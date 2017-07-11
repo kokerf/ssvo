@@ -1,0 +1,8 @@
+*.a
+*.so
+*~
+
+data/
+bin/
+*build*/
+.idea/
