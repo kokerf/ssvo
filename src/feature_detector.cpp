@@ -1,24 +1,28 @@
+#include <iostream>
 #include "feature_detector.hpp"
 
 namespace ssvo{
 
-FastDetector::FastDetector(int N, int maxThFAST, int minThFAST, int min_score, int levels, int grid_size):
-    N_(N), maxThFAST_(maxThFAST), minThFAST_(minThFAST), min_score_(min_score), levels_(levels), grid_size_(grid_size)
+FastDetector::FastDetector(int N, int top_level, int maxThFAST, int minThFAST, int min_score, int grid_size):
+    N_(N), nlevels_(top_level+1), maxThFAST_(maxThFAST), minThFAST_(minThFAST), min_score_(min_score), grid_size_(grid_size)
 {
-    size_ajust_ = (grid_size_ == -1) ? true : false;
+    size_ajust_ = (grid_size_ == -1);
 }
 
 void FastDetector::operator()(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>& all_kps, const std::vector<cv::KeyPoint>& ext_kps)
 {
-    assert(img_pyr.size() == levels_);
+    nlevels_ = img_pyr.size() < nlevels_? img_pyr.size() : nlevels_;
+    //std::cout << "-- FAST max detect level: " << nlevels_ - 1 << std::endl;
 
-    if(size_ajust_)
+    new_coners_ = 0;
+
+    if(grid_size_ == -1)
     {
         grid_size_ = static_cast<int>(std::sqrt(1.0 * img_pyr[0].cols * img_pyr[0].rows / N_));
+        grid_n_rows_ = ceil(static_cast<double>(img_pyr[0].rows) / grid_size_);
+        grid_n_cols_ = ceil(static_cast<double>(img_pyr[0].cols) / grid_size_);
     }
 
-    grid_n_rows_ = ceil(static_cast<double>(img_pyr[0].rows) / grid_size_);
-    grid_n_cols_ = ceil(static_cast<double>(img_pyr[0].cols) / grid_size_);
     if(grid_n_rows_ < min_rows_ || grid_n_cols_ < min_cols_)
     {
         int grid_size0 = img_pyr[0].rows / min_rows_;
@@ -31,20 +35,9 @@ void FastDetector::operator()(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>& 
 
     preSetGrid(img_pyr, ext_kps);
 
-    for(int level = 0; level < levels_; level++)
+    for(int level = 0; level < nlevels_; level++)
     {
-        // const int rows = img_pyr[level].rows;
-        // const int cols = img_pyr[level].cols;
-
         this->detectImage(img_pyr[level], level);
-
-        // for(cv::KeyPoint &kp : coners)
-        // {
-        //     const int u = kp.pt.x;
-        //     const int v = kp.pt.y;
-
-        //     int n = getGridIndex(u, v);
-        // }
     }
 
     getKeyPointsFromGrid(all_kps);
@@ -56,14 +49,23 @@ void FastDetector::preSetGrid(const ImgPyr& img_pyr, const std::vector<cv::KeyPo
     kps_in_grid_.clear();
     kps_in_grid_.resize(grid_n_rows_*grid_n_cols_);
 
+    for(const cv::Mat& image : img_pyr)
+    {
+        mask_pyr_.push_back(cv::Mat::zeros(image.size(), CV_8UC1));
+    }
+
     for(cv::KeyPoint kp : kps)
     {
         const int n = getGridIndex(kp.pt.x, kp.pt.y);
-        const int scale = 1 << kp.octave;
+        const int level = kp.octave;
+        const int scale = 1 << level;
         const int u = round(kp.pt.x / scale);
         const int v = round(kp.pt.y / scale);
-        kp.response = shiTomasiScore(img_pyr[kp.octave], u, v);
+        //! compute score and insert to grid
+        kp.response = shiTomasiScore(img_pyr[level], u, v);
         insertToGrid(kp, n);
+        //! set image mask
+        setMask(u, v, level);
     }
 }
 
@@ -112,14 +114,25 @@ int FastDetector::detectImage(const cv::Mat& image, int level)
         const int u = xy.x;
         const int v = xy.y;
 
+        //! border check;
+        if(u < border_ || v < border_ || u > cols-border_ || v > rows-border_)
+            continue;
+
+        //! if the pixel is occupied, ignore this corner
+        if(mask_pyr_[level].ptr<uchar>(v)[u])
+            continue;
 
         const float score = shiTomasiScore(image, u, v);
 
+        //! reject the low-score point
         if(score < min_score_)
             continue;
 
-        cv::KeyPoint kp(u*scale, v*scale, 0, -1, score, level);
-        int n = getGridIndex(kp.pt.x, kp.pt.y);
+        new_coners_ ++;
+        const int x = u*scale;
+        const int y = v*scale;
+        cv::KeyPoint kp(x, y, 0, -1, score, level);
+        const int n = getGridIndex(x, y);
         insertToGrid(kp, n);
     }
 
@@ -128,16 +141,20 @@ int FastDetector::detectImage(const cv::Mat& image, int level)
 void FastDetector::getKeyPointsFromGrid(std::vector<cv::KeyPoint>& all_kps)
 {
     all_kps.clear();
+    int count = 0;
+    int all_size =0;
     for(std::vector<cv::KeyPoint>& kps : kps_in_grid_)
     {
-        const int n = kps.size();
-        if (n > max_fts_)
-            std::sort(kps.begin(), kps.end(), [](const cv::KeyPoint &kp1, const cv::KeyPoint &kp2) { return kp1.response > kp2.response; });
+        const int size = kps.size();
+        all_size += size;
 
-        int i = 0;
-        for(auto it = kps.begin(), it_end = kps.end(); it != it_end && i < max_fts_; i++)
+        if(size==0)
+            continue;
+
+        for(int n = 0; n < size && n < max_fts_; n++)
         {
-            all_kps.push_back(*it);
+            count ++;
+            all_kps.push_back(kps[n]);
         }
     }
 }

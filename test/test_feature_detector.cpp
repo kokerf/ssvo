@@ -25,21 +25,25 @@ int main(int argc, char const *argv[])
     int nlevels = 1 + computePyramid(image, image_pyramid, 2, 4, cv::Size(40, 40));
 
     std::vector<cv::KeyPoint> all_keypoints, old_keypoints;
-    ssvo::FastDetector fast(1000, 20, 5, 20, nlevels);
+    ssvo::FastDetector fast(1000, nlevels);
+
+    fast(image_pyramid, old_keypoints, all_keypoints);
 
     const int n_trials = 1000;
     double time_accumulator = 0;
     for(int i = 0; i < n_trials; ++i)
     {
-      all_keypoints.clear();
-      double t = (double)cv::getTickCount();
-      fast(image_pyramid, all_keypoints, old_keypoints);
-      time_accumulator +=  ((cv::getTickCount() - t) / cv::getTickFrequency());
+        all_keypoints.clear();
+        double t = (double)cv::getTickCount();
+        fast(image_pyramid, all_keypoints, old_keypoints);
+        time_accumulator +=  ((cv::getTickCount() - t) / cv::getTickFrequency());
     }
     std::cout << "FAST Detector took " <<  time_accumulator/((double)n_trials)*1000.0
               << " ms (average over " << n_trials << " trials)." << std::endl;
 
-    std::cout << "Num of KeyPoints: " << all_keypoints.size() << std::endl;
+    std::cout << "All : " << all_keypoints.size()
+              << " old: " << old_keypoints.size()
+              << " new: " << fast.new_coners_ << std::endl;
 
     cv::Mat kps_img;
     cv::drawKeypoints(image, all_keypoints, kps_img);
