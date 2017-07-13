@@ -22,14 +22,16 @@ public:
 
     void operator()(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>& all_kps, const std::vector<cv::KeyPoint>& ext_kps);
 
+    void drawGrid(const cv::Mat& img, cv::Mat& img_grid);
+
 private:
-    int detectGrid(const cv::Mat& image, int level);
+    int detectByGrid(const cv::Mat& image, int level);
 
-    int detectImage(const cv::Mat& image, int level);
+    int detectByImage(const cv::Mat& image, int level);
 
-    void preSetGrid(const ImgPyr& img_pyr, const std::vector<cv::KeyPoint>& kps);
+    void preProccess(const ImgPyr& img_pyr, const std::vector<cv::KeyPoint>& kps);
 
-    void resetGrid();
+    void creatGrid();
 
     void getKeyPointsFromGrid(std::vector<cv::KeyPoint>& all_kps);
 
@@ -61,17 +63,24 @@ private:
         return false;
     }
 
+    //! get grid index by pixel in level0
+    inline int getGridIndex(int x, int y)
+    {
+        y = y > offset_rows_ ? y-offset_rows_ : y;
+        x = x > offset_cols_ ? x-offset_cols_ : 0;
+        int n_rows = y/grid_size_;
+        int n_cols = x/grid_size_;
+        n_rows = n_rows >= grid_n_rows_ ? grid_n_rows_-1: n_rows;
+        n_cols = n_cols >= grid_n_cols_ ? grid_n_cols_-1: n_cols;
+
+        return n_rows*grid_n_cols_ + n_cols;
+    }
+
     //! get grid index by pixel in level
     inline int getGridIndex(int u, int v, int level)
     {
         const int scale = (1<<level);
-        return (scale*v)/grid_size_*grid_n_cols_ + (scale*u)/grid_size_;
-    }
-
-    //! get grid index by pixel in level0
-    inline int getGridIndex(int x, int y)
-    {
-        return y/grid_size_*grid_n_cols_ + x/grid_size_;
+        return getGridIndex(u*scale, v*scale);
     }
 
     //! set 3×3 mask in mask image
@@ -95,9 +104,8 @@ public:
 
 private:
     const int border_ = 4;
-    const int min_cols_ = 8;
-    const int min_rows_ = 8;
-    const int max_fts_ = 2;
+    const int min_size_ = 8;
+    const int max_fts_ = 1;
 
     int N_;
     int nlevels_;
@@ -109,8 +117,11 @@ private:
     int grid_size_;
     int grid_n_cols_;
     int grid_n_rows_;
+    int offset_cols_;
+    int offset_rows_;
 
     std::vector<cv::Mat> mask_pyr_;
+    std::vector<int> occupancy_grid_;
     std::vector<std::vector<cv::KeyPoint> > kps_in_grid_;
 };
 

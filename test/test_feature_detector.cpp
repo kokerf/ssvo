@@ -25,9 +25,9 @@ int main(int argc, char const *argv[])
     int nlevels = 1 + computePyramid(image, image_pyramid, 2, 4, cv::Size(40, 40));
 
     std::vector<cv::KeyPoint> all_keypoints, old_keypoints;
-    ssvo::FastDetector fast(1000, nlevels);
+    ssvo::FastDetector fast(100, nlevels);
 
-    fast(image_pyramid, old_keypoints, all_keypoints);
+    //fast(image_pyramid, old_keypoints, all_keypoints);
 
     const int n_trials = 1000;
     double time_accumulator = 0;
@@ -47,6 +47,7 @@ int main(int argc, char const *argv[])
 
     cv::Mat kps_img;
     cv::drawKeypoints(image, all_keypoints, kps_img);
+    fast.drawGrid(kps_img, kps_img);
     cv::imshow("KeyPoints", kps_img);
     cv::waitKey(0);
 
