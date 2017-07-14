@@ -24,31 +24,65 @@ int main(int argc, char const *argv[])
     std::vector<cv::Mat> image_pyramid;
     int nlevels = 1 + computePyramid(image, image_pyramid, 2, 4, cv::Size(40, 40));
 
-    std::vector<cv::KeyPoint> all_keypoints, old_keypoints;
+    std::vector<cv::KeyPoint> all_keypoints0, all_keypoints1, old_keypoints;
     ssvo::FastDetector fast(100, nlevels);
 
-    //fast(image_pyramid, old_keypoints, all_keypoints);
-
+    std::cout << "=== FAST Detector ===" << std::endl;
+    std::cout << " ** detectByImage **" << std::endl;
     const int n_trials = 1000;
     double time_accumulator = 0;
     for(int i = 0; i < n_trials; ++i)
     {
-        all_keypoints.clear();
+        all_keypoints0.clear();
         double t = (double)cv::getTickCount();
-        fast(image_pyramid, all_keypoints, old_keypoints);
+        fast.detectByImage(image_pyramid, all_keypoints0, old_keypoints);
         time_accumulator +=  ((cv::getTickCount() - t) / cv::getTickFrequency());
     }
-    std::cout << "FAST Detector took " <<  time_accumulator/((double)n_trials)*1000.0
+    std::cout << " took " <<  time_accumulator/((double)n_trials)*1000.0
               << " ms (average over " << n_trials << " trials)." << std::endl;
+    std::cout << " All: " << all_keypoints0.size()
+              << " Old: " << old_keypoints.size()
+              << " New: " << fast.new_coners_ << std::endl;
 
-    std::cout << "All : " << all_keypoints.size()
-              << " old: " << old_keypoints.size()
-              << " new: " << fast.new_coners_ << std::endl;
+    std::cout << " ** detectByGrid **" << std::endl;
+    time_accumulator = 0;
+    for(int i = 0; i < n_trials; ++i)
+    {
+        all_keypoints1.clear();
+        double t = (double)cv::getTickCount();
+        fast.detectByGrid(image_pyramid, all_keypoints1, old_keypoints);
+        time_accumulator +=  ((cv::getTickCount() - t) / cv::getTickFrequency());
+    }
+    std::cout << " took " <<  time_accumulator/((double)n_trials)*1000.0
+              << " ms (average over " << n_trials << " trials)." << std::endl;
+    std::cout << " All: " << all_keypoints1.size()
+              << " Old: " << old_keypoints.size()
+              << " New: " << fast.new_coners_ << std::endl;
 
-    cv::Mat kps_img;
-    cv::drawKeypoints(image, all_keypoints, kps_img);
-    fast.drawGrid(kps_img, kps_img);
-    cv::imshow("KeyPoints", kps_img);
+    std::cout << " ** detectByGrid (with old keypoints) ** " << std::endl;
+    std::for_each(all_keypoints1.begin(), all_keypoints1.end(), [&](cv::KeyPoint& kp){old_keypoints.push_back(kp);});
+    old_keypoints.resize(old_keypoints.size()/3*2);
+    time_accumulator = 0;
+    for(int i = 0; i < n_trials; ++i)
+    {
+        all_keypoints1.clear();
+        double t = (double)cv::getTickCount();
+        fast.detectByGrid(image_pyramid, all_keypoints1, old_keypoints);
+        time_accumulator +=  ((cv::getTickCount() - t) / cv::getTickFrequency());
+    }
+    std::cout << " took " <<  time_accumulator/((double)n_trials)*1000.0
+              << " ms (average over " << n_trials << " trials)." << std::endl;
+    std::cout << " All: " << all_keypoints1.size()
+              << " Old: " << old_keypoints.size()
+              << " New: " << fast.new_coners_ << std::endl;
+
+    cv::Mat kps_img0, kps_img1;
+    cv::drawKeypoints(image, all_keypoints0, kps_img0);
+    cv::drawKeypoints(image, all_keypoints1, kps_img1);
+    fast.drawGrid(kps_img0, kps_img0);
+    fast.drawGrid(kps_img1, kps_img1);
+    cv::imshow("KeyPoints detectByImage", kps_img0);
+    cv::imshow("KeyPoints detectByGrid", kps_img1);
     cv::waitKey(0);
 
     return 0;

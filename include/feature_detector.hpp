@@ -3,10 +3,7 @@
 
 #include <vector>
 #include <opencv2/core.hpp>
-#include <Eigen/Core>
-#include "fast.h"
-
-
+#include "fast/fast.h"
 
 typedef std::vector<cv::Mat> ImgPyr;
 
@@ -18,9 +15,11 @@ namespace ssvo
 class FastDetector
 {
 public:
-    FastDetector(int N, int top_level = 3, int maxThFAST = 20, int minThFAST = 5, int min_score = 20, int grid_size = -1);
+    FastDetector(int N, int top_level = 3, int maxThFAST = 20, int minThFAST = 5, int min_score = 20, bool size_ajust = false);
 
-    void operator()(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>& all_kps, const std::vector<cv::KeyPoint>& ext_kps);
+    int detectByGrid(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>& all_kps, const std::vector<cv::KeyPoint>& ext_kps);
+
+    int detectByImage(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>& all_kps, const std::vector<cv::KeyPoint>& ext_kps);
 
     void drawGrid(const cv::Mat& img, cv::Mat& img_grid);
 
@@ -31,7 +30,7 @@ private:
 
     void preProccess(const ImgPyr& img_pyr, const std::vector<cv::KeyPoint>& kps);
 
-    void creatGrid();
+    void creatGrid(const ImgPyr& img_pyr);
 
     void getKeyPointsFromGrid(std::vector<cv::KeyPoint>& all_kps);
 
@@ -105,7 +104,7 @@ public:
 private:
     const int border_ = 4;
     const int min_size_ = 8;
-    const int max_fts_ = 1;
+    const int max_fts_ = 2;
 
     int N_;
     int nlevels_;
@@ -120,6 +119,8 @@ private:
     int offset_cols_;
     int offset_rows_;
 
+    std::vector<int> grid_boundary_x_;
+    std::vector<int> grid_boundary_y_;
     std::vector<cv::Mat> mask_pyr_;
     std::vector<int> occupancy_grid_;
     std::vector<std::vector<cv::KeyPoint> > kps_in_grid_;

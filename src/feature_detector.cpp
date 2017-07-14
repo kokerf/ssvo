@@ -5,13 +5,27 @@
 
 namespace ssvo{
 
-FastDetector::FastDetector(int N, int top_level, int maxThFAST, int minThFAST, int min_score, int grid_size):
-    N_(N), nlevels_(top_level+1), maxThFAST_(maxThFAST), minThFAST_(minThFAST), min_score_(min_score), grid_size_(grid_size)
+FastDetector::FastDetector(int N, int top_level, int maxThFAST, int minThFAST, int min_score, bool size_ajust):
+    N_(N), nlevels_(top_level+1), maxThFAST_(maxThFAST), minThFAST_(minThFAST), min_score_(min_score), size_ajust_(size_ajust_)
 {
-    size_ajust_ = (grid_size_ == -1);
+    grid_size_ = -1;
 }
 
-void FastDetector::operator()(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>& all_kps, const std::vector<cv::KeyPoint>& ext_kps)
+int FastDetector::detectByImage(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>& all_kps, const std::vector<cv::KeyPoint>& ext_kps)
+{
+    preProccess(img_pyr, ext_kps);
+
+    new_coners_ = 0;
+    for(int level = 0; level < nlevels_; level++)
+    {
+        new_coners_ += this->detectByImage(img_pyr[level], level);
+    }
+
+    getKeyPointsFromGrid(all_kps);
+    return new_coners_;
+}
+
+int FastDetector::detectByGrid(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>& all_kps, const std::vector<cv::KeyPoint>& ext_kps)
 {
     preProccess(img_pyr, ext_kps);
 
@@ -19,10 +33,10 @@ void FastDetector::operator()(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>& 
     for(int level = 0; level < nlevels_; level++)
     {
         new_coners_ += this->detectByGrid(img_pyr[level], level);
-        //new_coners_ += this->detectByImage(img_pyr[level], level);
     }
 
     getKeyPointsFromGrid(all_kps);
+    return new_coners_;
 }
 
 void FastDetector::preProccess(const ImgPyr& img_pyr, const std::vector<cv::KeyPoint>& kps)
@@ -30,26 +44,8 @@ void FastDetector::preProccess(const ImgPyr& img_pyr, const std::vector<cv::KeyP
     //! get max level
     nlevels_ = img_pyr.size() < nlevels_? img_pyr.size() : nlevels_;
 
-    //! adjust grid size
-    if(grid_size_ == -1)
-    {
-        grid_size_ = floorf(std::sqrt(1.0 * img_pyr[0].cols * img_pyr[0].rows / N_));
-        grid_n_rows_ = floorf(static_cast<double>(img_pyr[0].rows) / grid_size_);
-        grid_n_cols_ = floorf(static_cast<double>(img_pyr[0].cols) / grid_size_);
-
-        offset_cols_ = (img_pyr[0].cols - grid_size_ * grid_n_cols_) >> 1;
-        offset_rows_ = (img_pyr[0].rows - grid_size_ * grid_n_rows_) >> 1;
-    }
-
-    if(grid_size_ < min_size_)
-    {
-        grid_size_ = min_size_;
-        grid_n_rows_ = floorf(static_cast<double>(img_pyr[0].rows) / grid_size_);
-        grid_n_cols_ = floorf(static_cast<double>(img_pyr[0].cols) / grid_size_);
-
-        offset_cols_ = (img_pyr[0].cols - grid_size_ * grid_n_cols_) >> 1;
-        offset_rows_ = (img_pyr[0].rows - grid_size_ * grid_n_rows_) >> 1;
-    }
+    //! creat grid coordinate
+    creatGrid(img_pyr);
 
     //! set mask and grid
     kps_in_grid_.clear();
@@ -78,6 +74,43 @@ void FastDetector::preProccess(const ImgPyr& img_pyr, const std::vector<cv::KeyP
     }
 }
 
+void FastDetector::creatGrid(const ImgPyr& img_pyr)
+{
+    //! adjust grid size
+    if(grid_size_ == -1)
+    {
+        grid_size_ = floorf(std::sqrt(1.0 * img_pyr[0].cols * img_pyr[0].rows / (N_/max_fts_)));
+        grid_size_ = grid_size_ > min_size_? grid_size_ : min_size_;
+        grid_n_rows_ = floorf(static_cast<double>(img_pyr[0].rows) / grid_size_);
+        grid_n_cols_ = floorf(static_cast<double>(img_pyr[0].cols) / grid_size_);
+
+        offset_cols_ = (img_pyr[0].cols - grid_size_ * grid_n_cols_) >> 1;
+        offset_rows_ = (img_pyr[0].rows - grid_size_ * grid_n_rows_) >> 1;
+    }
+
+
+    grid_boundary_x_.resize(grid_n_cols_-1);
+    grid_boundary_y_.resize(grid_n_rows_-1);
+
+    // grid_boundary_x_[0] = 0;
+    // grid_boundary_x_[grid_n_cols_] = img_pyr[0].cols;
+    // grid_boundary_y_[0] = 0;
+    // grid_boundary_y_[grid_n_rows_] = img_pyr[0].rows;
+
+    const int n_grids = grid_n_rows_*grid_n_cols_;
+    for(int i = 0; i < grid_n_cols_-1; ++i)
+    {
+        const int x = offset_cols_ + (i+1) * grid_size_;
+        grid_boundary_x_[i] = x;
+    }
+
+    for(int i = 0; i < grid_n_rows_-1; ++i)
+    {
+        const int y = offset_rows_ + (i+1) * grid_size_;
+        grid_boundary_y_[i] = y;
+    }
+}
+
 int FastDetector::detectByGrid(const cv::Mat& image, int level)
 {
     assert(image.type() == CV_8UC1);
@@ -90,9 +123,6 @@ int FastDetector::detectByGrid(const cv::Mat& image, int level)
     const int rows = image.rows;
     const int cols = image.cols;
     const int stride = cols;
-
-    const int offset_cols = (cols - grid_size * grid_n_cols_) >> 1;
-    const int offset_rows = (rows - grid_size * grid_n_rows_) >> 1;
 
     const int n_grids = grid_n_rows_*grid_n_cols_;
     int new_coners = 0;
@@ -109,10 +139,10 @@ int FastDetector::detectByGrid(const cv::Mat& image, int level)
         const bool b_top = (i_rows == 0);
         const bool b_bottom = (i_rows == grid_n_rows_-1);
 
-        const int x_start = b_left ? 0 : offset_cols + i_cols * grid_size - 3;
-        const int x_end = b_right ? cols : offset_cols + (i_cols + 1) * grid_size + 3;
-        const int y_start = b_top ? 0 : offset_rows + i_rows * grid_size - 3;
-        const int y_end = b_bottom ? rows : offset_rows + (i_rows + 1) * grid_size + 3;
+        const int x_start = b_left ? 0 : (grid_boundary_x_[i_cols-1] >> level) - 3;
+        const int x_end = b_right ? cols : (grid_boundary_x_[i_cols] >> level) + 3;
+        const int y_start = b_top ? 0 : (grid_boundary_y_[i_rows-1] >> level) - 3;
+        const int y_end = b_bottom ? rows : (grid_boundary_y_[i_rows] >> level) + 3;
 
         const int grid_cols = x_end - x_start;
         const int grid_rows = y_end - y_start;
@@ -168,9 +198,8 @@ int FastDetector::detectByGrid(const cv::Mat& image, int level)
             const int x = u*scale;
             const int y = v*scale;
             cv::KeyPoint kp(x, y, 0, -1, score, level);
+            //! some point will be in the boundary
             const int n = getGridIndex(x, y);
-            if(n != i)
-                std::cout << "n= " <<n << " i= " << i << " pt: " << u << ", " << v << " l: " << level <<std::endl;
             insertToGrid(kp, n);
         }
 
@@ -260,6 +289,14 @@ void FastDetector::getKeyPointsFromGrid(std::vector<cv::KeyPoint>& all_kps)
             all_kps.push_back(kps[n]);
         }
      }
+
+    if(size_ajust_)
+    {
+        if(all_kps.size() < N_*0.9)
+            grid_size_ -= 5;
+        else if(all_kps.size() > N_*1.1)
+            grid_size_ += 5;
+    }
 }
 
 void FastDetector::drawGrid(const cv::Mat& img, cv::Mat& img_grid)

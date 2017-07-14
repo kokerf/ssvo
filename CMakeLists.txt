@@ -50,7 +50,7 @@ include_directories(${EIGEN3_INCLUDE_DIR})
 include_directories(
     ${PROJECT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/include
-    ${PROJECT_SOURCE_DIR}/Thirdparty/fast/include/fast
+    ${PROJECT_SOURCE_DIR}/Thirdparty/fast/include/
 )
 
 # FAST
