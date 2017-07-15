@@ -5,13 +5,15 @@
 
 using namespace cv;
 
+std::string ssvo::Config::FileName;
+
 int computePyramid(const cv::Mat& image, std::vector<cv::Mat>& image_pyramid, const float scale_factor, const uint16_t level, const cv::Size min_size);
 
 int main(int argc, char const *argv[])
 {
-    if(argc != 2)
+    if(argc != 3)
     {
-        std::cout << "Usge: ./test_feature_detector image" << std::endl;
+        std::cout << "Usge: ./test_feature_detector image configfile" << std::endl;
     }
 
     cv::Mat image = cv::imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
@@ -20,6 +22,8 @@ int main(int argc, char const *argv[])
     {
         std::cout << "Can not open:" << argv[1] << std::endl;
     }
+
+    ssvo::Config::FileName = std::string(argv[2]);
 
     std::vector<cv::Mat> image_pyramid;
     int nlevels = 1 + computePyramid(image, image_pyramid, 2, 4, cv::Size(40, 40));

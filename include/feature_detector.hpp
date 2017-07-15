@@ -5,7 +5,8 @@
 #include <opencv2/core.hpp>
 #include "fast/fast.h"
 
-typedef std::vector<cv::Mat> ImgPyr;
+#include "global.hpp"
+#include "config.hpp"
 
 //! (u,v) is in the n-level image of pyramid
 //! (x,y) is in the 0-level image of pyramid
@@ -15,7 +16,7 @@ namespace ssvo
 class FastDetector
 {
 public:
-    FastDetector(int N, int top_level = 3, int maxThFAST = 20, int minThFAST = 5, int min_score = 20, bool size_ajust = false);
+    FastDetector(int N, int top_level = 3, bool size_ajust = false);
 
     int detectByGrid(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>& all_kps, const std::vector<cv::KeyPoint>& ext_kps);
 
@@ -58,8 +59,6 @@ private:
 
             return true;
         }
-
-        return false;
     }
 
     //! get grid index by pixel in level0
@@ -102,15 +101,9 @@ public:
     int new_coners_;
 
 private:
-    const int border_ = 4;
-    const int min_size_ = 8;
-    const int max_fts_ = 2;
 
     int N_;
     int nlevels_;
-    int maxThFAST_;
-    int minThFAST_;
-    int min_score_;
 
     bool size_ajust_;
     int grid_size_;
