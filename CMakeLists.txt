@@ -68,7 +68,9 @@ LIST(APPEND LINK_LIBS
 
 # Set sourcefiles
 LIST(APPEND SOURCEFILES
-    src/feature_detector.cpp)
+    src/feature_detector.cpp
+    src/frame.cpp
+    src/initializer.cpp)
 
 add_library(${PROJECT_NAME} SHARED ${SOURCEFILES})
 target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})
@@ -76,6 +78,12 @@ target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})
 ## -----------------------
 ## Build test
 ## -----------------------
-add_executable(test_feature_detector
-    test/test_feature_detector.cpp)
+add_executable(test_feature_detector test/test_feature_detector.cpp)
 target_link_libraries(test_feature_detector ${PROJECT_NAME})
+
+add_executable(test_pyramid test/test_pyramid.cpp)
+target_link_libraries(test_pyramid ${PROJECT_NAME})
+
+add_executable(test_initializer test/test_initializer.cpp src/initializer.cpp     src/feature_detector.cpp
+        src/frame.cpp)
+target_link_libraries(test_initializer ${LINK_LIBS})# ${PROJECT_NAME})
