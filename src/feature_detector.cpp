@@ -284,7 +284,7 @@ void FastDetector::getKeyPointsFromGrid(std::vector<cv::KeyPoint>& all_kps)
         if(size==0)
             continue;
 
-        for(int n = 0; n < size && n < Config::fastMinEigen(); n++)
+        for(int n = 0; n < size && n < Config::gridMaxFeatures(); n++)
         {
             all_kps.push_back(kps[n]);
         }
