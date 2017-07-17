@@ -65,6 +65,23 @@ InitResult Initializer::initialize(FramePtr cur_frame)
     return SUCCESS;
 }
 
+void Initializer::getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur)
+{
+    const int n = pts_ref_.size();
+    pts_ref.resize(n);
+    pts_cur.resize(n);
+
+    const uchar* inliers_ptr = inliers_.ptr<uchar>(0);
+    for(int i = 0; i < n; ++i)
+    {
+        if(!inliers_ptr[i])
+            continue;
+
+        pts_ref.push_back(pts_ref_[i]);
+        pts_cur.push_back(pts_cur_[i]);
+    }
+}
+
 void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<double>& disparities)
 {
     const int klt_win_size = 21;
@@ -141,7 +158,7 @@ bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat
     P4 = K2*P4;
 
     //! Do the cheirality check, and remove points too far away
-    float max_dist = 50.0;
+    const float max_dist = 50.0;
     cv::Mat P3Ds;
     triangulate(P0, P1, pts1, pts2, mask, P3Ds);
     cv::Mat mask1 = mask.t();
@@ -209,7 +226,7 @@ bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat
 
 void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& P3D)
 {
-    int n = pts1.size();
+    const int n = pts1.size();
     assert(n == pts2.size());
     assert(mask.cols == 1 && mask.rows == n);
     uchar *mask_ptr = mask.ptr<uchar>(0);

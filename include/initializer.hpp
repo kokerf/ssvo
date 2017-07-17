@@ -18,6 +18,8 @@ public:
 
     InitResult initialize(FramePtr cur_frame);
 
+    void getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur);
+
 private:
 
     void kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<double>& disparities);
