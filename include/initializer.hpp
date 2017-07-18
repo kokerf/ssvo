@@ -13,14 +13,15 @@ using namespace Eigen;
 
 namespace ssvo{
 
-enum InitResult {FAILURE, SUCCESS, RESET};
+enum InitResult {RESET=-1, FAILURE=0, SUCCESS=1};
 
 class Initializer
 {
 public:
-    Initializer(FramePtr ref_frame);
 
-    InitResult initialize(FramePtr cur_frame);
+    InitResult addFirstFrame(FramePtr frame_ref);
+
+    InitResult addSecondFrame(FramePtr frame_cur);
 
     void getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur);
 
@@ -41,8 +42,8 @@ private:
 
 private:
 
-    FramePtr ref_frame_;
-    FramePtr cur_frame_;
+    FramePtr frame_ref_;
+    FramePtr frame_cur_;
 
     std::vector<cv::Point2f> pts_ref_;
     std::vector<cv::Point2f> pts_cur_;

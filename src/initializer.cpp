@@ -8,7 +8,7 @@
 
 namespace ssvo{
 
-Initializer::Initializer(FramePtr ref_frame)
+InitResult Initializer::addFirstFrame(FramePtr frame_ref)
 {
     //! reset
     pts_ref_.clear();
@@ -17,23 +17,27 @@ Initializer::Initializer(FramePtr ref_frame)
     inliers_.release();
 
     //! check corner number of first image
-    if(ref_frame->kps_.size() < Config::initMinCorners())
+    if(frame_ref->kps_.size() < Config::initMinCorners())
     {
-        SSVO_WARN_STREAM(" [INIT] First image has too less coners !!!");
+        SSVO_WARN_STREAM(" [INIT] First image has too less corners !!!");
+        return RESET;
     }
 
-    ref_frame_ = ref_frame;
-    cv::KeyPoint::convert(ref_frame_->kps_, pts_ref_);
+    frame_ref_ = frame_ref;
+    cv::KeyPoint::convert(frame_ref_->kps_, pts_ref_);
 
     //! set initial flow
     pts_cur_.insert(pts_cur_.begin(), pts_ref_.begin(), pts_ref_.end());
+
+    return SUCCESS;
 }
 
-InitResult Initializer::initialize(FramePtr cur_frame)
+InitResult Initializer::addSecondFrame(FramePtr frame_cur)
 {
     double t1 = (double)cv::getTickCount();
-    cur_frame_ = cur_frame;
-    kltTrack(ref_frame_->img_pyr_[0], cur_frame_->img_pyr_[0], pts_ref_, pts_cur_, disparities_);
+    frame_cur_ = frame_cur;
+    kltTrack(frame_ref_->img_pyr_[0], frame_cur_->img_pyr_[0], pts_ref_, pts_cur_, disparities_);
+    inliers_ = cv::Mat::ones(pts_ref_.size(), 1, CV_8UC1);
 
     SSVO_INFO_STREAM(" [INIT] KLT tracking points: " << disparities_.size());
     if(disparities_.size() < Config::initMinTracked())
@@ -61,8 +65,8 @@ InitResult Initializer::initialize(FramePtr cur_frame)
 
     double t4 = (double)cv::getTickCount();
     cv::Mat R1, R2, t;
-    cv::Mat K1= ref_frame_->K();
-    cv::Mat K2= cur_frame_->K();
+    cv::Mat K1= frame_ref_->K();
+    cv::Mat K2= frame_cur_->K();
     cv::Mat E = K1.t() * F * K2;
     Fundamental::decomposeEssentialMat(E, R1, R2, t);
 
@@ -81,14 +85,16 @@ InitResult Initializer::initialize(FramePtr cur_frame)
     if(succeed == false)
         return  FAILURE;
 
+    SSVO_INFO_STREAM(" [INIT] Initialization succeed!");
+
     return SUCCESS;
 }
 
 void Initializer::getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur)
 {
     const int n = pts_ref_.size();
-    pts_ref.resize(n);
-    pts_cur.resize(n);
+    pts_ref.reserve(n);
+    pts_cur.reserve(n);
 
     const uchar* inliers_ptr = inliers_.ptr<uchar>(0);
     for(int i = 0; i < n; ++i)

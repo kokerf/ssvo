@@ -18,6 +18,8 @@ public:
 
     static cv::Mat cameraDistCoef(){return getInstance().DistCoef;}
 
+    static float cameraFps(){return getInstance().fps;}
+
     static int initMinCorners(){return getInstance().init_min_corners;}
 
     static int initMinTracked(){return getInstance().init_min_tracked;}
@@ -81,6 +83,8 @@ private:
         DistCoef.at<float>(2) = p1;
         DistCoef.at<float>(3) = p2;
 
+        fps = (float)fs["Camera.fps"];
+
         //! initializer parameters
         init_min_corners = (int)fs["Initializer.min_corners"];
         init_min_tracked = (int)fs["Initializer.min_tracked"];
@@ -110,6 +114,7 @@ private:
     float k1, k2, p1, p2;
     cv::Mat K;
     cv::Mat DistCoef;
+    float fps;
 
     //! initializer parameters
     int init_min_corners;

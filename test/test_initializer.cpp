@@ -45,21 +45,22 @@ int main(int argc, char const *argv[])
     const int n_trials = 100;
     double time_accumulator1 = 0;
     double time_accumulator2 = 0;
+    ssvo::Initializer initializer;
     for(int i = 0; i < n_trials; ++i)
     {
         double t1 = (double)cv::getTickCount();
-        ssvo::Initializer initializer(std::make_shared<ssvo::Frame>(frame1));
+        initializer.addFirstFrame(std::make_shared<ssvo::Frame>(frame1));
         time_accumulator1 += ((cv::getTickCount() - t1) / cv::getTickFrequency());
 
         double t2 = (double)cv::getTickCount();
-        initializer.initialize(std::make_shared<ssvo::Frame>(frame2));
+        initializer.addSecondFrame(std::make_shared<ssvo::Frame>(frame2));
         time_accumulator2 += ((cv::getTickCount() - t2) / cv::getTickFrequency());
     }
     std::cout << " took " <<  time_accumulator1/((double)n_trials)*1000.0
               << " ms for first image and " << time_accumulator2/((double)n_trials)*1000.0 << " ms for second image(average over " << n_trials << " trials)." << std::endl;
 
-    ssvo::Initializer initializer(std::make_shared<ssvo::Frame>(frame1));
-    bool succeed = initializer.initialize(std::make_shared<ssvo::Frame>(frame2));
+    initializer.addFirstFrame(std::make_shared<ssvo::Frame>(frame1));
+    int succeed = initializer.addSecondFrame(std::make_shared<ssvo::Frame>(frame2));
     std::vector<cv::Point2f> pts_ref, pts_cur;
     initializer.getTrackedPoints(pts_ref, pts_cur);
     std::cout << "-- Initial succeed? " << succeed << std::endl;
