@@ -21,7 +21,7 @@ int FastDetector::detectByImage(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>
         new_coners_ += this->detectByImage(img_pyr[level], level);
     }
 
-    getKeyPointsFromGrid(all_kps);
+    getKeyPointsFromGrid(img_pyr[0], all_kps);
     return new_coners_;
 }
 
@@ -35,7 +35,7 @@ int FastDetector::detectByGrid(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>&
         new_coners_ += this->detectByGrid(img_pyr[level], level);
     }
 
-    getKeyPointsFromGrid(all_kps);
+    getKeyPointsFromGrid(img_pyr[0], all_kps);
     return new_coners_;
 }
 
@@ -111,17 +111,17 @@ void FastDetector::creatGrid(const ImgPyr& img_pyr)
     }
 }
 
-int FastDetector::detectByGrid(const cv::Mat& image, int level)
+int FastDetector::detectByGrid(const cv::Mat& img, int level)
 {
-    assert(image.type() == CV_8UC1);
+    assert(img.type() == CV_8UC1);
 
     const int scale = 1 << level;
     const int grid_size =  floorf(static_cast<double>(grid_size_) / scale);
     if(grid_size < Config::gridMinSize())
-        return this->detectByImage(image, level);
+        return this->detectByImage(img, level);
 
-    const int rows = image.rows;
-    const int cols = image.cols;
+    const int rows = img.rows;
+    const int cols = img.cols;
     const int stride = cols;
 
     const int n_grids = grid_n_rows_*grid_n_cols_;
@@ -147,7 +147,7 @@ int FastDetector::detectByGrid(const cv::Mat& image, int level)
         const int grid_cols = x_end - x_start;
         const int grid_rows = y_end - y_start;
 
-        const uchar* img_ptr = &image.ptr<uchar>(y_start)[x_start];
+        const uchar* img_ptr = &img.ptr<uchar>(y_start)[x_start];
 
         std::vector<fast::fast_xy> fast_corners;
 
@@ -188,16 +188,10 @@ int FastDetector::detectByGrid(const cv::Mat& image, int level)
             if(mask_pyr_[level].ptr<uchar>(v)[u])
                 continue;
 
-            const float score = shiTomasiScore(image, u, v);
-
-            //! reject the low-score point
-            if(score < Config::fastMinEigen())
-                continue;
-
             new_coners ++;
             const int x = u*scale;
             const int y = v*scale;
-            cv::KeyPoint kp(x, y, 0, -1, score, level);
+            cv::KeyPoint kp(x, y, 0, -1, scores[index], level);
             //! some point will be in the boundary
             const int n = getGridIndex(x, y);
             insertToGrid(kp, n);
@@ -208,19 +202,19 @@ int FastDetector::detectByGrid(const cv::Mat& image, int level)
     return new_coners;
 }
 
-int FastDetector::detectByImage(const cv::Mat& image, int level)
+int FastDetector::detectByImage(const cv::Mat& img, int level)
 {
-    assert(image.type() == CV_8UC1);
+    assert(img.type() == CV_8UC1);
 
-    const int rows = image.rows;
-    const int cols = image.cols;
+    const int rows = img.rows;
+    const int cols = img.cols;
     const int stride = cols;
     const int scale = 1 << level;
 
     std::vector<fast::fast_xy> fast_corners;
 
 #if __SSE2__
-    fast::fast_corner_detect_10_sse2(image.data, cols, rows, stride, Config::fastMaxThreshold(), fast_corners);
+    fast::fast_corner_detect_10_sse2(img.data, cols, rows, stride, Config::fastMaxThreshold(), fast_corners);
 #elif HAVE_FAST_NEON
     fast::fast_corner_detect_9_neon(image.data, cols, rows, stride, maxThFAST_, fast_corners);
 #else
@@ -230,7 +224,7 @@ int FastDetector::detectByImage(const cv::Mat& image, int level)
     if(fast_corners.empty())
     {
 #if __SSE2__
-        fast::fast_corner_detect_10_sse2(image.data, cols, rows, stride, Config::fastMinThreshold(), fast_corners);
+        fast::fast_corner_detect_10_sse2(img.data, cols, rows, stride, Config::fastMinThreshold(), fast_corners);
 #elif HAVE_FAST_NEON
         fast::fast_corner_detect_9_neon(image.data, cols, rows, stride, minThFAST_, fast_corners);
 #else
@@ -239,7 +233,7 @@ int FastDetector::detectByImage(const cv::Mat& image, int level)
     }
 
     std::vector<int> scores, nm_corners;
-    fast::fast_corner_score_10(image.data, stride, fast_corners, Config::fastMaxThreshold(), scores);
+    fast::fast_corner_score_10(img.data, stride, fast_corners, Config::fastMaxThreshold(), scores);
     fast::fast_nonmax_3x3(fast_corners, scores, nm_corners);
 
     int new_coners = 0;
@@ -257,16 +251,10 @@ int FastDetector::detectByImage(const cv::Mat& image, int level)
         if(mask_pyr_[level].ptr<uchar>(v)[u])
             continue;
 
-        const float score = shiTomasiScore(image, u, v);
-
-        //! reject the low-score point
-        if(score < Config::fastMinEigen())
-            continue;
-
         new_coners ++;
         const int x = u*scale;
         const int y = v*scale;
-        cv::KeyPoint kp(x, y, 0, -1, score, level);
+        cv::KeyPoint kp(x, y, 0, -1, scores[index], level);
         const int n = getGridIndex(x, y);
         insertToGrid(kp, n);
     }
@@ -274,19 +262,31 @@ int FastDetector::detectByImage(const cv::Mat& image, int level)
     return new_coners;
 }
 
-void FastDetector::getKeyPointsFromGrid(std::vector<cv::KeyPoint>& all_kps)
+void FastDetector::getKeyPointsFromGrid(const cv::Mat& img, std::vector<cv::KeyPoint>& all_kps)
 {
     all_kps.clear();
     for(std::vector<cv::KeyPoint>& kps : kps_in_grid_)
     {
-        const int size = kps.size();
-
-        if(size==0)
-            continue;
-
-        for(int n = 0; n < size && n < Config::gridMaxFeatures(); n++)
+        if(kps.empty())
         {
-            all_kps.push_back(kps[n]);
+            continue;
+        }
+
+        const int size = kps.size();
+        int nfts= 0;
+        for(int n = 0; n < size && nfts < Config::gridMaxFeatures(); n++)
+        {
+            cv::KeyPoint& kp = kps[n];
+            const int u = kp.pt.x;
+            const int v = kp.pt.y;
+            const float score = shiTomasiScore(img, u, v);
+            //! reject the low-score point
+            if(score < Config::fastMinEigen())
+                continue;
+
+            kp.response = score;
+            all_kps.push_back(kp);
+            nfts++;
         }
      }
 

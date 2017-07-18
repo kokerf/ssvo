@@ -25,15 +25,15 @@ public:
     void drawGrid(const cv::Mat& img, cv::Mat& img_grid);
 
 private:
-    int detectByGrid(const cv::Mat& image, int level);
+    int detectByGrid(const cv::Mat& img, int level);
 
-    int detectByImage(const cv::Mat& image, int level);
+    int detectByImage(const cv::Mat& img, int level);
 
     void preProccess(const ImgPyr& img_pyr, const std::vector<cv::KeyPoint>& kps);
 
     void creatGrid(const ImgPyr& img_pyr);
 
-    void getKeyPointsFromGrid(std::vector<cv::KeyPoint>& all_kps);
+    void getKeyPointsFromGrid(const cv::Mat& img, std::vector<cv::KeyPoint>& all_kps);
 
     float shiTomasiScore(const cv::Mat& img, int u, int v);
 
