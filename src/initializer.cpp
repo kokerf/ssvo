@@ -313,9 +313,9 @@ void Initializer::triangulate(const MatrixXf& P1, const MatrixXf& P2, const cv::
     A.row(3) = pt2.y*P2.row(2)-P2.row(1);
 
     JacobiSVD<MatrixXf> svd(A, ComputeThinV);
-    auto Vt = svd.matrixV();
+    MatrixXf V = svd.matrixV();
 
-    P3D = Vt.row(3).transpose();
+    P3D = V.col(3);
     P3D = P3D/P3D(3);
 }
 
@@ -327,6 +327,7 @@ int Fundamental::findFundamentalMat(const std::vector<cv::Point2f>& pts_prev, co
     return runRANSAC(pts_prev, pts_next, F, inliers, sigma, max_iterations);
 }
 
+#if 1
 void Fundamental::run8point(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat& F)
 {
     const int N = pts_prev.size();
@@ -375,6 +376,53 @@ void Fundamental::run8point(const std::vector<cv::Point2f>& pts_prev, const std:
     if(fabs(F22) > FLT_EPSILON)
         F /= F22;
 }
+#else
+void Fundamental::run8point(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat& F)
+{
+    const int N = pts_prev.size();
+    assert(N >= 8);
+
+    std::vector<cv::Point2f> pts_prev_norm;
+    std::vector<cv::Point2f> pts_next_norm;
+    Matrix3f T1, T2;
+    Normalize(pts_prev, pts_prev_norm, T1);
+    Normalize(pts_next, pts_next_norm, T2);
+
+    MatrixXf A(N,9);
+    for(int i = 0; i < N; ++i)
+    {
+        const float u1 = pts_prev_norm[i].x;
+        const float v1 = pts_prev_norm[i].y;
+        const float u2 = pts_next_norm[i].x;
+        const float v2 = pts_next_norm[i].y;
+
+        A.row(i) <<  u2*u1, u2*v1, u2, v2*u1, v2*v1, v2, u1, v1, 1;
+    }
+
+    JacobiSVD<MatrixXf> svd(A, ComputeFullV);
+    MatrixXf Va = svd.matrixV();
+
+    VectorXf Fv = Va.col(8);
+    Matrix3f Ft(Fv.data());
+
+    JacobiSVD<MatrixXf> svd1(Ft.transpose(), ComputeFullV|ComputeFullU);
+    MatrixXf V = svd1.matrixV();
+    MatrixXf U = svd1.matrixU();
+    Vector3f S = svd1.singularValues();
+    S(2) = 0;
+    DiagonalMatrix<float, Dynamic> W(S);
+
+    Matrix3f Fn = U * W * V.transpose();
+
+    MatrixXf FF = T2.transpose()*Fn*T1;
+    float F22 = FF(2, 2);
+    if(fabs(F22) > FLT_EPSILON)
+        FF /= F22;
+
+    cv::eigen2cv(FF, F);
+
+}
+#endif
 
 int Fundamental::runRANSAC(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat& F, cv::Mat& inliers, float sigma, int max_iterations)
 {
@@ -443,7 +491,7 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2f>& pts_prev, const std::
                 //! p = 99%
                 //! number of set: s = 8
                 //! omega = inlier points / total points
-                const double num = log(1 - 0.99);
+                const static double num = log(1 - 0.99);
                 const double omega = inliers_count*1.0 / N;
                 const double denom = log(1 - pow(omega, modelPoints));
 
@@ -515,6 +563,43 @@ void Fundamental::Normalize(const std::vector<cv::Point2f>& pts, std::vector<cv:
     T.at<float>(1,2) = -mean.y*scale_y;
 }
 
+void Fundamental::Normalize(const std::vector<cv::Point2f>& pts, std::vector<cv::Point2f>& pts_norm, Matrix3f& T)
+{
+    const int N = pts.size();
+    if(N == 0)
+        return;
+
+    pts_norm.resize(N);
+
+    cv::Point2f mean(0,0);
+    for(int i = 0; i < N; ++i)
+    {
+        mean += pts[i];
+    }
+    mean = mean/N;
+
+    cv::Point2f mean_dev(0,0);
+
+    for(int i = 0; i < N; ++i)
+    {
+        pts_norm[i] = pts[i] - mean;
+
+        mean_dev.x += fabs(pts_norm[i].x);
+        mean_dev.y += fabs(pts_norm[i].y);
+    }
+    mean_dev /= N;
+
+    const float scale_x = 1.0/mean_dev.x;
+    const float scale_y = 1.0/mean_dev.y;
+
+    for(int i=0; i<N; i++)
+    {
+        pts_norm[i].x *= scale_x;
+        pts_norm[i].y *= scale_y;
+    }
+
+    T <<  scale_x, 0, -mean.x*scale_x, 0, scale_y, -mean.y*scale_y, 0,0,1;
+}
 
 inline void Fundamental::computeErrors(const cv::Point2f& p1, const cv::Point2f& p2, const float* F, float& err1, float& err2)
 {
