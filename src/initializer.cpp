@@ -1,9 +1,10 @@
 #include <opencv2/core.hpp>
 #include <opencv2/video.hpp>
 #include <opencv2/opencv.hpp>
-
 #include "global.hpp"
+
 #include "initializer.hpp"
+#include <opencv/cxeigen.hpp>
 
 namespace ssvo{
 
@@ -18,7 +19,7 @@ Initializer::Initializer(FramePtr ref_frame)
     //! check corner number of first image
     if(ref_frame->kps_.size() < Config::initMinCorners())
     {
-        SSVO_WARN_STREAM("First image has too less coners !!!");
+        SSVO_WARN_STREAM(" [INIT] First image has too less coners !!!");
     }
 
     ref_frame_ = ref_frame;
@@ -30,34 +31,52 @@ Initializer::Initializer(FramePtr ref_frame)
 
 InitResult Initializer::initialize(FramePtr cur_frame)
 {
+    double t1 = (double)cv::getTickCount();
     cur_frame_ = cur_frame;
     kltTrack(ref_frame_->img_pyr_[0], cur_frame_->img_pyr_[0], pts_ref_, pts_cur_, disparities_);
 
+    SSVO_INFO_STREAM(" [INIT] KLT tracking points: " << disparities_.size());
     if(disparities_.size() < Config::initMinTracked())
         return RESET;
 
+    double t2 = (double)cv::getTickCount();
     double disparity = 0.0;
     for_each(disparities_.begin(), disparities_.end(), [&](double &d){disparity+=d;});
     disparity /= disparities_.size();
 
+    SSVO_INFO_STREAM(" [INIT] Avage disparity: " << disparity);
     if(disparity < Config::initMinDisparity())
         return FAILURE;
 
+    double t3 = (double)cv::getTickCount();
     //! geometry check
     cv::Mat F;
     int inliers_count = Fundamental::findFundamentalMat(pts_ref_, pts_cur_, F, inliers_, Config::initSigma(), Config::initMaxRansacIters());
-
+    //F  = cv::findFundamentalMat(pts_ref_, pts_cur_, inliers_, cv::FM_RANSAC, Config::initSigma()*3);//, Config::initMaxRansacIters());
+    //F.convertTo(F, CV_32FC1);
+    //int inliers_count = cv::countNonZero(inliers_);
+    SSVO_INFO_STREAM(" [INIT] Inliers after Fundamental Maxtrix RANSCA check: " << inliers_count);
     if(inliers_count < Config::initMinInliers())
         return  FAILURE;
 
+    double t4 = (double)cv::getTickCount();
     cv::Mat R1, R2, t;
     cv::Mat K1= ref_frame_->K();
     cv::Mat K2= cur_frame_->K();
     cv::Mat E = K1.t() * F * K2;
     Fundamental::decomposeEssentialMat(E, R1, R2, t);
 
+    double t5 = (double)cv::getTickCount();
     cv::Mat T;
     bool succeed = findBestRT(R1, R2, t, K1, K2, pts_ref_, pts_cur_, inliers_, T);
+    SSVO_INFO_STREAM(" [INIT] Inliers after cheirality check: " << cv::countNonZero(inliers_));
+
+    double t6 = (double)cv::getTickCount();
+    std::cout << "Time: " << (t2-t1)/cv::getTickFrequency() << " "
+                          << (t3-t2)/cv::getTickFrequency() << " "
+                          << (t4-t3)/cv::getTickFrequency() << " "
+                          << (t5-t4)/cv::getTickFrequency() << " "
+                          << (t6-t5)/cv::getTickFrequency() << std::endl;
 
     if(succeed == false)
         return  FAILURE;
@@ -224,6 +243,7 @@ bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat
     return true;
 }
 
+#if 0
 void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& P3D)
 {
     const int n = pts1.size();
@@ -234,6 +254,7 @@ void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::v
     for(int i = 0; i < n; ++i)
     {
         cv::Mat wP;
+
         if(mask_ptr[i])
             triangulate(P1, P2, pts1[i], pts2[i], wP);
         else
@@ -241,6 +262,32 @@ void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::v
         wP.copyTo(P3D.col(i));
     }
 }
+#else
+void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& P3D)
+{
+    const int n = pts1.size();
+    assert(n == pts2.size());
+    assert(mask.cols == 1 && mask.rows == n);
+    uchar *mask_ptr = mask.ptr<uchar>(0);
+    MatrixXf eP1, eP2;
+    cv::cv2eigen(P1, eP1);
+    cv::cv2eigen(P2, eP2);
+    MatrixXf eP3D = MatrixXf::Zero(4, n);
+    P3D = cv::Mat::zeros(4, n, CV_32FC1);
+    for(int i = 0; i < n; ++i)
+    {
+        Vector4f wP = Vector4f::Zero();
+
+        if(mask_ptr[i]) {
+            triangulate(eP1, eP2, pts1[i], pts2[i], wP);
+        }
+
+        eP3D.col(i) = wP;
+
+    }
+    cv::eigen2cv(eP3D, P3D);
+}
+#endif
 
 void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const cv::Point2f& pt1, const cv::Point2f& pt2, cv::Mat& P3D)
 {
@@ -255,6 +302,21 @@ void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const cv::Po
     cv::SVD::compute(A, W, U, Vt,cv::SVD::MODIFY_A| cv::SVD::FULL_UV);
     P3D = Vt.row(3).t();
     P3D = P3D/P3D.at<float>(3);
+}
+
+void Initializer::triangulate(const MatrixXf& P1, const MatrixXf& P2, const cv::Point2f& pt1, const cv::Point2f& pt2, Vector4f& P3D)
+{
+    MatrixXf A(4,4);
+    A.row(0) = pt1.x*P1.row(2)-P1.row(0);
+    A.row(1) = pt1.y*P1.row(2)-P1.row(1);
+    A.row(2) = pt2.x*P2.row(2)-P2.row(0);
+    A.row(3) = pt2.y*P2.row(2)-P2.row(1);
+
+    JacobiSVD<MatrixXf> svd(A, ComputeThinV);
+    auto Vt = svd.matrixV();
+
+    P3D = Vt.row(3).transpose();
+    P3D = P3D/P3D(3);
 }
 
 int Fundamental::findFundamentalMat(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat &F,
@@ -296,17 +358,17 @@ void Fundamental::run8point(const std::vector<cv::Point2f>& pts_prev, const std:
         a[8] = 1;
     }
 
-    cv::Mat u,w,vt;
+    cv::Mat U, W, vt;
 
-    cv::eigen(A.t()*A, w, vt);
+    cv::eigen(A.t()*A, W, vt);
 
     cv::Mat Fpre = vt.row(8).reshape(0, 3);
 
-    cv::SVDecomp(Fpre,w,u,vt,cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
+    cv::SVDecomp(Fpre, W, U, vt, cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
 
-    w.at<float>(2) = 0;
+    W.at<float>(2) = 0;
 
-    cv::Mat F_norm = u*cv::Mat::diag(w)*vt;
+    cv::Mat F_norm = U*cv::Mat::diag(W)*vt;
 
     F = T2.t()*F_norm*T1;
     float F22 = F.at<float>(2, 2);
@@ -321,7 +383,7 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2f>& pts_prev, const std::
     assert(N >= modelPoints);
 
     const double threshold = 3.841*sigma*sigma;
-    const int max_iters = MIN(MAX(max_iterations, 1), 2000);
+    const int max_iters = MIN(MAX(max_iterations, 1), 1000);
 
     std::vector<int> total_points;
     for(int i = 0; i < N; ++i)

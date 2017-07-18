@@ -19,9 +19,9 @@ Camera.k3: 1.163314
 #Camera.fps: 30.0
 
 # Initialization
-Initializer.min_corners: 500
-Initializer.min_tracked: 200
-Initializer.min_inliers: 100
+Initializer.min_corners: 200
+Initializer.min_tracked: 150
+Initializer.min_inliers: 80
 Initializer.min_disparity: 50
 Initializer.sigma: 1.0
 Initializer.ransac_max_iters: 1000

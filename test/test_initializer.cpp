@@ -40,6 +40,7 @@ int main(int argc, char const *argv[])
 
     ssvo::FastDetector fast_detector(1000, 3);
     frame1.detectFeatures(fast_detector);
+    std::cout << "-- Corners in First image: " << frame1.kps_.size() << std::endl;
 
     const int n_trials = 100;
     double time_accumulator1 = 0;
