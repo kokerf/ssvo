@@ -31,7 +31,9 @@ private:
 
     void preProccess(const ImgPyr& img_pyr, const std::vector<cv::KeyPoint>& kps);
 
-    void creatGrid(const ImgPyr& img_pyr);
+    void creatGrid();
+
+    void resetGridSize(const int size);
 
     void getKeyPointsFromGrid(const cv::Mat& img, std::vector<cv::KeyPoint>& all_kps);
 
@@ -104,6 +106,9 @@ private:
 
     int N_;
     int nlevels_;
+
+    int width_;
+    int height_;
 
     bool size_ajust_;
     int grid_size_;
