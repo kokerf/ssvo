@@ -7,21 +7,10 @@ namespace ssvo{
 
 long int Frame::frameId = 0;
 
-Frame::Frame(const cv::Mat& img, const double timestamp, cv::Mat& K, cv::Mat& dist_coef):
-    id_(frameId++), timestamp_(timestamp), K_(K)
+Frame::Frame(const cv::Mat& img, const double timestamp, CameraPtr cam):
+    id_(frameId++), timestamp_(timestamp)
 {
-    assert(K.cols == 3 && K.rows == 3);
-    fx = K.at<float>(0,0);
-    fy = K.at<float>(1,1);
-    cx = K.at<float>(0,2);
-    cy = K.at<float>(1,2);
-
-    assert(dist_coef.cols == 1 && dist_coef.rows == 4);
-    k1 = dist_coef.at<float>(0);
-    k2 = dist_coef.at<float>(1);
-    p1 = dist_coef.at<float>(2);
-    p2 = dist_coef.at<float>(3);
-
+    cam_ = cam;
     pyr_levels_ = createPyramid(img, img_pyr_);
 }
 

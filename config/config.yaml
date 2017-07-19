@@ -12,11 +12,11 @@ Camera.p1: -0.005358
 Camera.p2: 0.002628
 Camera.k3: 1.163314
 
-#Camera.width: 640
-#Camera.height: 480
+Camera.width: 640
+Camera.height: 480
 
 # Camera frames per second
-#Camera.fps: 30.0
+Camera.fps: 30.0
 
 # Initialization
 Initializer.min_corners: 200
@@ -29,9 +29,9 @@ Initializer.ransac_max_iters: 1000
 # Fast detector
 FastDetector.image_border: 4
 FastDetector.grid_min_size: 8
-FastDetector.grid_max_fts: 2
+FastDetector.grid_max_fts: 3
 FastDetector.fast_max_threshold: 20
 FastDetector.fast_min_threshold: 7
-FastDetector.fast_min_eigen: 20.0
+FastDetector.fast_min_eigen: 30.0
 
 

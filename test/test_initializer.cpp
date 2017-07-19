@@ -35,8 +35,10 @@ int main(int argc, char const *argv[])
 
     cv::Mat K = ssvo::Config::cameraIntrinsic();
     cv::Mat DistCoef = ssvo::Config::cameraDistCoef();
-    ssvo::Frame frame1(ref_img, 0, K, DistCoef);
-    ssvo::Frame frame2(cur_img, 0, K, DistCoef);
+    ssvo::Camera camera(ssvo::Config::imageWidth(), ssvo::Config::imageHeight(), K, DistCoef);
+
+    ssvo::Frame frame1(ref_img, 0, std::make_shared<ssvo::Camera>(camera));
+    ssvo::Frame frame2(cur_img, 0, std::make_shared<ssvo::Camera>(camera));
 
     ssvo::FastDetector fast_detector(1000, 3);
     frame1.detectFeatures(fast_detector);

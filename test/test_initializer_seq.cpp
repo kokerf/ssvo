@@ -67,10 +67,11 @@ int main(int argc, char const *argv[])
 
     cv::Mat K = ssvo::Config::cameraIntrinsic();
     cv::Mat DistCoef = ssvo::Config::cameraDistCoef();
+
+    ssvo::Camera camera(ssvo::Config::imageWidth(), ssvo::Config::imageHeight(), K, DistCoef);
     ssvo::FastDetector fast_detector(500, 3);
     ssvo::Initializer initializer;
 
-    bool stop = false;
     int fps = ssvo::Config::cameraFps();
     cv::Mat cur_img;
     cv::Mat ref_img;
@@ -82,7 +83,7 @@ int main(int argc, char const *argv[])
 
         cv::cvtColor(img, cur_img, cv::COLOR_RGB2GRAY);
 
-        ssvo::Frame frame(cur_img, 0, K, DistCoef);
+        ssvo::Frame frame(cur_img, 0, std::make_shared<ssvo::Camera>(camera));
 
         if(initial == 0)
         {

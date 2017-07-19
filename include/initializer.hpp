@@ -30,7 +30,7 @@ private:
     void kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<double>& disparities);
 
     bool findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat& t, const cv::Mat& K1, const cv::Mat& K2,
-                    const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& T);
+                    const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& P3Ds, cv::Mat& T);
 
     void triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& P3D);
 
@@ -47,6 +47,9 @@ private:
 
     std::vector<cv::Point2f> pts_ref_;
     std::vector<cv::Point2f> pts_cur_;
+    std::vector<cv::Point2f> upts_ref_;
+    std::vector<cv::Point2f> upts_cur_;
+    std::vector<Vector3f> p3ds_;
     std::vector<double> disparities_;
     cv::Mat inliers_;
 };

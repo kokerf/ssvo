@@ -13,13 +13,14 @@ InitResult Initializer::addFirstFrame(FramePtr frame_ref)
     //! reset
     pts_ref_.clear();
     pts_cur_.clear();
+    p3ds_.clear();
     disparities_.clear();
     inliers_.release();
 
     //! check corner number of first image
     if(frame_ref->kps_.size() < Config::initMinCorners())
     {
-        SSVO_WARN_STREAM(" [INIT] First image has too less corners !!!");
+        SSVO_WARN_STREAM("[INIT] First image has too less corners !!!");
         return RESET;
     }
 
@@ -39,7 +40,7 @@ InitResult Initializer::addSecondFrame(FramePtr frame_cur)
     kltTrack(frame_ref_->img_pyr_[0], frame_cur_->img_pyr_[0], pts_ref_, pts_cur_, disparities_);
     inliers_ = cv::Mat::ones(pts_ref_.size(), 1, CV_8UC1);
 
-    SSVO_INFO_STREAM(" [INIT] KLT tracking points: " << disparities_.size());
+    SSVO_INFO_STREAM("[INIT] KLT tracking points: " << disparities_.size());
     if(disparities_.size() < Config::initMinTracked())
         return RESET;
 
@@ -48,7 +49,7 @@ InitResult Initializer::addSecondFrame(FramePtr frame_cur)
     for_each(disparities_.begin(), disparities_.end(), [&](double &d){disparity+=d;});
     disparity /= disparities_.size();
 
-    SSVO_INFO_STREAM(" [INIT] Avage disparity: " << disparity);
+    SSVO_INFO_STREAM("[INIT] Avage disparity: " << disparity);
     if(disparity < Config::initMinDisparity())
         return FAILURE;
 
@@ -59,21 +60,47 @@ InitResult Initializer::addSecondFrame(FramePtr frame_cur)
     //F  = cv::findFundamentalMat(pts_ref_, pts_cur_, inliers_, cv::FM_RANSAC, Config::initSigma()*3);//, Config::initMaxRansacIters());
     //F.convertTo(F, CV_32FC1);
     //int inliers_count = cv::countNonZero(inliers_);
-    SSVO_INFO_STREAM(" [INIT] Inliers after Fundamental Maxtrix RANSCA check: " << inliers_count);
+    SSVO_INFO_STREAM("[INIT] Inliers after Fundamental Maxtrix RANSCA check: " << inliers_count);
     if(inliers_count < Config::initMinInliers())
-        return  FAILURE;
+        return FAILURE;
 
     double t4 = (double)cv::getTickCount();
     cv::Mat R1, R2, t;
-    cv::Mat K1= frame_ref_->K();
-    cv::Mat K2= frame_cur_->K();
+    cv::Mat K1= frame_ref_->cam_->cvK();
+    cv::Mat K2= frame_cur_->cam_->cvK();
     cv::Mat E = K1.t() * F * K2;
     Fundamental::decomposeEssentialMat(E, R1, R2, t);
 
     double t5 = (double)cv::getTickCount();
     cv::Mat T;
-    bool succeed = findBestRT(R1, R2, t, K1, K2, pts_ref_, pts_cur_, inliers_, T);
-    SSVO_INFO_STREAM(" [INIT] Inliers after cheirality check: " << cv::countNonZero(inliers_));
+    cv::Mat P3Ds;
+    bool succeed = findBestRT(R1, R2, t, K1, K2, pts_ref_, pts_cur_, inliers_, P3Ds, T);
+    if(!succeed)
+        return FAILURE;
+
+    const int n = pts_ref_.size();
+    std::vector<cv::Point2f> pts_ref;
+    std::vector<cv::Point2f> pts_cur;
+    pts_ref.reserve(n);
+    pts_cur.reserve(n);
+    p3ds_.reserve(n);
+
+    const uchar* inliers_ptr = inliers_.ptr<uchar>(0);
+    float* P3Ds_ptr = P3Ds.ptr<float>(0);
+    int strick = P3Ds.cols;
+    for(int i = 0; i < n; ++i, ++P3Ds_ptr)
+    {
+        if(!inliers_ptr[i])
+            continue;
+
+        pts_ref.push_back(pts_ref_[i]);
+        pts_cur.push_back(pts_cur_[i]);
+        p3ds_.push_back(Vector3f(*P3Ds_ptr, P3Ds_ptr[strick], P3Ds_ptr[strick*2]));
+    }
+    pts_ref_ = pts_ref;
+    pts_cur_ = pts_cur;
+
+    SSVO_INFO_STREAM("[INIT] Inliers after cheirality check: " << cv::countNonZero(inliers_));
 
     double t6 = (double)cv::getTickCount();
     std::cout << "Time: " << (t2-t1)/cv::getTickFrequency() << " "
@@ -82,10 +109,7 @@ InitResult Initializer::addSecondFrame(FramePtr frame_cur)
                           << (t5-t4)/cv::getTickFrequency() << " "
                           << (t6-t5)/cv::getTickFrequency() << std::endl;
 
-    if(succeed == false)
-        return  FAILURE;
-
-    SSVO_INFO_STREAM(" [INIT] Initialization succeed!");
+    SSVO_INFO_STREAM("[INIT] Initialization succeed!");
 
     return SUCCESS;
 }
@@ -131,12 +155,16 @@ void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::
 
     disparities.clear();
     disparities.reserve(pts_ref.size());
+    int size = pts_ref.size();
     for(int i = 0; pt_ref_it!= pts_ref.end(); ++i)
     {
         if(!status[i])
         {
-            pt_ref_it = pts_ref.erase(pt_ref_it);
-            pt_cur_it = pts_cur.erase(pt_cur_it);
+            *pt_ref_it = pts_ref.back();//pts_ref.erase(pt_ref_it);
+            *pt_cur_it = pts_cur.back();//erase(pt_cur_it);
+            pts_ref.pop_back();
+            pts_cur.pop_back();
+            status[i] = status[--size];
             continue;
         }
 
@@ -148,12 +176,11 @@ void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::
 }
 
 bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat& t, const cv::Mat& K1, const cv::Mat& K2,
-                             const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& T)
+                             const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& P3Ds, cv::Mat& T)
 {
     assert(pts1.size() == pts2.size());
     if(mask.empty())
         mask = cv::Mat(pts1.size(), 1, CV_8UC1, cv::Scalar(255));
-
 
     //! P = K[R|t]
     cv::Mat P0 = cv::Mat::eye(3, 4, R1.type());
@@ -184,30 +211,33 @@ bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat
 
     //! Do the cheirality check, and remove points too far away
     const float max_dist = 50.0;
-    cv::Mat P3Ds;
-    triangulate(P0, P1, pts1, pts2, mask, P3Ds);
+    cv::Mat P3Ds1;
+    triangulate(P0, P1, pts1, pts2, mask, P3Ds1);
     cv::Mat mask1 = mask.t();
-    mask1 &= (P3Ds.row(2) > 0) & (P3Ds.row(2) < max_dist);
-    P3Ds = P1*P3Ds;
-    mask1 &= (P3Ds.row(2) > 0) & (P3Ds.row(2) < max_dist);
+    mask1 &= (P3Ds1.row(2) > 0) & (P3Ds1.row(2) < max_dist);
+    P3Ds1 = P1*P3Ds1;
+    mask1 &= (P3Ds1.row(2) > 0) & (P3Ds1.row(2) < max_dist);
 
-    triangulate(P0, P2, pts1, pts2, mask, P3Ds);
+    cv::Mat P3Ds2;
+    triangulate(P0, P2, pts1, pts2, mask, P3Ds2);
     cv::Mat mask2 = mask.t();
-    mask2 &= (P3Ds.row(2) > 0) & (P3Ds.row(2) < max_dist);
-    P3Ds = P2*P3Ds;
-    mask2 &= (P3Ds.row(2) > 0) & (P3Ds.row(2) < max_dist);
+    mask2 &= (P3Ds2.row(2) > 0) & (P3Ds2.row(2) < max_dist);
+    P3Ds2 = P2*P3Ds2;
+    mask2 &= (P3Ds2.row(2) > 0) & (P3Ds2.row(2) < max_dist);
 
-    triangulate(P0, P3, pts1, pts2, mask, P3Ds);
+    cv::Mat P3Ds3;
+    triangulate(P0, P3, pts1, pts2, mask, P3Ds3);
     cv::Mat mask3 = mask.t();
-    mask3 &= (P3Ds.row(2) > 0) & (P3Ds.row(2) < max_dist);
-    P3Ds = P3*P3Ds;
-    mask3 &= (P3Ds.row(2) > 0) & (P3Ds.row(2) < max_dist);
+    mask3 &= (P3Ds3.row(2) > 0) & (P3Ds3.row(2) < max_dist);
+    P3Ds3 = P3*P3Ds3;
+    mask3 &= (P3Ds3.row(2) > 0) & (P3Ds3.row(2) < max_dist);
 
-    triangulate(P0, P4, pts1, pts2, mask, P3Ds);
+    cv::Mat P3Ds4;
+    triangulate(P0, P4, pts1, pts2, mask, P3Ds4);
     cv::Mat mask4 = mask.t();
-    mask4 &= (P3Ds.row(2) > 0) & (P3Ds.row(2) < max_dist);
-    P3Ds = P4*P3Ds;
-    mask4 &= (P3Ds.row(2) > 0) & (P3Ds.row(2) < max_dist);
+    mask4 &= (P3Ds4.row(2) > 0) & (P3Ds4.row(2) < max_dist);
+    P3Ds4 = P4*P3Ds4;
+    mask4 &= (P3Ds4.row(2) > 0) & (P3Ds4.row(2) < max_dist);
 
     int nGood0 = cv::countNonZero(mask);
     int nGood1 = cv::countNonZero(mask1);
@@ -218,30 +248,37 @@ bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat
     int maxGood = MAX(MAX(nGood1, nGood2), MAX(nGood3, nGood4));
     //! for normal, other count is 0
     if(maxGood < 0.9*nGood0)
+    {
+        SSVO_WARN_STREAM("[INIT] Less than 90% inliers after cheirality check!!!");
         return false;
+    }
 
     T = cv::Mat(3, 4, R1.type());
     if(maxGood == nGood1)
     {
-        mask = mask1.clone();
+        mask = mask1.t();
+        P3Ds = P3Ds1.clone();
         T.rowRange(0,3).colRange(0,3) = R1.clone();
         T.rowRange(0,3).col(3) = t;
     }
     else if(maxGood == nGood2)
     {
-        mask = mask2.clone();
+        mask = mask2.t();
+        P3Ds = P3Ds2.clone();
         T.rowRange(0,3).colRange(0,3) = R2.clone();
         T.rowRange(0,3).col(3) = t;
     }
     else if(maxGood == nGood3)
     {
-        mask = mask3.clone();
+        mask = mask3.t();
+        P3Ds = P3Ds3.clone();
         T.rowRange(0,3).colRange(0,3) = R1.clone();
         T.rowRange(0,3).col(3) = t * -1.0;
     }
     else if(maxGood == nGood4)
     {
-        mask = mask4.clone();
+        mask = mask4.t();
+        P3Ds = P3Ds4.clone();
         T.rowRange(0,3).colRange(0,3) = R2.clone();
         T.rowRange(0,3).col(3) = t * -1.0;
     }

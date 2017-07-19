@@ -18,6 +18,10 @@ public:
 
     static cv::Mat cameraDistCoef(){return getInstance().DistCoef;}
 
+    static int imageWidth(){return getInstance().width;}
+
+    static int imageHeight(){return getInstance().height;}
+
     static float cameraFps(){return getInstance().fps;}
 
     static int initMinCorners(){return getInstance().init_min_corners;}
@@ -83,6 +87,8 @@ private:
         DistCoef.at<float>(2) = p1;
         DistCoef.at<float>(3) = p2;
 
+        width = (int)fs["Camera.width"];
+        height = (int)fs["Camera.height"];
         fps = (float)fs["Camera.fps"];
 
         //! initializer parameters
@@ -114,6 +120,8 @@ private:
     float k1, k2, p1, p2;
     cv::Mat K;
     cv::Mat DistCoef;
+    int width;
+    int height;
     float fps;
 
     //! initializer parameters

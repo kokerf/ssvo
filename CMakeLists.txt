@@ -47,18 +47,19 @@ endif()
 find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
 
+# Ceres
+find_package(Ceres REQUIRED)
+include_directories(${CERES_INCLUDE_DIRS})
+
 include_directories(
     ${PROJECT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/Thirdparty/fast/include/
 )
 
-# FAST
-FIND_PACKAGE(fast REQUIRED)
-
-
 LIST(APPEND LINK_LIBS
   ${OpenCV_LIBS}
+  ${CERES_LIBRARIES}
   ${PROJECT_SOURCE_DIR}/Thirdparty/fast/build/libfast.so
 )
 
@@ -69,6 +70,7 @@ LIST(APPEND LINK_LIBS
 # Set sourcefiles
 LIST(APPEND SOURCEFILES
     src/feature_detector.cpp
+    src/camera.cpp
     src/frame.cpp
     src/initializer.cpp)
 
