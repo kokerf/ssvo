@@ -33,7 +33,7 @@ private:
 
     void creatGrid();
 
-    void resetGridSize(const int size);
+    void resetGridSize(const int npts=-1);
 
     void getKeyPointsFromGrid(const cv::Mat& img, std::vector<cv::KeyPoint>& all_kps);
 

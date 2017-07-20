@@ -24,7 +24,6 @@ public:
 
     Vector2f project(Vector3f& P) const;
 
-
     inline const int width() { return width_; }
 
     inline const int height() { return height_; }

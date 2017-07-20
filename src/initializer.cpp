@@ -10,6 +10,7 @@ namespace ssvo{
 
 Initializer::Initializer(const cv::Mat& K, const cv::Mat& D)
 {
+    finished_ = false;
     K_ = K.clone();
     D_ = D.clone();
 }
@@ -25,6 +26,7 @@ InitResult Initializer::addFirstImage(const cv::Mat& img_ref, std::vector<cv::Po
     p3ds_.clear();
     disparities_.clear();
     inliers_.release();
+    finished_ = false;
 
     //! check corner number of first image
     if(pts.size() < Config::initMinCorners())
@@ -48,11 +50,20 @@ InitResult Initializer::addFirstImage(const cv::Mat& img_ref, std::vector<cv::Po
 
 InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
 {
+    if(finished_)
+    {
+        SSVO_WARN_STREAM("[INIT] Last initialization is succeed! Plesase reset!")
+        return RESET;
+    }
+
     img_cur_ = img_cur;
     double t1 = (double)cv::getTickCount();
-    //! KLT tracking
-    kltTrack(img_ref_, img_cur_, pts_ref_, pts_cur_, fts_ref_);
-    inliers_ = cv::Mat::ones(pts_ref_.size(), 1, CV_8UC1);
+    //! [1] KLT tracking
+    kltTrack(img_ref_, img_cur_, pts_ref_, pts_cur_, inliers_);
+    reduceVecor(pts_ref_, inliers_);
+    reduceVecor(pts_cur_, inliers_);
+    reduceVecor(fts_ref_, inliers_);
+    inliers_ = cv::Mat(pts_ref_.size(), 1, CV_8UC1, cv::Scalar(255));
 
     //! calculate disparities on undistorted points
     cv::undistortPoints(pts_cur_, fts_cur_, K_, D_);
@@ -62,17 +73,47 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
     if(disparities_.size() < Config::initMinTracked()) return RESET;
 
     double t2 = (double)cv::getTickCount();
-    float disparity = 0.0;
-    for_each(disparities_.begin(), disparities_.end(), [&](float &d){disparity+=d;});
-    disparity /= disparities_.size();
+    std::vector<float> disparities_temp = disparities_;
+    std::sort(disparities_temp.begin(), disparities_temp.end());
+    float disparity = disparities_temp.at(disparities_temp.size()/2);
+    float max_disparity = disparities_temp.at(disparities_temp.size()*3/4)*2;
+    uchar* inliers_ptr = inliers_.ptr<uchar>(0);
+    bool reduce = false;
+    for (int i = 0; i < pts_ref_.size(); ++i)
+    {
+        if(disparities_[i] > max_disparity)
+        {
+            reduce = true;
+            inliers_ptr[i] = 0;
+        }
+    }
+    if(reduce)
+    {
+        reduceVecor(pts_ref_, inliers_);
+        reduceVecor(pts_cur_, inliers_);
+        reduceVecor(fts_ref_, inliers_);
+        reduceVecor(fts_cur_, inliers_);
+        inliers_ = cv::Mat(pts_ref_.size(), 1, CV_8UC1, cv::Scalar(255));
+    }
 
     SSVO_INFO_STREAM("[INIT] Avage disparity: " << disparity);
     if(disparity < Config::initMinDisparity()) return FAILURE;
 
     double t3 = (double)cv::getTickCount();
-    //! geometry check
+    //! [2] geometry check by F matrix
+    //cv::Mat F = cv::findFundamentalMat(fts_ref_, fts_cur_, inliers_, cv::FM_RANSAC);
+    //F.convertTo(F, CV_32FC1);
+    //int inliers_count = cv::countNonZero(inliers_);
     cv::Mat F;
-    int inliers_count = Fundamental::findFundamentalMat(pts_ref_, pts_cur_, F, inliers_, Config::initSigma(), Config::initMaxRansacIters());
+    int inliers_count = Fundamental::findFundamentalMat(fts_ref_, fts_cur_, F, inliers_, Config::initUnSigma(), Config::initMaxRansacIters());
+    if(inliers_count!= pts_ref_.size())
+    {
+        reduceVecor(pts_ref_, inliers_);
+        reduceVecor(pts_cur_, inliers_);
+        reduceVecor(fts_ref_, inliers_);
+        reduceVecor(fts_cur_, inliers_);
+        inliers_ = cv::Mat(pts_ref_.size(), 1, CV_8UC1, cv::Scalar(255));
+    }
     SSVO_INFO_STREAM("[INIT] Inliers after Fundamental Maxtrix RANSCA check: " << inliers_count);
     if(inliers_count < Config::initMinInliers()) return FAILURE;
 
@@ -85,32 +126,14 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
     cv::Mat T;
     cv::Mat P3Ds;
     cv::Mat K =cv::Mat::eye(3,3,CV_32FC1);
-    bool succeed = findBestRT(R1, R2, t, K_, K_, pts_ref_, pts_cur_, inliers_, P3Ds, T);
+    //! [3] cheirality check
+    bool succeed = findBestRT(R1, R2, t, K, K, fts_ref_, fts_cur_, inliers_, P3Ds, T);
     if(!succeed) return FAILURE;
     SSVO_INFO_STREAM("[INIT] Inliers after cheirality check: " << cv::countNonZero(inliers_));
 
-    const int n = pts_ref_.size();
-    std::vector<cv::Point2f> pts_ref;
-    std::vector<cv::Point2f> pts_cur;
-    pts_ref.reserve(n);
-    pts_cur.reserve(n);
-    p3ds_.reserve(n);
-
-    const uchar* inliers_ptr = inliers_.ptr<uchar>(0);
-    float* P3Ds_ptr = P3Ds.ptr<float>(0);
-    int strick = P3Ds.cols;
-    for(int i = 0; i < n; ++i, ++P3Ds_ptr)
-    {
-        if(!inliers_ptr[i])
-            continue;
-
-        pts_ref.push_back(pts_ref_[i]);
-        pts_cur.push_back(pts_cur_[i]);
-        Vector3f p3d(*P3Ds_ptr, P3Ds_ptr[strick], P3Ds_ptr[strick*2]);
-        p3ds_.push_back(p3d);
-    }
-    pts_ref_ = pts_ref;
-    pts_cur_ = pts_cur;
+    //! [4] reprojective check
+    succeed = checkReprejectErr(pts_ref_, pts_cur_, fts_ref_, fts_cur_, T, inliers_, P3Ds, Config::initUnSigma()*8, p3ds_);
+    if(!succeed) return FAILURE;
 
     double t6 = (double)cv::getTickCount();
     std::cout << "Time: " << (t2-t1)/cv::getTickFrequency() << " "
@@ -121,31 +144,38 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
 
     SSVO_INFO_STREAM("[INIT] Initialization succeed!");
 
+    finished_ = true;
     return SUCCESS;
+
 }
 
-void Initializer::getUndistInilers(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur)
+void Initializer::getUndistInilers(std::vector<cv::Point2f>& fts_ref, std::vector<cv::Point2f>& fts_cur) const
 {
-    const int n = pts_ref_.size();
-    pts_ref.reserve(n);
-    pts_cur.reserve(n);
-
-    const uchar* inliers_ptr = inliers_.ptr<uchar>(0);
-    for(int i = 0; i < n; ++i)
+    if(!finished_)
     {
-        if(!inliers_ptr[i])
-            continue;
-
-        pts_ref.push_back(pts_ref_[i]);
-        pts_cur.push_back(pts_cur_[i]);
+        SSVO_WARN_STREAM("[INIT] Please waiting until inintialization finished!");
+        return;
     }
+
+    fts_ref = fts_ref_;
+    fts_cur = fts_cur_;
+}
+void Initializer::getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur) const
+{
+    pts_ref = pts_ref_;
+    pts_cur = pts_cur_;
 }
 
-void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<cv::Point2f>& fts_ref)
+void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, cv::Mat& inliers)
 {
     const int klt_win_size = 21;
     const int klt_max_iter = 30;
     const double klt_eps = 0.001;
+    const int border = 8;
+    const int x_min = border;
+    const int y_min = border;
+    const int x_max = img_ref.cols - border;
+    const int y_max = img_ref.rows - border;
 
     std::vector<float> error;
     std::vector<uchar> status;
@@ -160,29 +190,19 @@ void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::
         termcrit, cv::OPTFLOW_USE_INITIAL_FLOW
     );
 
-    std::vector<cv::Point2f>::iterator pts_ref_it = pts_ref.begin();
-    std::vector<cv::Point2f>::iterator fts_ref_it = fts_ref.begin();
     std::vector<cv::Point2f>::iterator pts_cur_it = pts_cur.begin();
+    std::vector<cv::Point2f>::iterator pts_cur_end = pts_cur.end();
 
-    int size = pts_ref.size();
-    for(int i = 0; pts_ref_it!= pts_ref.end(); ++i)
+    inliers = cv::Mat(pts_cur.size(), 1, CV_8UC1, cv::Scalar(255));
+    uchar* inliers_ptr = inliers.ptr<uchar>(0);
+    for(int i = 0; pts_cur_it!= pts_cur_end; ++i, ++pts_cur_it)
     {
-        if(!status[i])
+        if(!status[i] || pts_cur_it->x < x_min || pts_cur_it->y < y_min || pts_cur_it->x > x_max || pts_cur_it->y > y_max)
         {
-            *pts_ref_it = pts_ref.back();
-            *fts_ref_it = fts_ref.back();
-            *pts_cur_it = pts_cur.back();
-            pts_ref.pop_back();
-            fts_ref.pop_back();
-            pts_cur.pop_back();
-            status[i] = status[--size];
+            inliers_ptr[i] = 0;
             continue;
         }
-        ++pts_ref_it;
-        ++fts_ref_it;
-        ++pts_cur_it;
     }
-
 }
 
 void Initializer::calcDisparity(std::vector<cv::Point2f>& pts1, std::vector<cv::Point2f>& pts2, std::vector<float>& disparities)
@@ -309,6 +329,60 @@ bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat
     return true;
 }
 
+bool Initializer::checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<cv::Point2f>& fts_ref, std::vector<cv::Point2f>& fts_cur,
+                       const cv::Mat& T, const cv::Mat& mask, const cv::Mat& P3Ds, const float sigma, std::vector<Vector3f>& p3ds)
+{
+    assert(T.type() == CV_32FC1);
+    assert(P3Ds.type() == CV_32FC1);
+
+    const int n = pts_ref_.size();
+    const float sigma2 = sigma*sigma;
+    p3ds_.clear(); p3ds_.reserve(n);
+
+    std::vector<int> inliers;
+    inliers.reserve(n);
+    const uchar* mask_ptr = mask.ptr<uchar>(0);
+    const float* P3Ds_ptr = P3Ds.ptr<float>(0);
+    const int strick = P3Ds.cols;
+    const int strick2 = strick*2;
+
+    for(int i = 0; i < n; ++i)
+    {
+        if(!mask_ptr[i])
+            continue;
+
+        const float* p3d1 = &P3Ds_ptr[i];
+        const float X = p3d1[0];
+        const float Y = p3d1[strick];
+        const float Z = p3d1[strick2];
+        float x1 = X / Z;
+        float y1 = Y / Z;
+        float dx1 = fts_ref[i].x - x1;
+        float dy1 = fts_ref[i].y - y1;
+        float err1 = dx1*dx1 + dy1*dy1;
+
+        if(err1 > sigma2)
+            continue;
+
+        cv::Mat P1 = (cv::Mat_<float>(4,1) <<X, Y, Z, 1);
+        cv::Mat P2 = T*P1;
+        float* p3d2 = P2.ptr<float>(0);
+        float x2 = p3d2[0] / p3d2[2];
+        float y2 = p3d2[1] / p3d2[2];
+        float dx2 = fts_cur[i].x - x2;
+        float dy2 = fts_cur[i].y - y2;
+        float err2 = dx2*dx2 + dy2*dy2;
+
+        if(err2 > sigma2)
+            continue;
+
+        inliers.push_back(i);
+        p3ds.push_back(Vector3f(X, Y, Z));
+    }
+    std::cout << "  " << inliers.size() << std::endl;
+    return false;
+}
+
 #if 0
 void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& P3D)
 {
@@ -383,6 +457,30 @@ void Initializer::triangulate(const MatrixXf& P1, const MatrixXf& P2, const cv::
 
     P3D = V.col(3);
     P3D = P3D/P3D(3);
+}
+
+void Initializer::reduceVecor(std::vector<cv::Point2f>& pts, const cv::Mat& inliers)
+{
+    assert(inliers.cols == 1 || inliers.rows == 1);
+    assert(inliers.type() == CV_8UC1);
+    int size = MAX(inliers.cols, inliers.rows);
+    assert(size == pts.size());
+
+    std::vector<cv::Point2f>::iterator pts_iter = pts.begin();
+    cv::Mat inliers_mat = inliers.clone();
+    uchar* inliers_ptr = inliers_mat.ptr<uchar>(0);
+    for(;pts_iter!=pts.end();)
+    {
+        if(!(*inliers_ptr))
+        {
+            *inliers_ptr = inliers_mat.data[--size];
+            *pts_iter = pts.back();
+            pts.pop_back();
+            continue;
+        }
+        inliers_ptr++;
+        pts_iter++;
+    }
 }
 
 int Fundamental::findFundamentalMat(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat &F,

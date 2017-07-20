@@ -99,7 +99,7 @@ private:
         init_min_disparity = (int)fs["Initializer.min_disparity"];
         init_min_inliers = (int)fs["Initializer.min_inliers"];
         init_sigma = (float)fs["Initializer.sigma"];
-        init_unsigma = init_sigma / sqrt(fx*fx + fy*fy);
+        init_unsigma = init_sigma / MIN(fx,fy);
         init_max_iters = (int)fs["Initializer.ransac_max_iters"];
 
         //! FAST detector parameters

@@ -69,7 +69,7 @@ int main(int argc, char const *argv[])
     initializer.addFirstImage(ref_img, pts, upts);
     int succeed = initializer.addSecondImage(cur_img);
     std::vector<cv::Point2f> pts_ref, pts_cur;
-    initializer.getUndistInilers(pts_ref, pts_cur);
+    initializer.getTrackedPoints(pts_ref, pts_cur);
     std::cout << "-- Initial succeed? " << succeed << std::endl;
 
     std::vector<cv::KeyPoint> kps1, kps2;

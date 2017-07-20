@@ -25,13 +25,7 @@ int FastDetector::detectByImage(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>
 
     if(size_ajust_)
     {
-        int size = grid_size_;
-        if(all_kps.size() < N_*0.95)
-            size -= 5;
-        else if(all_kps.size() > N_*1.1)
-            size += 5;
-
-        resetGridSize(size);
+        resetGridSize(all_kps.size());
     }
 
     return new_coners_;
@@ -51,13 +45,7 @@ int FastDetector::detectByGrid(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>&
 
     if(size_ajust_)
     {
-        int size = grid_size_;
-        if(all_kps.size() < N_*0.95)
-            size -= 5;
-        else if(all_kps.size() > N_*1.1)
-            size += 5;
-
-        resetGridSize(size);
+        resetGridSize(all_kps.size());
     }
 
     return new_coners_;
@@ -72,7 +60,8 @@ void FastDetector::preProccess(const ImgPyr& img_pyr, const std::vector<cv::KeyP
     nlevels_ = MIN(img_pyr.size(), nlevels_);
 
     //! creat grid coordinate
-    creatGrid();
+    if(-1 == grid_size_)
+        creatGrid();
 
     //! set mask and grid
     kps_in_grid_.clear();
@@ -101,11 +90,27 @@ void FastDetector::preProccess(const ImgPyr& img_pyr, const std::vector<cv::KeyP
     }
 }
 
-void FastDetector::resetGridSize(const int size)
+void FastDetector::resetGridSize(const int npts)
 {
+    int size = grid_size_;
+    if(npts == -1 || size == -1)
+    {
+        size = floorf(std::sqrt(1.0 * width_ * height_ / (N_/Config::gridMaxFeatures())));
+    }
+    else if(npts < N_*0.9 || npts > N_*1.1)
+    {
+        const float pts_per_grid = 1.0 * npts / (grid_n_rows_ * grid_n_rows_);
+        const float n_grid = N_ / pts_per_grid;
+        size = floorf(std::sqrt(width_ * height_ / n_grid));
+    }
+//    else if(npts < N_*0.95)
+//        size -= 5;
+//    else if(npts > N_*1.1)
+//        size += 5;
+
     grid_size_ = MAX(size, Config::gridMinSize());
-    grid_n_rows_ = floorf(static_cast<double>(height_) / grid_size_);
-    grid_n_cols_ = floorf(static_cast<double>(width_) / grid_size_);
+    grid_n_rows_ = ceil(static_cast<double>(height_) / grid_size_);
+    grid_n_cols_ = ceil(static_cast<double>(width_) / grid_size_);
 
     offset_rows_ = (height_ - grid_size_ * grid_n_rows_) >> 1;
     offset_cols_ = (width_ - grid_size_ * grid_n_cols_) >> 1;
@@ -114,11 +119,7 @@ void FastDetector::resetGridSize(const int size)
 void FastDetector::creatGrid()
 {
     //! adjust grid size
-    if(grid_size_ == -1)
-    {
-        const int size = floorf(std::sqrt(1.0 * width_ * height_ / (N_/Config::gridMaxFeatures())));
-        resetGridSize(size);
-    }
+    resetGridSize();
 
     grid_boundary_x_.resize(grid_n_cols_-1);
     grid_boundary_y_.resize(grid_n_rows_-1);

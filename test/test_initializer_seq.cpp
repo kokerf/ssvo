@@ -110,13 +110,12 @@ int main(int argc, char const *argv[])
                 break;
 
             std::vector<cv::Point2f> pts_ref, pts_cur;
-            initializer.getUndistInilers(pts_ref, pts_cur);
-
+            initializer.getTrackedPoints(pts_ref, pts_cur);
 
             cv::Mat match_img = img.clone();
             for(int i=0; i<pts_ref.size();i++)
             {
-                cv::line(match_img, pts_cur[i], pts_ref[i],cv::Scalar(0,0,70));
+                cv::line(match_img, pts_ref[i], pts_cur[i],cv::Scalar(0,0,70));
             }
 
             cv::imshow("KeyPoints detectByImage", match_img);
