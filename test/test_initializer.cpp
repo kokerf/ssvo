@@ -37,34 +37,39 @@ int main(int argc, char const *argv[])
     cv::Mat DistCoef = ssvo::Config::cameraDistCoef();
     ssvo::Camera camera(ssvo::Config::imageWidth(), ssvo::Config::imageHeight(), K, DistCoef);
 
-    ssvo::Frame frame1(ref_img, 0, std::make_shared<ssvo::Camera>(camera));
-    ssvo::Frame frame2(cur_img, 0, std::make_shared<ssvo::Camera>(camera));
-
+    std::vector<cv::KeyPoint> kps;
+    std::vector<cv::KeyPoint> kps_old;
+    std::vector<cv::Point2f> pts;
+    std::vector<cv::Point2f> upts;
+    ImgPyr img_pyr;
     ssvo::FastDetector fast_detector(1000, 3);
-    frame1.detectFeatures(fast_detector);
-    std::cout << "-- Corners in First image: " << frame1.kps_.size() << std::endl;
+    ssvo::Frame::createPyramid(ref_img, img_pyr);
+    fast_detector.detectByImage(img_pyr, kps, kps_old);
+    cv::KeyPoint::convert(kps, pts);
+    cv::undistortPoints(pts, upts, K, DistCoef);
+    std::cout << "-- Corners in First image: " << kps.size() << std::endl;
 
     const int n_trials = 100;
     double time_accumulator1 = 0;
     double time_accumulator2 = 0;
-    ssvo::Initializer initializer;
+    ssvo::Initializer initializer(K, DistCoef);
     for(int i = 0; i < n_trials; ++i)
     {
         double t1 = (double)cv::getTickCount();
-        initializer.addFirstFrame(std::make_shared<ssvo::Frame>(frame1));
+        initializer.addFirstImage(ref_img, pts, upts);
         time_accumulator1 += ((cv::getTickCount() - t1) / cv::getTickFrequency());
 
         double t2 = (double)cv::getTickCount();
-        initializer.addSecondFrame(std::make_shared<ssvo::Frame>(frame2));
+        initializer.addSecondImage(cur_img);
         time_accumulator2 += ((cv::getTickCount() - t2) / cv::getTickFrequency());
     }
     std::cout << " took " <<  time_accumulator1/((double)n_trials)*1000.0
               << " ms for first image and " << time_accumulator2/((double)n_trials)*1000.0 << " ms for second image(average over " << n_trials << " trials)." << std::endl;
 
-    initializer.addFirstFrame(std::make_shared<ssvo::Frame>(frame1));
-    int succeed = initializer.addSecondFrame(std::make_shared<ssvo::Frame>(frame2));
+    initializer.addFirstImage(ref_img, pts, upts);
+    int succeed = initializer.addSecondImage(cur_img);
     std::vector<cv::Point2f> pts_ref, pts_cur;
-    initializer.getTrackedPoints(pts_ref, pts_cur);
+    initializer.getUndistInilers(pts_ref, pts_cur);
     std::cout << "-- Initial succeed? " << succeed << std::endl;
 
     std::vector<cv::KeyPoint> kps1, kps2;
@@ -78,7 +83,7 @@ int main(int argc, char const *argv[])
     }
 
     cv::Mat match_img;
-    cv::drawMatches(frame1.img_pyr_[0], kps1, frame2.img_pyr_[0], kps2, matches, match_img);
+    cv::drawMatches(ref_img, kps1, cur_img, kps2, matches, match_img);
     cv::imshow("KeyPoints detectByImage", match_img);
     cv::waitKey(0);
 

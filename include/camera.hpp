@@ -1,6 +1,7 @@
 #ifndef _CAMERA_HPP_
 #define _CAMERA_HPP_
 
+#include <vector>
 #include <memory>
 #include <Eigen/Eigen>
 #include <opencv2/opencv.hpp>
@@ -10,15 +11,18 @@ using namespace Eigen;
 namespace ssvo {
 
 class Camera {
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 public:
     Camera(int width, int height, float fx, float fy, float cx, float cy,
            float k1 = 0.0, float k2 = 0.0, float p1 = 0.0, float p2 = 0.0);
 
     Camera(int width, int height, cv::Mat& K, cv::Mat& D);
 
-    Vector3f lift(Vector2f &px) const;
+    Vector3f lift(Vector2f& px) const;
 
-    Vector2f project(Vector3f &P) const;
+    void liftPoints(std::vector<Vector2f>& pxs, std::vector<Vector3f>& fts) const;
+
+    Vector2f project(Vector3f& P) const;
 
 
     inline const int width() { return width_; }

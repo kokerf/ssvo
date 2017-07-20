@@ -19,15 +19,19 @@ class Initializer
 {
 public:
 
-    InitResult addFirstFrame(FramePtr frame_ref);
+    Initializer(const cv::Mat& K, const cv::Mat& D);
 
-    InitResult addSecondFrame(FramePtr frame_cur);
+    InitResult addFirstImage(const cv::Mat& img_ref, std::vector<cv::Point2f>& pts, std::vector<cv::Point2f>& fts);
 
-    void getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur);
+    InitResult addSecondImage(const cv::Mat& img);
+
+    void getUndistInilers(std::vector<cv::Point2f>& fts_ref, std::vector<cv::Point2f>& fts_cur);
 
 private:
 
-    void kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<double>& disparities);
+    void kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<cv::Point2f>& fts_ref);
+
+    void calcDisparity(std::vector<cv::Point2f>& pts1, std::vector<cv::Point2f>& pts2, std::vector<float>& disparities);
 
     bool findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat& t, const cv::Mat& K1, const cv::Mat& K2,
                     const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& P3Ds, cv::Mat& T);
@@ -42,15 +46,16 @@ private:
 
 private:
 
-    FramePtr frame_ref_;
-    FramePtr frame_cur_;
+    cv::Mat K_, D_;
+    cv::Mat img_ref_;
+    cv::Mat img_cur_;
 
     std::vector<cv::Point2f> pts_ref_;
+    std::vector<cv::Point2f> fts_ref_;
     std::vector<cv::Point2f> pts_cur_;
-    std::vector<cv::Point2f> upts_ref_;
-    std::vector<cv::Point2f> upts_cur_;
+    std::vector<cv::Point2f> fts_cur_;
     std::vector<Vector3f> p3ds_;
-    std::vector<double> disparities_;
+    std::vector<float> disparities_;
     cv::Mat inliers_;
 };
 

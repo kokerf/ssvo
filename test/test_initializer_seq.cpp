@@ -69,13 +69,17 @@ int main(int argc, char const *argv[])
     cv::Mat DistCoef = ssvo::Config::cameraDistCoef();
 
     ssvo::Camera camera(ssvo::Config::imageWidth(), ssvo::Config::imageHeight(), K, DistCoef);
-    ssvo::FastDetector fast_detector(500, 3);
-    ssvo::Initializer initializer;
+    ssvo::FastDetector fast_detector(300, 0, true);
+    ssvo::Initializer initializer(K, DistCoef);
 
     int fps = ssvo::Config::cameraFps();
     cv::Mat cur_img;
     cv::Mat ref_img;
     int initial = 0;
+    std::vector<cv::KeyPoint> kps;
+    std::vector<cv::KeyPoint> kps_old;
+    std::vector<cv::Point2f> pts;
+    std::vector<cv::Point2f> upts;
     for(std::vector<std::string>::iterator i = img_file_names.begin(); i != img_file_names.end(); ++i)
     {
         cv::Mat img = cv::imread(*i, CV_LOAD_IMAGE_UNCHANGED);
@@ -83,19 +87,21 @@ int main(int argc, char const *argv[])
 
         cv::cvtColor(img, cur_img, cv::COLOR_RGB2GRAY);
 
-        ssvo::Frame frame(cur_img, 0, std::make_shared<ssvo::Camera>(camera));
-
         if(initial == 0)
         {
             ref_img = cur_img.clone();
-            frame.detectFeatures(fast_detector);
-            std::cout << "All corners: " << frame.kps_.size() <<std::endl;
-            int succeed = initializer.addFirstFrame(std::make_shared<ssvo::Frame>(frame));
+            ImgPyr img_pyr;
+            ssvo::Frame::createPyramid(cur_img, img_pyr);
+            fast_detector.detectByImage(img_pyr, kps, kps_old);
+            cv::KeyPoint::convert(kps, pts);
+            std::cout << "All corners: " << pts.size() <<std::endl;
+            cv::undistortPoints(pts, upts, K, DistCoef);
+            int succeed = initializer.addFirstImage(cur_img, pts, upts);
             if(succeed == ssvo::SUCCESS) initial = 1;
         }
         else if(initial == 1)
         {
-            ssvo::InitResult result = initializer.addSecondFrame(std::make_shared<ssvo::Frame>(frame));
+            ssvo::InitResult result = initializer.addSecondImage(cur_img);
             if(result == ssvo::RESET) {
                 initial = 0;
                 continue;
@@ -104,7 +110,7 @@ int main(int argc, char const *argv[])
                 break;
 
             std::vector<cv::Point2f> pts_ref, pts_cur;
-            initializer.getTrackedPoints(pts_ref, pts_cur);
+            initializer.getUndistInilers(pts_ref, pts_cur);
 
 
             cv::Mat match_img = img.clone();

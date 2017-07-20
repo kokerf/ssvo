@@ -8,75 +8,86 @@
 
 namespace ssvo{
 
-InitResult Initializer::addFirstFrame(FramePtr frame_ref)
+Initializer::Initializer(const cv::Mat& K, const cv::Mat& D)
 {
+    K_ = K.clone();
+    D_ = D.clone();
+}
+
+InitResult Initializer::addFirstImage(const cv::Mat& img_ref, std::vector<cv::Point2f>& pts, std::vector<cv::Point2f>& fts)
+{
+    assert(pts.size() == fts.size());
     //! reset
     pts_ref_.clear();
+    fts_ref_.clear();
     pts_cur_.clear();
+    fts_cur_.clear();
     p3ds_.clear();
     disparities_.clear();
     inliers_.release();
 
     //! check corner number of first image
-    if(frame_ref->kps_.size() < Config::initMinCorners())
+    if(pts.size() < Config::initMinCorners())
     {
         SSVO_WARN_STREAM("[INIT] First image has too less corners !!!");
         return RESET;
     }
 
-    frame_ref_ = frame_ref;
-    cv::KeyPoint::convert(frame_ref_->kps_, pts_ref_);
-
+    //! get refrence image
+    img_ref_ = img_ref.clone();
     //! set initial flow
-    pts_cur_.insert(pts_cur_.begin(), pts_ref_.begin(), pts_ref_.end());
+    pts_ref_.resize(pts.size());
+    fts_ref_.resize(pts.size());
+    pts_cur_.resize(pts.size());
+    std::copy(pts.begin(), pts.end(), pts_ref_.begin());
+    std::copy(fts.begin(), fts.end(), fts_ref_.begin());
+    std::copy(pts.begin(), pts.end(), pts_cur_.begin());
 
     return SUCCESS;
 }
 
-InitResult Initializer::addSecondFrame(FramePtr frame_cur)
+InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
 {
+    img_cur_ = img_cur;
     double t1 = (double)cv::getTickCount();
-    frame_cur_ = frame_cur;
-    kltTrack(frame_ref_->img_pyr_[0], frame_cur_->img_pyr_[0], pts_ref_, pts_cur_, disparities_);
+    //! KLT tracking
+    kltTrack(img_ref_, img_cur_, pts_ref_, pts_cur_, fts_ref_);
     inliers_ = cv::Mat::ones(pts_ref_.size(), 1, CV_8UC1);
 
+    //! calculate disparities on undistorted points
+    cv::undistortPoints(pts_cur_, fts_cur_, K_, D_);
+    calcDisparity(pts_ref_, pts_cur_, disparities_);
+
     SSVO_INFO_STREAM("[INIT] KLT tracking points: " << disparities_.size());
-    if(disparities_.size() < Config::initMinTracked())
-        return RESET;
+    if(disparities_.size() < Config::initMinTracked()) return RESET;
 
     double t2 = (double)cv::getTickCount();
-    double disparity = 0.0;
-    for_each(disparities_.begin(), disparities_.end(), [&](double &d){disparity+=d;});
+    float disparity = 0.0;
+    for_each(disparities_.begin(), disparities_.end(), [&](float &d){disparity+=d;});
     disparity /= disparities_.size();
 
     SSVO_INFO_STREAM("[INIT] Avage disparity: " << disparity);
-    if(disparity < Config::initMinDisparity())
-        return FAILURE;
+    if(disparity < Config::initMinDisparity()) return FAILURE;
 
     double t3 = (double)cv::getTickCount();
     //! geometry check
     cv::Mat F;
     int inliers_count = Fundamental::findFundamentalMat(pts_ref_, pts_cur_, F, inliers_, Config::initSigma(), Config::initMaxRansacIters());
-    //F  = cv::findFundamentalMat(pts_ref_, pts_cur_, inliers_, cv::FM_RANSAC, Config::initSigma()*3);//, Config::initMaxRansacIters());
-    //F.convertTo(F, CV_32FC1);
-    //int inliers_count = cv::countNonZero(inliers_);
     SSVO_INFO_STREAM("[INIT] Inliers after Fundamental Maxtrix RANSCA check: " << inliers_count);
-    if(inliers_count < Config::initMinInliers())
-        return FAILURE;
+    if(inliers_count < Config::initMinInliers()) return FAILURE;
 
     double t4 = (double)cv::getTickCount();
     cv::Mat R1, R2, t;
-    cv::Mat K1= frame_ref_->cam_->cvK();
-    cv::Mat K2= frame_cur_->cam_->cvK();
-    cv::Mat E = K1.t() * F * K2;
+    cv::Mat E = K_.t() * F * K_;
     Fundamental::decomposeEssentialMat(E, R1, R2, t);
 
     double t5 = (double)cv::getTickCount();
     cv::Mat T;
     cv::Mat P3Ds;
-    bool succeed = findBestRT(R1, R2, t, K1, K2, pts_ref_, pts_cur_, inliers_, P3Ds, T);
-    if(!succeed)
-        return FAILURE;
+    cv::Mat K =cv::Mat::eye(3,3,CV_32FC1);
+    bool succeed = findBestRT(R1, R2, t, K_, K_, pts_ref_, pts_cur_, inliers_, P3Ds, T);
+    if(!succeed) return FAILURE;
+    SSVO_INFO_STREAM("[INIT] Inliers after cheirality check: " << cv::countNonZero(inliers_));
 
     const int n = pts_ref_.size();
     std::vector<cv::Point2f> pts_ref;
@@ -95,12 +106,11 @@ InitResult Initializer::addSecondFrame(FramePtr frame_cur)
 
         pts_ref.push_back(pts_ref_[i]);
         pts_cur.push_back(pts_cur_[i]);
-        p3ds_.push_back(Vector3f(*P3Ds_ptr, P3Ds_ptr[strick], P3Ds_ptr[strick*2]));
+        Vector3f p3d(*P3Ds_ptr, P3Ds_ptr[strick], P3Ds_ptr[strick*2]);
+        p3ds_.push_back(p3d);
     }
     pts_ref_ = pts_ref;
     pts_cur_ = pts_cur;
-
-    SSVO_INFO_STREAM("[INIT] Inliers after cheirality check: " << cv::countNonZero(inliers_));
 
     double t6 = (double)cv::getTickCount();
     std::cout << "Time: " << (t2-t1)/cv::getTickFrequency() << " "
@@ -114,7 +124,7 @@ InitResult Initializer::addSecondFrame(FramePtr frame_cur)
     return SUCCESS;
 }
 
-void Initializer::getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur)
+void Initializer::getUndistInilers(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur)
 {
     const int n = pts_ref_.size();
     pts_ref.reserve(n);
@@ -131,7 +141,7 @@ void Initializer::getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vecto
     }
 }
 
-void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<double>& disparities)
+void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<cv::Point2f>& fts_ref)
 {
     const int klt_win_size = 21;
     const int klt_max_iter = 30;
@@ -150,28 +160,43 @@ void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::
         termcrit, cv::OPTFLOW_USE_INITIAL_FLOW
     );
 
-    std::vector<cv::Point2f>::iterator pt_ref_it = pts_ref.begin();
-    std::vector<cv::Point2f>::iterator pt_cur_it = pts_cur.begin();
+    std::vector<cv::Point2f>::iterator pts_ref_it = pts_ref.begin();
+    std::vector<cv::Point2f>::iterator fts_ref_it = fts_ref.begin();
+    std::vector<cv::Point2f>::iterator pts_cur_it = pts_cur.begin();
 
-    disparities.clear();
-    disparities.reserve(pts_ref.size());
     int size = pts_ref.size();
-    for(int i = 0; pt_ref_it!= pts_ref.end(); ++i)
+    for(int i = 0; pts_ref_it!= pts_ref.end(); ++i)
     {
         if(!status[i])
         {
-            *pt_ref_it = pts_ref.back();//pts_ref.erase(pt_ref_it);
-            *pt_cur_it = pts_cur.back();//erase(pt_cur_it);
+            *pts_ref_it = pts_ref.back();
+            *fts_ref_it = fts_ref.back();
+            *pts_cur_it = pts_cur.back();
             pts_ref.pop_back();
+            fts_ref.pop_back();
             pts_cur.pop_back();
             status[i] = status[--size];
             continue;
         }
+        ++pts_ref_it;
+        ++fts_ref_it;
+        ++pts_cur_it;
+    }
 
-        double dx = pt_ref_it->x - pt_cur_it->x;
-        double dy = pt_ref_it->y - pt_cur_it->y;
+}
+
+void Initializer::calcDisparity(std::vector<cv::Point2f>& pts1, std::vector<cv::Point2f>& pts2, std::vector<float>& disparities)
+{
+    std::vector<cv::Point2f>::iterator pts1_it = pts1.begin();
+    std::vector<cv::Point2f>::iterator pts2_it = pts2.begin();
+
+    disparities.clear();
+    disparities.reserve(pts1.size());
+    for(std::vector<cv::Point2f>::iterator it_end = pts1.end(); pts1_it != it_end; pts1_it++, pts2_it++)
+    {
+        float dx = pts2_it->x - pts1_it->x;
+        float dy = pts2_it->y - pts1_it->y;
         disparities.push_back(sqrt(dx*dx + dy*dy));
-        ++pt_ref_it, ++pt_cur_it;
     }
 }
 
@@ -184,30 +209,32 @@ bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat
 
     //! P = K[R|t]
     cv::Mat P0 = cv::Mat::eye(3, 4, R1.type());
+    cv::Mat T1(3, 4, R1.type(), cv::Scalar(0)), T2(3, 4, R1.type(), cv::Scalar(0)), T3(3, 4, R1.type(), cv::Scalar(0)), T4(3, 4, R1.type(), cv::Scalar(0));
     cv::Mat P1(3, 4, R1.type(), cv::Scalar(0)), P2(3, 4, R1.type(), cv::Scalar(0)), P3(3, 4, R1.type(), cv::Scalar(0)), P4(3, 4, R1.type(), cv::Scalar(0));
+    cv::Mat T_P3Ds;
 
     //! P0 = K[I|0]
     K1.copyTo(P0.rowRange(0,3).colRange(0,3));
 
     //! P1 = K[R1|t]
-    P1.rowRange(0,3).colRange(0,3) = R1 * 1.0;
-    P1.rowRange(0,3).col(3) = t * 1.0;
-    P1 = K2*P1;
+    T1.rowRange(0,3).colRange(0,3) = R1 * 1.0;
+    T1.rowRange(0,3).col(3) = t * 1.0;
+    P1 = K2*T1;
 
     //! P2 = K[R2|t]
-    P2.rowRange(0,3).colRange(0,3) = R2 * 1.0;
-    P2.rowRange(0,3).col(3) = t * 1.0;
-    P2 = K2*P2;
+    T2.rowRange(0,3).colRange(0,3) = R2 * 1.0;
+    T2.rowRange(0,3).col(3) = t * 1.0;
+    P2 = K2*T2;
 
     //! P3 = K[R1|-t]
-    P3.rowRange(0,3).colRange(0,3) = R1 * 1.0;
-    P3.rowRange(0,3).col(3) = t * -1.0;
-    P3 = K2*P3;
+    T3.rowRange(0,3).colRange(0,3) = R1 * 1.0;
+    T3.rowRange(0,3).col(3) = t * -1.0;
+    P3 = K2*T3;
 
     //! P4 = K[R2|-t]
-    P4.rowRange(0,3).colRange(0,3) = R2 * 1.0;
-    P4.rowRange(0,3).col(3) = t * -1.0;
-    P4 = K2*P4;
+    T4.rowRange(0,3).colRange(0,3) = R2 * 1.0;
+    T4.rowRange(0,3).col(3) = t * -1.0;
+    P4 = K2*T4;
 
     //! Do the cheirality check, and remove points too far away
     const float max_dist = 50.0;
@@ -215,29 +242,29 @@ bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat
     triangulate(P0, P1, pts1, pts2, mask, P3Ds1);
     cv::Mat mask1 = mask.t();
     mask1 &= (P3Ds1.row(2) > 0) & (P3Ds1.row(2) < max_dist);
-    P3Ds1 = P1*P3Ds1;
-    mask1 &= (P3Ds1.row(2) > 0) & (P3Ds1.row(2) < max_dist);
+    T_P3Ds = T1*P3Ds1;
+    mask1 &= (T_P3Ds.row(2) > 0) & (T_P3Ds.row(2) < max_dist);
 
     cv::Mat P3Ds2;
     triangulate(P0, P2, pts1, pts2, mask, P3Ds2);
     cv::Mat mask2 = mask.t();
     mask2 &= (P3Ds2.row(2) > 0) & (P3Ds2.row(2) < max_dist);
-    P3Ds2 = P2*P3Ds2;
-    mask2 &= (P3Ds2.row(2) > 0) & (P3Ds2.row(2) < max_dist);
+    T_P3Ds = T2*P3Ds2;
+    mask2 &= (T_P3Ds.row(2) > 0) & (T_P3Ds.row(2) < max_dist);
 
     cv::Mat P3Ds3;
     triangulate(P0, P3, pts1, pts2, mask, P3Ds3);
     cv::Mat mask3 = mask.t();
     mask3 &= (P3Ds3.row(2) > 0) & (P3Ds3.row(2) < max_dist);
-    P3Ds3 = P3*P3Ds3;
-    mask3 &= (P3Ds3.row(2) > 0) & (P3Ds3.row(2) < max_dist);
+    T_P3Ds = T3*P3Ds3;
+    mask3 &= (T_P3Ds.row(2) > 0) & (T_P3Ds.row(2) < max_dist);
 
     cv::Mat P3Ds4;
     triangulate(P0, P4, pts1, pts2, mask, P3Ds4);
     cv::Mat mask4 = mask.t();
     mask4 &= (P3Ds4.row(2) > 0) & (P3Ds4.row(2) < max_dist);
-    P3Ds4 = P4*P3Ds4;
-    mask4 &= (P3Ds4.row(2) > 0) & (P3Ds4.row(2) < max_dist);
+    T_P3Ds = T4*P3Ds4;
+    mask4 &= (T_P3Ds.row(2) > 0) & (T_P3Ds.row(2) < max_dist);
 
     int nGood0 = cv::countNonZero(mask);
     int nGood1 = cv::countNonZero(mask1);
@@ -249,38 +276,34 @@ bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat
     //! for normal, other count is 0
     if(maxGood < 0.9*nGood0)
     {
-        SSVO_WARN_STREAM("[INIT] Less than 90% inliers after cheirality check!!!");
+        SSVO_WARN_STREAM("[INIT] Inliers: " << maxGood << ", less than 90% inliers after cheirality check!!!");
         return false;
     }
 
-    T = cv::Mat(3, 4, R1.type());
+
     if(maxGood == nGood1)
     {
         mask = mask1.t();
         P3Ds = P3Ds1.clone();
-        T.rowRange(0,3).colRange(0,3) = R1.clone();
-        T.rowRange(0,3).col(3) = t;
+        T = T1.clone();
     }
     else if(maxGood == nGood2)
     {
         mask = mask2.t();
         P3Ds = P3Ds2.clone();
-        T.rowRange(0,3).colRange(0,3) = R2.clone();
-        T.rowRange(0,3).col(3) = t;
+        T = T2.clone();
     }
     else if(maxGood == nGood3)
     {
         mask = mask3.t();
         P3Ds = P3Ds3.clone();
-        T.rowRange(0,3).colRange(0,3) = R1.clone();
-        T.rowRange(0,3).col(3) = t * -1.0;
+        T = T3.clone();
     }
     else if(maxGood == nGood4)
     {
         mask = mask4.t();
         P3Ds = P3Ds4.clone();
-        T.rowRange(0,3).colRange(0,3) = R2.clone();
-        T.rowRange(0,3).col(3) = t * -1.0;
+        T = T4.clone();
     }
 
     return true;

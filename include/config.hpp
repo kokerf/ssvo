@@ -34,6 +34,8 @@ public:
 
     static float initSigma(){return getInstance().init_sigma;}
 
+    static float initUnSigma(){return getInstance().init_unsigma;}
+
     static int initMaxRansacIters(){return getInstance().init_max_iters;}
 
     static int imageBorder(){return getInstance().image_border;}
@@ -97,6 +99,7 @@ private:
         init_min_disparity = (int)fs["Initializer.min_disparity"];
         init_min_inliers = (int)fs["Initializer.min_inliers"];
         init_sigma = (float)fs["Initializer.sigma"];
+        init_unsigma = init_sigma / sqrt(fx*fx + fy*fy);
         init_max_iters = (int)fs["Initializer.ransac_max_iters"];
 
         //! FAST detector parameters
@@ -130,6 +133,7 @@ private:
     int init_min_disparity;
     int init_min_inliers;
     float init_sigma;
+    float init_unsigma;
     int init_max_iters;
 
     //! FAST detector parameters
