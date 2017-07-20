@@ -212,10 +212,16 @@ int FastDetector::detectByGrid(const cv::Mat& img, int level)
             if(mask_pyr_[level].ptr<uchar>(v)[u])
                 continue;
 
+            const float score = shiTomasiScore(img, u, v);
+
+            //! reject the low-score point
+            if(score < Config::fastMinEigen())
+                continue;
+
             new_coners ++;
             const int x = u*scale;
             const int y = v*scale;
-            cv::KeyPoint kp(x, y, 0, -1, scores[index], level);
+            cv::KeyPoint kp(x, y, 0, -1, score, level);
             //! some point will be in the boundary
             const int n = getGridIndex(x, y);
             insertToGrid(kp, n);
@@ -275,10 +281,16 @@ int FastDetector::detectByImage(const cv::Mat& img, int level)
         if(mask_pyr_[level].ptr<uchar>(v)[u])
             continue;
 
+        const float score = shiTomasiScore(img, u, v);
+
+        //! reject the low-score point
+        if(score < Config::fastMinEigen())
+            continue;
+
         new_coners ++;
         const int x = u*scale;
         const int y = v*scale;
-        cv::KeyPoint kp(x, y, 0, -1, scores[index], level);
+        cv::KeyPoint kp(x, y, 0, -1, score, level);
         const int n = getGridIndex(x, y);
         insertToGrid(kp, n);
     }
@@ -292,26 +304,13 @@ void FastDetector::getKeyPointsFromGrid(const cv::Mat& img, std::vector<cv::KeyP
     for(std::vector<cv::KeyPoint>& kps : kps_in_grid_)
     {
         if(kps.empty())
-        {
             continue;
-        }
 
         const int size = kps.size();
         int nfts= 0;
         for(int n = 0; n < size && nfts < Config::gridMaxFeatures(); n++)
         {
-            cv::KeyPoint& kp = kps[n];
-            const int u = kp.pt.x;
-            const int v = kp.pt.y;
-            const float score = shiTomasiScore(img, u, v);
-            //! reject the low-score point
-            kp.response = score;
-            if(score < Config::fastMinEigen())
-            {
-                continue;
-            }
-
-            all_kps.push_back(kp);
+            all_kps.push_back(kps[n]);
             nfts++;
         }
      }
