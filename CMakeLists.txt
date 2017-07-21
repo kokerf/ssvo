@@ -1,11 +1,25 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(ssvo)
 
+## -----------------------
+## User's option
+## -----------------------
+set(DEBUG_OUTPUT TRUE)
+message(STATUS "Imformation output: " ${DEBUG_OUTPUT})
+
+# Definitions
+if(DEBUG_OUTPUT)
+  add_definitions(-DSSVO_IMFORM_OUTPUT)
+endif()
+
+## -----------------------
+## Build setting
+## -----------------------
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-message("Build type: " ${CMAKE_BUILD_TYPE})
+message(STATUS "Build type: " ${CMAKE_BUILD_TYPE})
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)

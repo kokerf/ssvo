@@ -57,6 +57,9 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
     }
 
     img_cur_ = img_cur;
+
+    SSVO_INFO_STREAM("[INIT] ~~ Processing second image ~~ ");
+
     double t1 = (double)cv::getTickCount();
     //! [1] KLT tracking
     kltTrack(img_ref_, img_cur_, pts_ref_, pts_cur_, inliers_);
@@ -64,15 +67,12 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
     reduceVecor(pts_cur_, inliers_);
     reduceVecor(fts_ref_, inliers_);
     inliers_ = cv::Mat(pts_ref_.size(), 1, CV_8UC1, cv::Scalar(255));
-
-    //! calculate disparities on undistorted points
-    cv::undistortPoints(pts_cur_, fts_cur_, K_, D_);
     calcDisparity(pts_ref_, pts_cur_, disparities_);
-
     SSVO_INFO_STREAM("[INIT] KLT tracking points: " << disparities_.size());
     if(disparities_.size() < Config::initMinTracked()) return RESET;
 
     double t2 = (double)cv::getTickCount();
+    //! [2] calculate disparities
     std::vector<float> disparities_temp = disparities_;
     std::sort(disparities_temp.begin(), disparities_temp.end());
     float disparity = disparities_temp.at(disparities_temp.size()/2);
@@ -92,20 +92,21 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
         reduceVecor(pts_ref_, inliers_);
         reduceVecor(pts_cur_, inliers_);
         reduceVecor(fts_ref_, inliers_);
-        reduceVecor(fts_cur_, inliers_);
         inliers_ = cv::Mat(pts_ref_.size(), 1, CV_8UC1, cv::Scalar(255));
     }
+    //! get undistorted points
+    cv::undistortPoints(pts_cur_, fts_cur_, K_, D_);
 
     SSVO_INFO_STREAM("[INIT] Avage disparity: " << disparity);
     if(disparity < Config::initMinDisparity()) return FAILURE;
 
     double t3 = (double)cv::getTickCount();
-    //! [2] geometry check by F matrix
-    //cv::Mat F = cv::findFundamentalMat(fts_ref_, fts_cur_, inliers_, cv::FM_RANSAC);
-    //F.convertTo(F, CV_32FC1);
+    //! [3] geometry check by F matrix
+    //cv::Mat FE = cv::findEssentialMat(fts_ref_, fts_cur_, 1, cv::Point2d(0, 0), cv::RANSAC, 0.95, 0.001, inliers_);
+    //FE.convertTo(FE, CV_32FC1);
     //int inliers_count = cv::countNonZero(inliers_);
-    cv::Mat F;
-    int inliers_count = Fundamental::findFundamentalMat(fts_ref_, fts_cur_, F, inliers_, Config::initUnSigma(), Config::initMaxRansacIters());
+    cv::Mat E;
+    int inliers_count = Fundamental::findFundamentalMat(fts_ref_, fts_cur_, E, inliers_, Config::initUnSigma2(), Config::initMaxRansacIters());
     if(inliers_count!= pts_ref_.size())
     {
         reduceVecor(pts_ref_, inliers_);
@@ -114,26 +115,25 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
         reduceVecor(fts_cur_, inliers_);
         inliers_ = cv::Mat(pts_ref_.size(), 1, CV_8UC1, cv::Scalar(255));
     }
-    SSVO_INFO_STREAM("[INIT] Inliers after Fundamental Maxtrix RANSCA check: " << inliers_count);
+    SSVO_INFO_STREAM("[INIT] Inliers after epipolar geometry check: " << inliers_count);
     if(inliers_count < Config::initMinInliers()) return FAILURE;
 
     double t4 = (double)cv::getTickCount();
+    //! [4] cheirality check
     cv::Mat R1, R2, t;
-    cv::Mat E = K_.t() * F * K_;
     Fundamental::decomposeEssentialMat(E, R1, R2, t);
 
-    double t5 = (double)cv::getTickCount();
-    cv::Mat T;
-    cv::Mat P3Ds;
+    cv::Mat T, P3Ds;
     cv::Mat K =cv::Mat::eye(3,3,CV_32FC1);
-    //! [3] cheirality check
     bool succeed = findBestRT(R1, R2, t, K, K, fts_ref_, fts_cur_, inliers_, P3Ds, T);
     if(!succeed) return FAILURE;
     SSVO_INFO_STREAM("[INIT] Inliers after cheirality check: " << cv::countNonZero(inliers_));
 
-    //! [4] reprojective check
-    succeed = checkReprejectErr(pts_ref_, pts_cur_, fts_ref_, fts_cur_, T, inliers_, P3Ds, Config::initUnSigma()*8, p3ds_);
-    if(!succeed) return FAILURE;
+    double t5 = (double)cv::getTickCount();
+    //! [5] reprojective check
+    inliers_count = checkReprejectErr(pts_ref_, pts_cur_, fts_ref_, fts_cur_, T, inliers_, P3Ds, Config::initUnSigma2()*4, p3ds_);
+    SSVO_INFO_STREAM("[INIT] Inliers after reprojective check: " << inliers_count);
+    if(inliers_count < Config::initMinInliers()) return FAILURE;
 
     double t6 = (double)cv::getTickCount();
     std::cout << "Time: " << (t2-t1)/cv::getTickFrequency() << " "
@@ -300,7 +300,6 @@ bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat
         return false;
     }
 
-
     if(maxGood == nGood1)
     {
         mask = mask1.t();
@@ -329,24 +328,23 @@ bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat
     return true;
 }
 
-bool Initializer::checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<cv::Point2f>& fts_ref, std::vector<cv::Point2f>& fts_cur,
-                       const cv::Mat& T, const cv::Mat& mask, const cv::Mat& P3Ds, const float sigma, std::vector<Vector3f>& p3ds)
+int Initializer::checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<cv::Point2f>& fts_ref, std::vector<cv::Point2f>& fts_cur,
+                       const cv::Mat& T, const cv::Mat& mask, const cv::Mat& P3Ds, const float sigma2, std::vector<Vector3f>& p3ds)
 {
     assert(T.type() == CV_32FC1);
     assert(P3Ds.type() == CV_32FC1);
 
-    const int n = pts_ref_.size();
-    const float sigma2 = sigma*sigma;
-    p3ds_.clear(); p3ds_.reserve(n);
+    const int size = pts_ref_.size();
+    p3ds_.clear(); p3ds_.reserve(size);
 
     std::vector<int> inliers;
-    inliers.reserve(n);
+    inliers.reserve(size);
     const uchar* mask_ptr = mask.ptr<uchar>(0);
     const float* P3Ds_ptr = P3Ds.ptr<float>(0);
     const int strick = P3Ds.cols;
     const int strick2 = strick*2;
 
-    for(int i = 0; i < n; ++i)
+    for(int i = 0; i < size; ++i)
     {
         if(!mask_ptr[i])
             continue;
@@ -379,8 +377,35 @@ bool Initializer::checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vect
         inliers.push_back(i);
         p3ds.push_back(Vector3f(X, Y, Z));
     }
-    std::cout << "  " << inliers.size() << std::endl;
-    return false;
+
+    const int n_inliers = inliers.size();
+    if(n_inliers == size)
+        return inliers.size();
+
+    std::vector<cv::Point2f>::iterator pts_ref_inter = pts_ref.begin();
+    std::vector<cv::Point2f>::iterator pts_cur_inter = pts_cur.begin();
+    std::vector<cv::Point2f>::iterator fts_ref_inter = fts_ref.begin();
+    std::vector<cv::Point2f>::iterator fts_cur_inter = fts_cur.begin();
+    for(int j = 0; j < n_inliers; ++j)
+    {
+        const int id = inliers[j];
+
+        *pts_ref_inter = pts_ref[id];
+        *pts_cur_inter = pts_cur[id];
+        *fts_ref_inter = fts_ref[id];
+        *fts_cur_inter = fts_cur[id];
+
+        pts_ref_inter++;
+        pts_cur_inter++;
+        fts_ref_inter++;
+        fts_cur_inter++;
+    }
+    pts_ref.resize(n_inliers);
+    pts_cur.resize(n_inliers);
+    fts_ref.resize(n_inliers);
+    fts_cur.resize(n_inliers);
+
+    return inliers.size();
 }
 
 #if 0
@@ -483,12 +508,12 @@ void Initializer::reduceVecor(std::vector<cv::Point2f>& pts, const cv::Mat& inli
     }
 }
 
-int Fundamental::findFundamentalMat(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat &F,
-                                    cv::Mat& inliers, float sigma, int max_iterations)
+int Fundamental::findFundamentalMat(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat &E,
+                                    cv::Mat& inliers, float sigma2, int max_iterations)
 {
     assert(pts_prev.size() == pts_next.size());
 
-    return runRANSAC(pts_prev, pts_next, F, inliers, sigma, max_iterations);
+    return runRANSAC(pts_prev, pts_next, E, inliers, sigma2, max_iterations);
 }
 
 #if 1
@@ -523,17 +548,17 @@ void Fundamental::run8point(const std::vector<cv::Point2f>& pts_prev, const std:
         a[8] = 1;
     }
 
-    cv::Mat U, W, vt;
+    cv::Mat U, W, Vt;
 
-    cv::eigen(A.t()*A, W, vt);
+    cv::eigen(A.t()*A, W, Vt);
 
-    cv::Mat Fpre = vt.row(8).reshape(0, 3);
+    cv::Mat Epre = Vt.row(8).reshape(0, 3);
 
-    cv::SVDecomp(Fpre, W, U, vt, cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
+    cv::SVDecomp(Epre, W, U, Vt, cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
 
     W.at<float>(2) = 0;
 
-    cv::Mat F_norm = U*cv::Mat::diag(W)*vt;
+    cv::Mat F_norm = U*cv::Mat::diag(W)*Vt;
 
     F = T2.t()*F_norm*T1;
     float F22 = F.at<float>(2, 2);
@@ -584,17 +609,16 @@ void Fundamental::run8point(const std::vector<cv::Point2f>& pts_prev, const std:
         FF /= F22;
 
     cv::eigen2cv(FF, F);
-
 }
 #endif
 
-int Fundamental::runRANSAC(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat& F, cv::Mat& inliers, float sigma, int max_iterations)
+int Fundamental::runRANSAC(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat& F, cv::Mat& inliers, const float sigma2, const int max_iterations)
 {
     const int N = pts_prev.size();
     const int modelPoints = 8;
     assert(N >= modelPoints);
 
-    const double threshold = 3.841*sigma*sigma;
+    const double threshold = 3.841*sigma2;
     const int max_iters = MIN(MAX(max_iterations, 1), 1000);
 
     std::vector<int> total_points;
@@ -639,7 +663,6 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2f>& pts_prev, const std::
             if(error < threshold)
             {
                 inliers_ptr[n] = 0xff;
-                //inliers_temp.at<uchar>(n, 0) = 255;
                 inliers_count++;
             }
         }

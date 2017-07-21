@@ -38,8 +38,8 @@ private:
     bool findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat& t, const cv::Mat& K1, const cv::Mat& K2,
                     const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& P3Ds, cv::Mat& T);
 
-    bool checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<cv::Point2f>& fts_ref, std::vector<cv::Point2f>& fts_cur,
-                           const cv::Mat& T, const cv::Mat& mask, const cv::Mat& P3Ds, const float sigma, std::vector<Vector3f>& vP3Ds);
+    int checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<cv::Point2f>& fts_ref, std::vector<cv::Point2f>& fts_cur,
+                           const cv::Mat& T, const cv::Mat& mask, const cv::Mat& P3Ds, const float sigma2, std::vector<Vector3f>& vP3Ds);
 
     void triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& P3D);
 
@@ -72,7 +72,7 @@ class Fundamental
 {
 public:
     static int findFundamentalMat(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat &F,
-                                        cv::Mat& inliers, float sigma = 1, int max_iterations = 2000);
+                                        cv::Mat& inliers, const float sigma2 = 1, const int max_iterations = 1000);
 
     static inline void computeErrors(const cv::Point2f& p1, const cv::Point2f& p2, const float* F, float& err1, float& err2);
 
@@ -82,7 +82,7 @@ public:
 
     static void run8point(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat& F);
 
-    static int runRANSAC(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat& F, cv::Mat& inliers, float sigma = 1, int max_iterations = 2000);
+    static int runRANSAC(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat& F, cv::Mat& inliers, const float sigma2 = 1, const int max_iterations = 1000);
 
     static void decomposeEssentialMat(const cv::Mat& E, cv::Mat& R1, cv::Mat& R2, cv::Mat& t);
 
