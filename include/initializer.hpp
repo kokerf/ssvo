@@ -21,11 +21,14 @@ public:
 
     Initializer(const cv::Mat& K, const cv::Mat& D);
 
-    InitResult addFirstImage(const cv::Mat& img_ref, std::vector<cv::Point2f>& pts, std::vector<cv::Point2f>& fts);
+    InitResult addFirstImage(const cv::Mat& img_ref, std::vector<cv::Point2f>& pts, std::vector<cv::Point2d>& fts);
 
     InitResult addSecondImage(const cv::Mat& img);
 
-    void getUndistInilers(std::vector<cv::Point2f>& fts_ref, std::vector<cv::Point2f>& fts_cur) const;
+    void getResults(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur,
+    std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur, std::vector<Vector3d>& p3ds) const;
+
+    void getUndistInilers(std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur) const;
 
     void getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur) const;
 
@@ -36,20 +39,20 @@ private:
     void calcDisparity(std::vector<cv::Point2f>& pts1, std::vector<cv::Point2f>& pts2, std::vector<float>& disparities);
 
     bool findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat& t, const cv::Mat& K1, const cv::Mat& K2,
-                    const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& P3Ds, cv::Mat& T);
+                    const std::vector<cv::Point2d>& fts1, const std::vector<cv::Point2d>& fts2, cv::Mat& mask, cv::Mat& P3Ds, cv::Mat& T);
 
-    int checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<cv::Point2f>& fts_ref, std::vector<cv::Point2f>& fts_cur,
-                           const cv::Mat& T, const cv::Mat& mask, const cv::Mat& P3Ds, const float sigma2, std::vector<Vector3f>& vP3Ds);
+    int checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur,
+                           const cv::Mat& T, const cv::Mat& mask, const cv::Mat& P3Ds, const double sigma2, std::vector<Vector3d>& vP3Ds);
 
-    void triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& P3D);
+    void triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::vector<cv::Point2d>& fts1, const std::vector<cv::Point2d>& fts2, cv::Mat& mask, cv::Mat& P3D);
 
-    void triangulate(const cv::Mat& P1, const cv::Mat& P2, const cv::Point2f& pt1, const cv::Point2f& pt2, cv::Mat& P3D);
+    void triangulate(const cv::Mat& P1, const cv::Mat& P2, const cv::Point2d& ft1, const cv::Point2d& ft2, cv::Mat& P3D);
 
-    void triangulate(const MatrixXf& P1, const MatrixXf& P2, const cv::Point2f& pt1, const cv::Point2f& pt2, Vector4f& P3D);
+    void triangulate(const MatrixXd& P1, const MatrixXd& P2, const cv::Point2d& ft1, const cv::Point2d& ft2, Vector4d& P3D);
 
     void reduceVecor(std::vector<cv::Point2f>& pts, const cv::Mat& inliers);
 
-    //void checkInliers(const cv::Mat& P1, const cv::Mat& P2, const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& inliers, std::vector<float>& errors);
+    void reduceVecor(std::vector<cv::Point2d>& fts, const cv::Mat& inliers);
 
 private:
 
@@ -58,10 +61,10 @@ private:
     cv::Mat img_cur_;
 
     std::vector<cv::Point2f> pts_ref_;
-    std::vector<cv::Point2f> fts_ref_;
     std::vector<cv::Point2f> pts_cur_;
-    std::vector<cv::Point2f> fts_cur_;
-    std::vector<Vector3f> p3ds_;
+    std::vector<cv::Point2d> fts_ref_;
+    std::vector<cv::Point2d> fts_cur_;
+    std::vector<Vector3d> p3ds_;
     std::vector<float> disparities_;
     cv::Mat inliers_;
 
@@ -71,18 +74,19 @@ private:
 class Fundamental
 {
 public:
-    static int findFundamentalMat(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat &F,
-                                        cv::Mat& inliers, const float sigma2 = 1, const int max_iterations = 1000);
+    static int findFundamentalMat(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, cv::Mat &F,
+                                        cv::Mat& inliers, const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
 
-    static inline void computeErrors(const cv::Point2f& p1, const cv::Point2f& p2, const float* F, float& err1, float& err2);
+    static inline void computeErrors(const cv::Point2d& p1, const cv::Point2d& p2, const double* F, double& err1, double& err2);
 
-    static void Normalize(const std::vector<cv::Point2f>& pts, std::vector<cv::Point2f>& pts_norm, cv::Mat& T);
+    static void Normalize(const std::vector<cv::Point2d>& pts, std::vector<cv::Point2d>& pts_norm, cv::Mat& T);
 
-    static void Normalize(const std::vector<cv::Point2f>& pts, std::vector<cv::Point2f>& pts_norm, Matrix3f& T);
+    static void Normalize(const std::vector<cv::Point2d>& pts, std::vector<cv::Point2d>& pts_norm, Matrix3f& T);
 
-    static void run8point(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat& F);
+    static void run8point(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, cv::Mat& F, const bool bE = false);
 
-    static int runRANSAC(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat& F, cv::Mat& inliers, const float sigma2 = 1, const int max_iterations = 1000);
+    static int runRANSAC(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, cv::Mat& F, cv::Mat& inliers,
+                         const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
 
     static void decomposeEssentialMat(const cv::Mat& E, cv::Mat& R1, cv::Mat& R2, cv::Mat& t);
 

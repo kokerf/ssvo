@@ -78,8 +78,8 @@ int main(int argc, char const *argv[])
     int initial = 0;
     std::vector<cv::KeyPoint> kps;
     std::vector<cv::KeyPoint> kps_old;
-    std::vector<cv::Point2f> pts;
-    std::vector<cv::Point2f> upts;
+    std::vector<cv::Point2f> pts, upts;
+    std::vector<cv::Point2d> fts;
     for(std::vector<std::string>::iterator i = img_file_names.begin(); i != img_file_names.end(); ++i)
     {
         cv::Mat img = cv::imread(*i, CV_LOAD_IMAGE_UNCHANGED);
@@ -94,9 +94,11 @@ int main(int argc, char const *argv[])
             ssvo::Frame::createPyramid(cur_img, img_pyr);
             fast_detector.detectByImage(img_pyr, kps, kps_old);
             cv::KeyPoint::convert(kps, pts);
-            std::cout << "All corners: " << pts.size() <<std::endl;
             cv::undistortPoints(pts, upts, K, DistCoef);
-            int succeed = initializer.addFirstImage(cur_img, pts, upts);
+            fts.clear();fts.reserve(kps.size());
+            std::for_each(upts.begin(), upts.end(), [&](cv::Point2f& pt){fts.push_back(cv::Point2d((double)pt.x, (double)pt.y));});
+            std::cout << "All corners: " << pts.size() <<std::endl;
+            int succeed = initializer.addFirstImage(cur_img, pts, fts);
             if(succeed == ssvo::SUCCESS) initial = 1;
         }
         else if(initial == 1)

@@ -15,7 +15,7 @@ Initializer::Initializer(const cv::Mat& K, const cv::Mat& D)
     D_ = D.clone();
 }
 
-InitResult Initializer::addFirstImage(const cv::Mat& img_ref, std::vector<cv::Point2f>& pts, std::vector<cv::Point2f>& fts)
+InitResult Initializer::addFirstImage(const cv::Mat& img_ref, std::vector<cv::Point2f>& pts, std::vector<cv::Point2d>& fts)
 {
     assert(pts.size() == fts.size());
     //! reset
@@ -95,7 +95,11 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
         inliers_ = cv::Mat(pts_ref_.size(), 1, CV_8UC1, cv::Scalar(255));
     }
     //! get undistorted points
-    cv::undistortPoints(pts_cur_, fts_cur_, K_, D_);
+    std::vector<cv::Point2f> temp_udist;
+    cv::undistortPoints(pts_cur_, temp_udist, K_, D_);
+    fts_cur_.resize(pts_cur_.size());
+    int idx = 0;
+    std::for_each(temp_udist.begin(), temp_udist.end(), [&](cv::Point2f& pt){fts_cur_[idx].x = pt.x; fts_cur_[idx].y = pt.y; idx++;});
 
     SSVO_INFO_STREAM("[INIT] Avage disparity: " << disparity);
     if(disparity < Config::initMinDisparity()) return FAILURE;
@@ -103,10 +107,9 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
     double t3 = (double)cv::getTickCount();
     //! [3] geometry check by F matrix
     //cv::Mat FE = cv::findEssentialMat(fts_ref_, fts_cur_, 1, cv::Point2d(0, 0), cv::RANSAC, 0.95, 0.001, inliers_);
-    //FE.convertTo(FE, CV_32FC1);
     //int inliers_count = cv::countNonZero(inliers_);
     cv::Mat E;
-    int inliers_count = Fundamental::findFundamentalMat(fts_ref_, fts_cur_, E, inliers_, Config::initUnSigma2(), Config::initMaxRansacIters());
+    int inliers_count = Fundamental::findFundamentalMat(fts_ref_, fts_cur_, E, inliers_, Config::initUnSigma2(), Config::initMaxRansacIters(), true);
     if(inliers_count!= pts_ref_.size())
     {
         reduceVecor(pts_ref_, inliers_);
@@ -124,7 +127,7 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
     Fundamental::decomposeEssentialMat(E, R1, R2, t);
 
     cv::Mat T, P3Ds;
-    cv::Mat K =cv::Mat::eye(3,3,CV_32FC1);
+    cv::Mat K =cv::Mat::eye(3,3,CV_64FC1);
     bool succeed = findBestRT(R1, R2, t, K, K, fts_ref_, fts_cur_, inliers_, P3Ds, T);
     if(!succeed) return FAILURE;
     SSVO_INFO_STREAM("[INIT] Inliers after cheirality check: " << cv::countNonZero(inliers_));
@@ -149,7 +152,17 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
 
 }
 
-void Initializer::getUndistInilers(std::vector<cv::Point2f>& fts_ref, std::vector<cv::Point2f>& fts_cur) const
+void Initializer::getResults(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur,
+    std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur, std::vector<Vector3d>& p3ds) const
+{
+    pts_ref = pts_ref_;
+    pts_cur = pts_cur_;
+    fts_ref = fts_ref_;
+    fts_cur = fts_cur_;
+    p3ds = p3ds_;
+}
+
+void Initializer::getUndistInilers(std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur) const
 {
     if(!finished_)
     {
@@ -160,6 +173,7 @@ void Initializer::getUndistInilers(std::vector<cv::Point2f>& fts_ref, std::vecto
     fts_ref = fts_ref_;
     fts_cur = fts_cur_;
 }
+
 void Initializer::getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur) const
 {
     pts_ref = pts_ref_;
@@ -221,11 +235,11 @@ void Initializer::calcDisparity(std::vector<cv::Point2f>& pts1, std::vector<cv::
 }
 
 bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat& t, const cv::Mat& K1, const cv::Mat& K2,
-                             const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& P3Ds, cv::Mat& T)
+                             const std::vector<cv::Point2d>& fts1, const std::vector<cv::Point2d>& fts2, cv::Mat& mask, cv::Mat& P3Ds, cv::Mat& T)
 {
-    assert(pts1.size() == pts2.size());
+    assert(fts1.size() == fts2.size());
     if(mask.empty())
-        mask = cv::Mat(pts1.size(), 1, CV_8UC1, cv::Scalar(255));
+        mask = cv::Mat(fts1.size(), 1, CV_8UC1, cv::Scalar(255));
 
     //! P = K[R|t]
     cv::Mat P0 = cv::Mat::eye(3, 4, R1.type());
@@ -257,30 +271,30 @@ bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat
     P4 = K2*T4;
 
     //! Do the cheirality check, and remove points too far away
-    const float max_dist = 50.0;
+    const double max_dist = 50.0;
     cv::Mat P3Ds1;
-    triangulate(P0, P1, pts1, pts2, mask, P3Ds1);
+    triangulate(P0, P1, fts1, fts2, mask, P3Ds1);
     cv::Mat mask1 = mask.t();
     mask1 &= (P3Ds1.row(2) > 0) & (P3Ds1.row(2) < max_dist);
     T_P3Ds = T1*P3Ds1;
     mask1 &= (T_P3Ds.row(2) > 0) & (T_P3Ds.row(2) < max_dist);
 
     cv::Mat P3Ds2;
-    triangulate(P0, P2, pts1, pts2, mask, P3Ds2);
+    triangulate(P0, P2, fts1, fts2, mask, P3Ds2);
     cv::Mat mask2 = mask.t();
     mask2 &= (P3Ds2.row(2) > 0) & (P3Ds2.row(2) < max_dist);
     T_P3Ds = T2*P3Ds2;
     mask2 &= (T_P3Ds.row(2) > 0) & (T_P3Ds.row(2) < max_dist);
 
     cv::Mat P3Ds3;
-    triangulate(P0, P3, pts1, pts2, mask, P3Ds3);
+    triangulate(P0, P3, fts1, fts2, mask, P3Ds3);
     cv::Mat mask3 = mask.t();
     mask3 &= (P3Ds3.row(2) > 0) & (P3Ds3.row(2) < max_dist);
     T_P3Ds = T3*P3Ds3;
     mask3 &= (T_P3Ds.row(2) > 0) & (T_P3Ds.row(2) < max_dist);
 
     cv::Mat P3Ds4;
-    triangulate(P0, P4, pts1, pts2, mask, P3Ds4);
+    triangulate(P0, P4, fts1, fts2, mask, P3Ds4);
     cv::Mat mask4 = mask.t();
     mask4 &= (P3Ds4.row(2) > 0) & (P3Ds4.row(2) < max_dist);
     T_P3Ds = T4*P3Ds4;
@@ -328,11 +342,11 @@ bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat
     return true;
 }
 
-int Initializer::checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<cv::Point2f>& fts_ref, std::vector<cv::Point2f>& fts_cur,
-                       const cv::Mat& T, const cv::Mat& mask, const cv::Mat& P3Ds, const float sigma2, std::vector<Vector3f>& p3ds)
+int Initializer::checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur,
+                       const cv::Mat& T, const cv::Mat& mask, const cv::Mat& P3Ds, const double sigma2, std::vector<Vector3d>& p3ds)
 {
-    assert(T.type() == CV_32FC1);
-    assert(P3Ds.type() == CV_32FC1);
+    assert(T.type() == CV_64FC1);
+    assert(P3Ds.type() == CV_64FC1);
 
     const int size = pts_ref_.size();
     p3ds_.clear(); p3ds_.reserve(size);
@@ -340,7 +354,7 @@ int Initializer::checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vecto
     std::vector<int> inliers;
     inliers.reserve(size);
     const uchar* mask_ptr = mask.ptr<uchar>(0);
-    const float* P3Ds_ptr = P3Ds.ptr<float>(0);
+    const double* P3Ds_ptr = P3Ds.ptr<double>(0);
     const int strick = P3Ds.cols;
     const int strick2 = strick*2;
 
@@ -349,33 +363,33 @@ int Initializer::checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vecto
         if(!mask_ptr[i])
             continue;
 
-        const float* p3d1 = &P3Ds_ptr[i];
-        const float X = p3d1[0];
-        const float Y = p3d1[strick];
-        const float Z = p3d1[strick2];
-        float x1 = X / Z;
-        float y1 = Y / Z;
-        float dx1 = fts_ref[i].x - x1;
-        float dy1 = fts_ref[i].y - y1;
-        float err1 = dx1*dx1 + dy1*dy1;
+        const double* p3d1 = &P3Ds_ptr[i];
+        const double X = p3d1[0];
+        const double Y = p3d1[strick];
+        const double Z = p3d1[strick2];
+        double x1 = X / Z;
+        double y1 = Y / Z;
+        double dx1 = fts_ref[i].x - x1;
+        double dy1 = fts_ref[i].y - y1;
+        double err1 = dx1*dx1 + dy1*dy1;
 
         if(err1 > sigma2)
             continue;
 
-        cv::Mat P1 = (cv::Mat_<float>(4,1) <<X, Y, Z, 1);
+        cv::Mat P1 = (cv::Mat_<double>(4,1) <<X, Y, Z, 1);
         cv::Mat P2 = T*P1;
-        float* p3d2 = P2.ptr<float>(0);
-        float x2 = p3d2[0] / p3d2[2];
-        float y2 = p3d2[1] / p3d2[2];
-        float dx2 = fts_cur[i].x - x2;
-        float dy2 = fts_cur[i].y - y2;
-        float err2 = dx2*dx2 + dy2*dy2;
+        double* p3d2 = P2.ptr<double>(0);
+        double x2 = p3d2[0] / p3d2[2];
+        double y2 = p3d2[1] / p3d2[2];
+        double dx2 = fts_cur[i].x - x2;
+        double dy2 = fts_cur[i].y - y2;
+        double err2 = dx2*dx2 + dy2*dy2;
 
         if(err2 > sigma2)
             continue;
 
         inliers.push_back(i);
-        p3ds.push_back(Vector3f(X, Y, Z));
+        p3ds.push_back(Vector3d(X, Y, Z));
     }
 
     const int n_inliers = inliers.size();
@@ -384,8 +398,8 @@ int Initializer::checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vecto
 
     std::vector<cv::Point2f>::iterator pts_ref_inter = pts_ref.begin();
     std::vector<cv::Point2f>::iterator pts_cur_inter = pts_cur.begin();
-    std::vector<cv::Point2f>::iterator fts_ref_inter = fts_ref.begin();
-    std::vector<cv::Point2f>::iterator fts_cur_inter = fts_cur.begin();
+    std::vector<cv::Point2d>::iterator fts_ref_inter = fts_ref.begin();
+    std::vector<cv::Point2d>::iterator fts_cur_inter = fts_cur.begin();
     for(int j = 0; j < n_inliers; ++j)
     {
         const int id = inliers[j];
@@ -415,7 +429,7 @@ void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::v
     assert(n == pts2.size());
     assert(mask.cols == 1 && mask.rows == n);
     uchar *mask_ptr = mask.ptr<uchar>(0);
-    P3D = cv::Mat::zeros(4, n, CV_32FC1);
+    P3D = cv::Mat::zeros(4, n, CV_64FC1);
     for(int i = 0; i < n; ++i)
     {
         cv::Mat wP;
@@ -423,28 +437,28 @@ void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::v
         if(mask_ptr[i])
             triangulate(P1, P2, pts1[i], pts2[i], wP);
         else
-            wP = cv::Mat::zeros(4,1,CV_32FC1);
+            wP = cv::Mat::zeros(4,1,CV_64FC1);
         wP.copyTo(P3D.col(i));
     }
 }
 #else
-void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, cv::Mat& mask, cv::Mat& P3D)
+void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::vector<cv::Point2d>& fts1, const std::vector<cv::Point2d>& fts2, cv::Mat& mask, cv::Mat& P3D)
 {
-    const int n = pts1.size();
-    assert(n == pts2.size());
+    const int n = fts1.size();
+    assert(n == fts2.size());
     assert(mask.cols == 1 && mask.rows == n);
     uchar *mask_ptr = mask.ptr<uchar>(0);
-    MatrixXf eP1, eP2;
+    MatrixXd eP1, eP2;
     cv::cv2eigen(P1, eP1);
     cv::cv2eigen(P2, eP2);
-    MatrixXf eP3D = MatrixXf::Zero(4, n);
-    P3D = cv::Mat::zeros(4, n, CV_32FC1);
+    MatrixXd eP3D = MatrixXd::Zero(4, n);
+    P3D = cv::Mat::zeros(4, n, CV_64FC1);
     for(int i = 0; i < n; ++i)
     {
-        Vector4f wP = Vector4f::Zero();
+        Vector4d wP = Vector4d::Zero();
 
         if(mask_ptr[i]) {
-            triangulate(eP1, eP2, pts1[i], pts2[i], wP);
+            triangulate(eP1, eP2, fts1[i], fts2[i], wP);
         }
 
         eP3D.col(i) = wP;
@@ -454,31 +468,31 @@ void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::v
 }
 #endif
 
-void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const cv::Point2f& pt1, const cv::Point2f& pt2, cv::Mat& P3D)
+void Initializer::triangulate(const cv::Mat& P1, const cv::Mat& P2, const cv::Point2d& ft1, const cv::Point2d& ft2, cv::Mat& P3D)
 {
-    cv::Mat A(4,4,CV_32F);
+    cv::Mat A(4,4,CV_64F);
 
-    A.row(0) = pt1.x*P1.row(2)-P1.row(0);
-    A.row(1) = pt1.y*P1.row(2)-P1.row(1);
-    A.row(2) = pt2.x*P2.row(2)-P2.row(0);
-    A.row(3) = pt2.y*P2.row(2)-P2.row(1);
+    A.row(0) = ft1.x*P1.row(2)-P1.row(0);
+    A.row(1) = ft1.y*P1.row(2)-P1.row(1);
+    A.row(2) = ft2.x*P2.row(2)-P2.row(0);
+    A.row(3) = ft2.y*P2.row(2)-P2.row(1);
 
     cv::Mat U, W, Vt;
     cv::SVD::compute(A, W, U, Vt,cv::SVD::MODIFY_A| cv::SVD::FULL_UV);
     P3D = Vt.row(3).t();
-    P3D = P3D/P3D.at<float>(3);
+    P3D = P3D/P3D.at<double>(3);
 }
 
-void Initializer::triangulate(const MatrixXf& P1, const MatrixXf& P2, const cv::Point2f& pt1, const cv::Point2f& pt2, Vector4f& P3D)
+void Initializer::triangulate(const MatrixXd& P1, const MatrixXd& P2, const cv::Point2d& ft1, const cv::Point2d& ft2, Vector4d& P3D)
 {
-    MatrixXf A(4,4);
-    A.row(0) = pt1.x*P1.row(2)-P1.row(0);
-    A.row(1) = pt1.y*P1.row(2)-P1.row(1);
-    A.row(2) = pt2.x*P2.row(2)-P2.row(0);
-    A.row(3) = pt2.y*P2.row(2)-P2.row(1);
+    MatrixXd A(4,4);
+    A.row(0) = ft1.x*P1.row(2)-P1.row(0);
+    A.row(1) = ft1.y*P1.row(2)-P1.row(1);
+    A.row(2) = ft2.x*P2.row(2)-P2.row(0);
+    A.row(3) = ft2.y*P2.row(2)-P2.row(1);
 
-    JacobiSVD<MatrixXf> svd(A, ComputeThinV);
-    MatrixXf V = svd.matrixV();
+    JacobiSVD<MatrixXd> svd(A, ComputeThinV);
+    MatrixXd V = svd.matrixV();
 
     P3D = V.col(3);
     P3D = P3D/P3D(3);
@@ -508,34 +522,58 @@ void Initializer::reduceVecor(std::vector<cv::Point2f>& pts, const cv::Mat& inli
     }
 }
 
-int Fundamental::findFundamentalMat(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat &E,
-                                    cv::Mat& inliers, float sigma2, int max_iterations)
+void Initializer::reduceVecor(std::vector<cv::Point2d>& fts, const cv::Mat& inliers)
 {
-    assert(pts_prev.size() == pts_next.size());
+    assert(inliers.cols == 1 || inliers.rows == 1);
+    assert(inliers.type() == CV_8UC1);
+    int size = MAX(inliers.cols, inliers.rows);
+    assert(size == fts.size());
 
-    return runRANSAC(pts_prev, pts_next, E, inliers, sigma2, max_iterations);
+    std::vector<cv::Point2d>::iterator fts_iter = fts.begin();
+    cv::Mat inliers_mat = inliers.clone();
+    uchar* inliers_ptr = inliers_mat.ptr<uchar>(0);
+    for(;fts_iter!=fts.end();)
+    {
+        if(!(*inliers_ptr))
+        {
+            *inliers_ptr = inliers_mat.data[--size];
+            *fts_iter =fts.back();
+            fts.pop_back();
+            continue;
+        }
+        inliers_ptr++;
+        fts_iter++;
+    }
+}
+
+int Fundamental::findFundamentalMat(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, cv::Mat &E,
+                                    cv::Mat& inliers, double sigma2, int max_iterations, const bool bE)
+{
+    assert(fts_prev.size() == fts_next.size());
+
+    return runRANSAC(fts_prev, fts_next, E, inliers, sigma2, max_iterations, bE);
 }
 
 #if 1
-void Fundamental::run8point(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat& F)
+void Fundamental::run8point(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, cv::Mat& F, const bool bE)
 {
-    const int N = pts_prev.size();
+    const int N = fts_prev.size();
     assert(N >= 8);
 
-    std::vector<cv::Point2f> pts_prev_norm;
-    std::vector<cv::Point2f> pts_next_norm;
+    std::vector<cv::Point2d> fts_prev_norm;
+    std::vector<cv::Point2d> fts_next_norm;
     cv::Mat T1, T2;
-    Normalize(pts_prev, pts_prev_norm, T1);
-    Normalize(pts_next, pts_next_norm, T2);
+    Normalize(fts_prev, fts_prev_norm, T1);
+    Normalize(fts_next, fts_next_norm, T2);
 
-    cv::Mat A(N, 9, CV_32F);
+    cv::Mat A(N, 9, CV_64F);
     for(int i = 0; i < N; ++i)
     {
-        const float u1 = pts_prev_norm[i].x;
-        const float v1 = pts_prev_norm[i].y;
-        const float u2 = pts_next_norm[i].x;
-        const float v2 = pts_next_norm[i].y;
-        float* a = A.ptr<float>(i);
+        const double u1 = fts_prev_norm[i].x;
+        const double v1 = fts_prev_norm[i].y;
+        const double u2 = fts_next_norm[i].x;
+        const double v2 = fts_next_norm[i].y;
+        double* a = A.ptr<double>(i);
 
         a[0] = u2*u1;
         a[1] = u2*v1;
@@ -552,69 +590,77 @@ void Fundamental::run8point(const std::vector<cv::Point2f>& pts_prev, const std:
 
     cv::eigen(A.t()*A, W, Vt);
 
-    cv::Mat Epre = Vt.row(8).reshape(0, 3);
+    cv::Mat Fpre = Vt.row(8).reshape(0, 3);
 
-    cv::SVDecomp(Epre, W, U, Vt, cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
+    cv::Mat F_unorm = T2.t()*Fpre*T1;
 
-    W.at<float>(2) = 0;
+    cv::SVDecomp(F_unorm, W, U, Vt, cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
 
-    cv::Mat F_norm = U*cv::Mat::diag(W)*Vt;
+    if(bE)
+    {
+        const double s = 0.5*(W.at<double>(0)+W.at<double>(1));
+        W.at<double>(0) = s;
+        W.at<double>(1) = s;
+    }
+    W.at<double>(2) = 0;
 
-    F = T2.t()*F_norm*T1;
-    float F22 = F.at<float>(2, 2);
-    if(fabs(F22) > FLT_EPSILON)
+    F = U*cv::Mat::diag(W)*Vt;
+
+    double F22 = F.at<double>(2, 2);
+    if(fabs(F22) > std::numeric_limits<double>::epsilon())
         F /= F22;
 }
 #else
-void Fundamental::run8point(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat& F)
+void Fundamental::run8point(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, cv::Mat& F)
 {
-    const int N = pts_prev.size();
+    const int N = fts_prev.size();
     assert(N >= 8);
 
-    std::vector<cv::Point2f> pts_prev_norm;
-    std::vector<cv::Point2f> pts_next_norm;
-    Matrix3f T1, T2;
-    Normalize(pts_prev, pts_prev_norm, T1);
-    Normalize(pts_next, pts_next_norm, T2);
+    std::vector<cv::Point2d> fts_prev_norm;
+    std::vector<cv::Point2d> fts_next_norm;
+    Matrix3d T1, T2;
+    Normalize(fts_prev, fts_prev_norm, T1);
+    Normalize(fts_next, fts_next_norm, T2);
 
-    MatrixXf A(N,9);
+    MatrixXd A(N,9);
     for(int i = 0; i < N; ++i)
     {
-        const float u1 = pts_prev_norm[i].x;
-        const float v1 = pts_prev_norm[i].y;
-        const float u2 = pts_next_norm[i].x;
-        const float v2 = pts_next_norm[i].y;
+        const double u1 = fts_prev_norm[i].x;
+        const double v1 = fts_prev_norm[i].y;
+        const double u2 = fts_next_norm[i].x;
+        const double v2 = fts_next_norm[i].y;
 
         A.row(i) <<  u2*u1, u2*v1, u2, v2*u1, v2*v1, v2, u1, v1, 1;
     }
 
-    JacobiSVD<MatrixXf> svd(A, ComputeFullV);
-    MatrixXf Va = svd.matrixV();
+    JacobiSVD<MatrixXd> svd(A, ComputeFullV);
+    MatrixXd Va = svd.matrixV();
 
-    VectorXf Fv = Va.col(8);
-    Matrix3f Ft(Fv.data());
+    VectorXd Fv = Va.col(8);
+    Matrix3d Ft(Fv.data());
 
     JacobiSVD<MatrixXf> svd1(Ft.transpose(), ComputeFullV|ComputeFullU);
-    MatrixXf V = svd1.matrixV();
-    MatrixXf U = svd1.matrixU();
-    Vector3f S = svd1.singularValues();
+    MatrixXd V = svd1.matrixV();
+    MatrixXd U = svd1.matrixU();
+    Vector3d S = svd1.singularValues();
     S(2) = 0;
-    DiagonalMatrix<float, Dynamic> W(S);
+    DiagonalMatrix<double, Dynamic> W(S);
 
-    Matrix3f Fn = U * W * V.transpose();
+    Matrix3d Fn = U * W * V.transpose();
 
-    MatrixXf FF = T2.transpose()*Fn*T1;
-    float F22 = FF(2, 2);
-    if(fabs(F22) > FLT_EPSILON)
+    MatrixXd FF = T2.transpose()*Fn*T1;
+    double F22 = FF(2, 2);
+    if(fabs(F22) > std::numeric_limits<double>::epsilon())
         FF /= F22;
 
     cv::eigen2cv(FF, F);
 }
 #endif
 
-int Fundamental::runRANSAC(const std::vector<cv::Point2f>& pts_prev, const std::vector<cv::Point2f>& pts_next, cv::Mat& F, cv::Mat& inliers, const float sigma2, const int max_iterations)
+int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, cv::Mat& F, cv::Mat& inliers,
+    const double sigma2, const int max_iterations, const bool bE)
 {
-    const int N = pts_prev.size();
+    const int N = fts_prev.size();
     const int modelPoints = 8;
     assert(N >= modelPoints);
 
@@ -627,10 +673,10 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2f>& pts_prev, const std::
         total_points.push_back(i);
     }
 
-    std::vector<cv::Point2f> pts1(modelPoints);
-    std::vector<cv::Point2f> pts2(modelPoints);
-    std::vector<cv::Point2f> pts1_norm;
-    std::vector<cv::Point2f> pts2_norm;
+    std::vector<cv::Point2d> fts1(modelPoints);
+    std::vector<cv::Point2d> fts2(modelPoints);
+    std::vector<cv::Point2d> fts1_norm;
+    std::vector<cv::Point2d> fts2_norm;
     cv::Mat F_temp;
     inliers = cv::Mat::zeros(N, 1, CV_8UC1);
     int max_inliers = 0;
@@ -641,24 +687,24 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2f>& pts_prev, const std::
         for(int i = 0; i < modelPoints; ++i)
         {
             int randi = Rand(0, points.size()-1);
-            pts1[i] = pts_prev[points[randi]];
-            pts2[i] = pts_next[points[randi]];
+            fts1[i] = fts_prev[points[randi]];
+            fts2[i] = fts_next[points[randi]];
 
             points[randi] = points.back();
             points.pop_back();
         }
 
-        run8point(pts1, pts2, F_temp);
+        run8point(fts1, fts2, F_temp, bE);
 
         int inliers_count = 0;
         cv::Mat inliers_temp = cv::Mat::zeros(N, 1, CV_8UC1);
         uchar* inliers_ptr = inliers_temp.ptr<uchar>(0);
         for(int n = 0; n < N; ++n)
         {
-            float error1, error2;
-            computeErrors(pts_prev[n], pts_next[n], F_temp.ptr<float>(0), error1, error2);
+            double error1, error2;
+            computeErrors(fts_prev[n], fts_next[n], F_temp.ptr<double>(0), error1, error2);
 
-            const float error = MAX(error1, error2);
+            const double error = MAX(error1, error2);
 
             if(error < threshold)
             {
@@ -690,8 +736,8 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2f>& pts_prev, const std::
 
     }//! iterations
 
-    pts1.clear();
-    pts2.clear();
+    fts1.clear();
+    fts2.clear();
     for(int n = 0; n < N; ++n)
     {
         if(0 == inliers.at<uchar>(n, 0))
@@ -699,120 +745,120 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2f>& pts_prev, const std::
             continue;
         }
 
-        pts1.push_back(pts_prev[n]);
-        pts2.push_back(pts_next[n]);
+        fts1.push_back(fts_prev[n]);
+        fts2.push_back(fts_next[n]);
     }
 
-    run8point(pts1, pts2, F);
+    run8point(fts1, fts2, F, bE);
 
     return max_inliers;
 }
 
-void Fundamental::Normalize(const std::vector<cv::Point2f>& pts, std::vector<cv::Point2f>& pts_norm, cv::Mat& T)
+void Fundamental::Normalize(const std::vector<cv::Point2d>& fts, std::vector<cv::Point2d>& fts_norm, cv::Mat& T)
 {
-    const int N = pts.size();
+    const int N = fts.size();
     if(N == 0)
         return;
 
-    pts_norm.resize(N);
+    fts_norm.resize(N);
 
-    cv::Point2f mean(0,0);
+    cv::Point2d mean(0,0);
     for(int i = 0; i < N; ++i)
     {
-        mean += pts[i];
+        mean += fts[i];
     }
     mean = mean/N;
 
-    cv::Point2f mean_dev(0,0);
+    cv::Point2d mean_dev(0,0);
 
     for(int i = 0; i < N; ++i)
     {
-        pts_norm[i] = pts[i] - mean;
+        fts_norm[i] = fts[i] - mean;
 
-        mean_dev.x += fabs(pts_norm[i].x);
-        mean_dev.y += fabs(pts_norm[i].y);
+        mean_dev.x += fabs(fts_norm[i].x);
+        mean_dev.y += fabs(fts_norm[i].y);
     }
     mean_dev /= N;
 
-    const float scale_x = 1.0/mean_dev.x;
-    const float scale_y = 1.0/mean_dev.y;
+    const double scale_x = 1.0/mean_dev.x;
+    const double scale_y = 1.0/mean_dev.y;
 
     for(int i=0; i<N; i++)
     {
-        pts_norm[i].x *= scale_x;
-        pts_norm[i].y *= scale_y;
+        fts_norm[i].x *= scale_x;
+        fts_norm[i].y *= scale_y;
     }
 
-    T = cv::Mat::eye(3,3,CV_32F);
-    T.at<float>(0,0) = scale_x;
-    T.at<float>(1,1) = scale_y;
-    T.at<float>(0,2) = -mean.x*scale_x;
-    T.at<float>(1,2) = -mean.y*scale_y;
+    T = cv::Mat::eye(3,3,CV_64F);
+    T.at<double>(0,0) = scale_x;
+    T.at<double>(1,1) = scale_y;
+    T.at<double>(0,2) = -mean.x*scale_x;
+    T.at<double>(1,2) = -mean.y*scale_y;
 }
 
-void Fundamental::Normalize(const std::vector<cv::Point2f>& pts, std::vector<cv::Point2f>& pts_norm, Matrix3f& T)
+void Fundamental::Normalize(const std::vector<cv::Point2d>& fts, std::vector<cv::Point2d>& fts_norm, Matrix3f& T)
 {
-    const int N = pts.size();
+    const int N = fts.size();
     if(N == 0)
         return;
 
-    pts_norm.resize(N);
+    fts_norm.resize(N);
 
-    cv::Point2f mean(0,0);
+    cv::Point2d mean(0,0);
     for(int i = 0; i < N; ++i)
     {
-        mean += pts[i];
+        mean += fts[i];
     }
     mean = mean/N;
 
-    cv::Point2f mean_dev(0,0);
+    cv::Point2d mean_dev(0,0);
 
     for(int i = 0; i < N; ++i)
     {
-        pts_norm[i] = pts[i] - mean;
+        fts_norm[i] = fts[i] - mean;
 
-        mean_dev.x += fabs(pts_norm[i].x);
-        mean_dev.y += fabs(pts_norm[i].y);
+        mean_dev.x += fabs(fts_norm[i].x);
+        mean_dev.y += fabs(fts_norm[i].y);
     }
     mean_dev /= N;
 
-    const float scale_x = 1.0/mean_dev.x;
-    const float scale_y = 1.0/mean_dev.y;
+    const double scale_x = 1.0/mean_dev.x;
+    const double scale_y = 1.0/mean_dev.y;
 
     for(int i=0; i<N; i++)
     {
-        pts_norm[i].x *= scale_x;
-        pts_norm[i].y *= scale_y;
+        fts_norm[i].x *= scale_x;
+        fts_norm[i].y *= scale_y;
     }
 
     T <<  scale_x, 0, -mean.x*scale_x, 0, scale_y, -mean.y*scale_y, 0,0,1;
 }
 
-inline void Fundamental::computeErrors(const cv::Point2f& p1, const cv::Point2f& p2, const float* F, float& err1, float& err2)
+inline void Fundamental::computeErrors(const cv::Point2d& p1, const cv::Point2d& p2, const double* F, double& err1, double& err2)
 {
     //! point X1 = (u1, v1, 1)^T in first image
     //! poInt X2 = (u2, v2, 1)^T in second image
-    const float u1 = p1.x;
-    const float v1 = p1.y;
-    const float u2 = p2.x;
-    const float v2 = p2.y;
+    const double u1 = p1.x;
+    const double v1 = p1.y;
+    const double u2 = p2.x;
+    const double v2 = p2.y;
 
     //! epipolar line in the second image L2 = (a2, b2, c2)^T = F   * X1
-    const float a2 = F[0]*u1 + F[1]*v1 + F[2];
-    const float b2 = F[3]*u1 + F[4]*v1 + F[5];
-    const float c2 = F[6]*u1 + F[7]*v1 + F[8];
+    const double a2 = F[0]*u1 + F[1]*v1 + F[2];
+    const double b2 = F[3]*u1 + F[4]*v1 + F[5];
+    const double c2 = F[6]*u1 + F[7]*v1 + F[8];
     //! epipolar line in the first image  L1 = (a1, b1, c1)^T = F^T * X2
-    const float a1 = F[0]*u2 + F[3]*v2 + F[6];
-    const float b1 = F[1]*u2 + F[4]*v2 + F[7];
-    const float c1 = F[2]*u2 + F[5]*v2 + F[8];
+    const double a1 = F[0]*u2 + F[3]*v2 + F[6];
+    const double b1 = F[1]*u2 + F[4]*v2 + F[7];
+    const double c1 = F[2]*u2 + F[5]*v2 + F[8];
 
     //! distance from point to line: d^2 = |ax+by+c|^2/(a^2+b^2)
     //! X2 to L2 in second image
-    const float dist2 = a2*u2 + b2*v2 + c2;
-    const float square_dist2 = dist2*dist2/(a2*a2 + b2*b2);
+    const double dist2 = a2*u2 + b2*v2 + c2;
+    const double square_dist2 = dist2*dist2/(a2*a2 + b2*b2);
     //! X1 to L1 in first image
-    const float dist1 = a1*u1 + b1*v1 + c1;
-    const float square_dist1 = dist1*dist1/(a1*a1 + b1*b1);
+    const double dist1 = a1*u1 + b1*v1 + c1;
+    const double square_dist1 = dist1*dist1/(a1*a1 + b1*b1);
 
     err1 = square_dist1;
     err2 = square_dist2;
@@ -829,7 +875,7 @@ void Fundamental::decomposeEssentialMat(const cv::Mat& E, cv::Mat& R1, cv::Mat& 
     if(determinant(U) < 0) U *= -1.;
     if(determinant(Vt) < 0) Vt *= -1.;
 
-    cv::Mat W = (cv::Mat_<float>(3, 3) << 0, 1, 0, -1, 0, 0, 0, 0, 1);
+    cv::Mat W = (cv::Mat_<double>(3, 3) << 0, 1, 0, -1, 0, 0, 0, 0, 1);
     W.convertTo(W, E.type());
 
     R1 = U * W * Vt;

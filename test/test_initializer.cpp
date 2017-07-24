@@ -39,14 +39,16 @@ int main(int argc, char const *argv[])
 
     std::vector<cv::KeyPoint> kps;
     std::vector<cv::KeyPoint> kps_old;
-    std::vector<cv::Point2f> pts;
-    std::vector<cv::Point2f> upts;
+    std::vector<cv::Point2f> pts, upts;
+    std::vector<cv::Point2d> fts;
     ImgPyr img_pyr;
     ssvo::FastDetector fast_detector(1000, 3);
     ssvo::Frame::createPyramid(ref_img, img_pyr);
     fast_detector.detectByImage(img_pyr, kps, kps_old);
     cv::KeyPoint::convert(kps, pts);
     cv::undistortPoints(pts, upts, K, DistCoef);
+    fts.clear();fts.reserve(kps.size());
+    std::for_each(upts.begin(), upts.end(), [&](cv::Point2f& pt){fts.push_back(cv::Point2d((double)pt.x, (double)pt.y));});
     std::cout << "-- Corners in First image: " << kps.size() << std::endl;
 
     const int n_trials = 100;
@@ -56,7 +58,7 @@ int main(int argc, char const *argv[])
     for(int i = 0; i < n_trials; ++i)
     {
         double t1 = (double)cv::getTickCount();
-        initializer.addFirstImage(ref_img, pts, upts);
+        initializer.addFirstImage(ref_img, pts, fts);
         time_accumulator1 += ((cv::getTickCount() - t1) / cv::getTickFrequency());
 
         double t2 = (double)cv::getTickCount();
@@ -66,7 +68,7 @@ int main(int argc, char const *argv[])
     std::cout << " took " <<  time_accumulator1/((double)n_trials)*1000.0
               << " ms for first image and " << time_accumulator2/((double)n_trials)*1000.0 << " ms for second image(average over " << n_trials << " trials)." << std::endl;
 
-    initializer.addFirstImage(ref_img, pts, upts);
+    initializer.addFirstImage(ref_img, pts, fts);
     int succeed = initializer.addSecondImage(cur_img);
     std::vector<cv::Point2f> pts_ref, pts_cur;
     initializer.getTrackedPoints(pts_ref, pts_cur);
