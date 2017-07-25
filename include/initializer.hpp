@@ -34,15 +34,15 @@ public:
 
 private:
 
-    void kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, cv::Mat& inliers);
+    void kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, const std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, cv::Mat& inliers);
 
-    void calcDisparity(std::vector<cv::Point2f>& pts1, std::vector<cv::Point2f>& pts2, std::vector<float>& disparities);
+    void calcDisparity(const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, const cv::Mat& inliers, std::vector<std::pair<int, float> >& disparities);
 
     bool findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat& t, const cv::Mat& K1, const cv::Mat& K2,
                     const std::vector<cv::Point2d>& fts1, const std::vector<cv::Point2d>& fts2, cv::Mat& mask, cv::Mat& P3Ds, cv::Mat& T);
 
-    int checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur,
-                           const cv::Mat& T, const cv::Mat& mask, const cv::Mat& P3Ds, const double sigma2, std::vector<Vector3d>& vP3Ds);
+    int checkReprejectErr(const std::vector<cv::Point2f>& pts_ref, const std::vector<cv::Point2f>& pts_cur, const std::vector<cv::Point2d>& fts_ref, const std::vector<cv::Point2d>& fts_cur,
+                           const cv::Mat& T, cv::Mat& mask, const cv::Mat& P3Ds, const double sigma2, std::vector<Vector3d>& vP3Ds);
 
     void triangulate(const cv::Mat& P1, const cv::Mat& P2, const std::vector<cv::Point2d>& fts1, const std::vector<cv::Point2d>& fts2, cv::Mat& mask, cv::Mat& P3D);
 
@@ -65,7 +65,7 @@ private:
     std::vector<cv::Point2d> fts_ref_;
     std::vector<cv::Point2d> fts_cur_;
     std::vector<Vector3d> p3ds_;
-    std::vector<float> disparities_;
+    std::vector<std::pair<int, float> > disparities_;
     cv::Mat inliers_;
 
     bool finished_;

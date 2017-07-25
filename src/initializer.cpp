@@ -63,37 +63,37 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
     double t1 = (double)cv::getTickCount();
     //! [1] KLT tracking
     kltTrack(img_ref_, img_cur_, pts_ref_, pts_cur_, inliers_);
-    reduceVecor(pts_ref_, inliers_);
-    reduceVecor(pts_cur_, inliers_);
-    reduceVecor(fts_ref_, inliers_);
-    inliers_ = cv::Mat(pts_ref_.size(), 1, CV_8UC1, cv::Scalar(255));
-    calcDisparity(pts_ref_, pts_cur_, disparities_);
+//    reduceVecor(pts_ref_, inliers_);
+//    reduceVecor(pts_cur_, inliers_);
+//    reduceVecor(fts_ref_, inliers_);
+//    inliers_ = cv::Mat(pts_ref_.size(), 1, CV_8UC1, cv::Scalar(255));
+    calcDisparity(pts_ref_, pts_cur_, inliers_, disparities_);
     SSVO_INFO_STREAM("[INIT] KLT tracking points: " << disparities_.size());
     if(disparities_.size() < Config::initMinTracked()) return RESET;
 
     double t2 = (double)cv::getTickCount();
     //! [2] calculate disparities
-    std::vector<float> disparities_temp = disparities_;
-    std::sort(disparities_temp.begin(), disparities_temp.end());
-    float disparity = disparities_temp.at(disparities_temp.size()/2);
-    float max_disparity = disparities_temp.at(disparities_temp.size()*3/4)*2;
+    std::vector<std::pair<int, float> > disparities_temp = disparities_;
+    std::sort(disparities_temp.begin(), disparities_temp.end(), [](const std::pair<int, float> disp1, const std::pair<int, float> disp2){return (disp1.second < disp2.second);});
+    float disparity = disparities_temp.at(disparities_temp.size()/2).second;
+    float max_disparity = disparities_temp.at(disparities_temp.size()*3/4).second * 2;
     uchar* inliers_ptr = inliers_.ptr<uchar>(0);
-    bool reduce = false;
-    for (int i = 0; i < pts_ref_.size(); ++i)
+    //bool reduce = false;
+    for (int i = 0; i < disparities_.size(); ++i)
     {
-        if(disparities_[i] > max_disparity)
+        if(disparities_[i].second > max_disparity)
         {
-            reduce = true;
-            inliers_ptr[i] = 0;
+            const int id = disparities_[i].first;
+            inliers_ptr[id] = 0;
         }
     }
-    if(reduce)
-    {
-        reduceVecor(pts_ref_, inliers_);
-        reduceVecor(pts_cur_, inliers_);
-        reduceVecor(fts_ref_, inliers_);
-        inliers_ = cv::Mat(pts_ref_.size(), 1, CV_8UC1, cv::Scalar(255));
-    }
+//    if(reduce)
+//    {
+//        reduceVecor(pts_ref_, inliers_);
+//        reduceVecor(pts_cur_, inliers_);
+//        reduceVecor(fts_ref_, inliers_);
+//        inliers_ = cv::Mat(pts_ref_.size(), 1, CV_8UC1, cv::Scalar(255));
+//    }
     //! get undistorted points
     std::vector<cv::Point2f> temp_udist;
     cv::undistortPoints(pts_cur_, temp_udist, K_, D_);
@@ -110,14 +110,14 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
     //int inliers_count = cv::countNonZero(inliers_);
     cv::Mat E;
     int inliers_count = Fundamental::findFundamentalMat(fts_ref_, fts_cur_, E, inliers_, Config::initUnSigma2(), Config::initMaxRansacIters(), true);
-    if(inliers_count!= pts_ref_.size())
-    {
-        reduceVecor(pts_ref_, inliers_);
-        reduceVecor(pts_cur_, inliers_);
-        reduceVecor(fts_ref_, inliers_);
-        reduceVecor(fts_cur_, inliers_);
-        inliers_ = cv::Mat(pts_ref_.size(), 1, CV_8UC1, cv::Scalar(255));
-    }
+//    if(inliers_count!= pts_ref_.size())
+//    {
+//        reduceVecor(pts_ref_, inliers_);
+//        reduceVecor(pts_cur_, inliers_);
+//        reduceVecor(fts_ref_, inliers_);
+//        reduceVecor(fts_cur_, inliers_);
+//        inliers_ = cv::Mat(pts_ref_.size(), 1, CV_8UC1, cv::Scalar(255));
+//    }
     SSVO_INFO_STREAM("[INIT] Inliers after epipolar geometry check: " << inliers_count);
     if(inliers_count < Config::initMinInliers()) return FAILURE;
 
@@ -155,11 +155,23 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
 void Initializer::getResults(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur,
     std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur, std::vector<Vector3d>& p3ds) const
 {
-    pts_ref = pts_ref_;
-    pts_cur = pts_cur_;
-    fts_ref = fts_ref_;
-    fts_cur = fts_cur_;
-    p3ds = p3ds_;
+    const int N = pts_ref_.size();
+    pts_ref.reserve(N);
+    pts_cur.reserve(N);
+    fts_ref.reserve(N);
+    fts_cur.reserve(N);
+
+    const uchar* inliers_ptr = inliers_.ptr<uchar>(0);
+    for (int i = 0; i < N; ++i) {
+        if(!inliers_ptr[i])
+            continue;
+
+        pts_ref.push_back(pts_ref_[i]);
+        pts_cur.push_back(pts_cur_[i]);
+        fts_ref.push_back(fts_ref_[i]);
+        fts_cur.push_back(fts_cur_[i]);
+        p3ds.push_back(p3ds_[i]);
+    }
 }
 
 void Initializer::getUndistInilers(std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur) const
@@ -170,18 +182,39 @@ void Initializer::getUndistInilers(std::vector<cv::Point2d>& fts_ref, std::vecto
         return;
     }
 
-    fts_ref = fts_ref_;
-    fts_cur = fts_cur_;
+    const int N = pts_ref_.size();
+    fts_ref.reserve(N);
+    fts_cur.reserve(N);
+
+    const uchar* inliers_ptr = inliers_.ptr<uchar>(0);
+    for (int i = 0; i < N; ++i) {
+        if(!inliers_ptr[i])
+            continue;
+
+        fts_ref.push_back(fts_ref_[i]);
+        fts_cur.push_back(fts_cur_[i]);
+    }
 }
 
 void Initializer::getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur) const
 {
-    pts_ref = pts_ref_;
-    pts_cur = pts_cur_;
+    const int N = pts_ref_.size();
+    pts_ref.reserve(N);
+    pts_cur.reserve(N);
+
+    const uchar* inliers_ptr = inliers_.ptr<uchar>(0);
+    for (int i = 0; i < N; ++i) {
+        if(!inliers_ptr[i])
+            continue;
+
+        pts_ref.push_back(pts_ref_[i]);
+        pts_cur.push_back(pts_cur_[i]);
+    }
 }
 
-void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, cv::Mat& inliers)
+void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, const std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, cv::Mat& inliers)
 {
+    const int N = pts_ref.size();
     const int klt_win_size = 21;
     const int klt_max_iter = 30;
     const double klt_eps = 0.001;
@@ -191,6 +224,32 @@ void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::
     const int x_max = img_ref.cols - border;
     const int y_max = img_ref.rows - border;
 
+    std::vector<cv::Point2f> pts_ref_temp;
+    std::vector<cv::Point2f> pts_cur_temp;
+    pts_ref_temp.reserve(N);
+    pts_cur_temp.reserve(N);
+    if(!inliers.empty())
+    {
+        const uchar* inliers_ptr = inliers.ptr<uchar>(0);
+        int i = 0;
+        for (int idx = 0; idx < N; ++idx)
+        {
+            if(!inliers_ptr[idx])
+                continue;
+
+            pts_ref_temp.push_back(pts_ref[idx]);
+            pts_cur_temp.push_back(pts_cur[idx]);
+
+        }
+    }
+    else
+    {
+        inliers = cv::Mat(N, 1, CV_8UC1, cv::Scalar(255));
+        pts_ref_temp = pts_ref;
+        pts_cur_temp = pts_cur;
+    }
+
+
     std::vector<float> error;
     std::vector<uchar> status;
 
@@ -198,39 +257,50 @@ void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, std::
 
     cv::calcOpticalFlowPyrLK(
         img_ref, img_cur,
-        pts_ref, pts_cur,
+        pts_ref_temp, pts_cur_temp,
         status, error,
         cv::Size(klt_win_size, klt_win_size), 3,
         termcrit, cv::OPTFLOW_USE_INITIAL_FLOW
     );
 
-    std::vector<cv::Point2f>::iterator pts_cur_it = pts_cur.begin();
-    std::vector<cv::Point2f>::iterator pts_cur_end = pts_cur.end();
 
-    inliers = cv::Mat(pts_cur.size(), 1, CV_8UC1, cv::Scalar(255));
+    pts_cur.resize(N);
     uchar* inliers_ptr = inliers.ptr<uchar>(0);
-    for(int i = 0; pts_cur_it!= pts_cur_end; ++i, ++pts_cur_it)
+    int idx = 0;
+    for(int i = 0; i < N; ++i)
     {
-        if(!status[i] || pts_cur_it->x < x_min || pts_cur_it->y < y_min || pts_cur_it->x > x_max || pts_cur_it->y > y_max)
+        if(!inliers_ptr[i])
+            continue;
+
+        const cv::Point2f pt = pts_cur_temp[idx];
+        if(!status[idx] || pt.x < x_min || pt.y < y_min || pt.x > x_max || pt.y > y_max)
         {
             inliers_ptr[i] = 0;
-            continue;
+            pts_cur[i] = cv::Point2f(0,0);
         }
+        else
+        {
+            pts_cur[i] = pt;
+        }
+        idx++;
     }
 }
 
-void Initializer::calcDisparity(std::vector<cv::Point2f>& pts1, std::vector<cv::Point2f>& pts2, std::vector<float>& disparities)
+void Initializer::calcDisparity(const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, const cv::Mat& inliers, std::vector<std::pair<int, float> >& disparities)
 {
-    std::vector<cv::Point2f>::iterator pts1_it = pts1.begin();
-    std::vector<cv::Point2f>::iterator pts2_it = pts2.begin();
+    const int N = pts1.size();
 
     disparities.clear();
-    disparities.reserve(pts1.size());
-    for(std::vector<cv::Point2f>::iterator it_end = pts1.end(); pts1_it != it_end; pts1_it++, pts2_it++)
+    disparities.reserve(N);
+    const uchar* inliers_ptr = inliers.ptr<uchar>(0);
+    for(int i = 0; i < N; i++)
     {
-        float dx = pts2_it->x - pts1_it->x;
-        float dy = pts2_it->y - pts1_it->y;
-        disparities.push_back(sqrt(dx*dx + dy*dy));
+        if(!inliers_ptr[i])
+            continue;
+
+        float dx = pts2[i].x - pts1[i].x;
+        float dy = pts2[i].y - pts1[i].y;
+        disparities.push_back(std::make_pair(i,sqrt(dx*dx + dy*dy)));
     }
 }
 
@@ -342,18 +412,19 @@ bool Initializer::findBestRT(const cv::Mat& R1, const cv::Mat& R2, const cv::Mat
     return true;
 }
 
-int Initializer::checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur,
-                       const cv::Mat& T, const cv::Mat& mask, const cv::Mat& P3Ds, const double sigma2, std::vector<Vector3d>& p3ds)
+int Initializer::checkReprejectErr(const std::vector<cv::Point2f>& pts_ref, const std::vector<cv::Point2f>& pts_cur, const  std::vector<cv::Point2d>& fts_ref, const std::vector<cv::Point2d>& fts_cur,
+                       const cv::Mat& T, cv::Mat& mask, const cv::Mat& P3Ds, const double sigma2, std::vector<Vector3d>& p3ds)
 {
     assert(T.type() == CV_64FC1);
     assert(P3Ds.type() == CV_64FC1);
 
     const int size = pts_ref_.size();
-    p3ds_.clear(); p3ds_.reserve(size);
+    p3ds.clear(); p3ds.resize(size);
 
-    std::vector<int> inliers;
-    inliers.reserve(size);
-    const uchar* mask_ptr = mask.ptr<uchar>(0);
+//    std::vector<int> inliers;
+//    inliers.reserve(size);
+    int inliers_count = 0;
+    uchar* mask_ptr = mask.ptr<uchar>(0);
     const double* P3Ds_ptr = P3Ds.ptr<double>(0);
     const int strick = P3Ds.cols;
     const int strick2 = strick*2;
@@ -374,7 +445,10 @@ int Initializer::checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vecto
         double err1 = dx1*dx1 + dy1*dy1;
 
         if(err1 > sigma2)
+        {
+            mask_ptr[i] = 0;
             continue;
+        }
 
         cv::Mat P1 = (cv::Mat_<double>(4,1) <<X, Y, Z, 1);
         cv::Mat P2 = T*P1;
@@ -386,40 +460,44 @@ int Initializer::checkReprejectErr(std::vector<cv::Point2f>& pts_ref, std::vecto
         double err2 = dx2*dx2 + dy2*dy2;
 
         if(err2 > sigma2)
+        {
+            mask_ptr[i] = 0;
             continue;
+        }
 
-        inliers.push_back(i);
-        p3ds.push_back(Vector3d(X, Y, Z));
+//        inliers.push_back(i);
+        inliers_count++;
+        p3ds[i] = Vector3d(X, Y, Z);
     }
 
-    const int n_inliers = inliers.size();
-    if(n_inliers == size)
-        return inliers.size();
+//    const int n_inliers = inliers.size();
+//    if(n_inliers == size)
+//        return inliers.size();
 
-    std::vector<cv::Point2f>::iterator pts_ref_inter = pts_ref.begin();
-    std::vector<cv::Point2f>::iterator pts_cur_inter = pts_cur.begin();
-    std::vector<cv::Point2d>::iterator fts_ref_inter = fts_ref.begin();
-    std::vector<cv::Point2d>::iterator fts_cur_inter = fts_cur.begin();
-    for(int j = 0; j < n_inliers; ++j)
-    {
-        const int id = inliers[j];
+//    std::vector<cv::Point2f>::iterator pts_ref_inter = pts_ref.begin();
+//    std::vector<cv::Point2f>::iterator pts_cur_inter = pts_cur.begin();
+//    std::vector<cv::Point2d>::iterator fts_ref_inter = fts_ref.begin();
+//    std::vector<cv::Point2d>::iterator fts_cur_inter = fts_cur.begin();
+//    for(int j = 0; j < n_inliers; ++j)
+//    {
+//        const int id = inliers[j];
+//
+//        *pts_ref_inter = pts_ref[id];
+//        *pts_cur_inter = pts_cur[id];
+//        *fts_ref_inter = fts_ref[id];
+//        *fts_cur_inter = fts_cur[id];
+//
+//        pts_ref_inter++;
+//        pts_cur_inter++;
+//        fts_ref_inter++;
+//        fts_cur_inter++;
+//    }
+//    pts_ref.resize(n_inliers);
+//    pts_cur.resize(n_inliers);
+//    fts_ref.resize(n_inliers);
+//    fts_cur.resize(n_inliers);
 
-        *pts_ref_inter = pts_ref[id];
-        *pts_cur_inter = pts_cur[id];
-        *fts_ref_inter = fts_ref[id];
-        *fts_cur_inter = fts_cur[id];
-
-        pts_ref_inter++;
-        pts_cur_inter++;
-        fts_ref_inter++;
-        fts_cur_inter++;
-    }
-    pts_ref.resize(n_inliers);
-    pts_cur.resize(n_inliers);
-    fts_ref.resize(n_inliers);
-    fts_cur.resize(n_inliers);
-
-    return inliers.size();
+    return inliers_count;
 }
 
 #if 0
@@ -662,16 +740,19 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::
 {
     const int N = fts_prev.size();
     const int modelPoints = 8;
-    assert(N >= modelPoints);
 
     const double threshold = 3.841*sigma2;
     const int max_iters = MIN(MAX(max_iterations, 1), 1000);
 
     std::vector<int> total_points;
+    total_points.reserve(N);
+    const uchar* inliers_ptr = inliers.ptr<uchar>(0);
     for(int i = 0; i < N; ++i)
     {
-        total_points.push_back(i);
+        if(inliers_ptr[i])
+            total_points.push_back(i);
     }
+    assert(total_points.size() >= modelPoints);
 
     std::vector<cv::Point2d> fts1(modelPoints);
     std::vector<cv::Point2d> fts2(modelPoints);
@@ -699,8 +780,10 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::
         int inliers_count = 0;
         cv::Mat inliers_temp = cv::Mat::zeros(N, 1, CV_8UC1);
         uchar* inliers_ptr = inliers_temp.ptr<uchar>(0);
-        for(int n = 0; n < N; ++n)
+        std::vector<int>::iterator total_points_iter = total_points.begin();
+        for(const std::vector<int>::iterator end_iter = total_points.end(); total_points_iter != end_iter; ++total_points_iter)
         {
+            const int n = *total_points_iter;
             double error1, error2;
             computeErrors(fts_prev[n], fts_next[n], F_temp.ptr<double>(0), error1, error2);
 
