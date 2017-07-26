@@ -9,43 +9,39 @@
 
 #include "camera.hpp"
 #include "feature_detector.hpp"
+#include "global.hpp"
 
 namespace ssvo{
 
-//class Feature;
+typedef std::vector<Feature*> Features;
+typedef std::vector<MapPoint*> MapPoints;
 
 class Frame
 {
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 public:
     Frame(const cv::Mat& img, const double timestamp, CameraPtr cam);
 
     static int createPyramid(const cv::Mat& img, std::vector<cv::Mat>& img_pyr, const uint16_t nlevels = 4, const cv::Size min_size = cv::Size(40, 40));
 
-    int detectFeatures(FastDetector& detector);
-
-    void addFeature();
+    void addFeature(Feature* ft);
 
     inline long int ID(){return id_;};
 
 public:
-    static long int frameId;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    CameraPtr cam_;
-    ImgPyr img_pyr_;
-    std::vector<cv::KeyPoint> kps_;
-    std::vector<cv::Point2f> pts_;
-    //std::vector<Feature> fts_;
-
-private:
+    static long int frame_id_;
     const long int id_;
     const double timestamp_;
 
     int pyr_levels_;
 
-};
+    CameraPtr cam_;
+    ImgPyr img_pyr_;
+    Features fts_;
+    MapPoints mps_;
 
-typedef std::shared_ptr<Frame> FramePtr;
+};
 
 }
 

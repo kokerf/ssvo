@@ -54,6 +54,8 @@ public:
 
     static double fastMinEigen(){return getInstance().fast_min_eigen;}
 
+    static double mapScale(){return getInstance().mapping_scale;}
+
 private:
     static Config& getInstance()
     {
@@ -97,6 +99,14 @@ private:
         height = (int)fs["Camera.height"];
         fps = (double)fs["Camera.fps"];
 
+        //! FAST detector parameters
+        image_border = (int)fs["FastDetector.image_border"];
+        grid_min_size = (int)fs["FastDetector.grid_min_size"];
+        grid_max_fts = (int)fs["FastDetector.grid_max_fts"];
+        fast_max_threshold = (int)fs["FastDetector.fast_max_threshold"];
+        fast_min_threshold = (int)fs["FastDetector.fast_min_threshold"];
+        fast_min_eigen = (double)fs["FastDetector.fast_min_eigen"];
+
         //! initializer parameters
         init_min_corners = (int)fs["Initializer.min_corners"];
         init_min_tracked = (int)fs["Initializer.min_tracked"];
@@ -108,13 +118,8 @@ private:
         init_unsigma = sqrt(init_unsigma2);
         init_max_iters = (int)fs["Initializer.ransac_max_iters"];
 
-        //! FAST detector parameters
-        image_border = (int)fs["FastDetector.image_border"];
-        grid_min_size = (int)fs["FastDetector.grid_min_size"];
-        grid_max_fts = (int)fs["FastDetector.grid_max_fts"];
-        fast_max_threshold = (int)fs["FastDetector.fast_max_threshold"];
-        fast_min_threshold = (int)fs["FastDetector.fast_min_threshold"];
-        fast_min_eigen = (double)fs["FastDetector.fast_min_eigen"];
+        //! map
+        mapping_scale = (double)fs["Mapping.scale"];
 
         fs.release();
     }
@@ -133,6 +138,14 @@ private:
     int height;
     double fps;
 
+    //! FAST detector parameters
+    int image_border;
+    int grid_min_size;
+    int grid_max_fts;
+    int fast_max_threshold;
+    int fast_min_threshold;
+
+    double fast_min_eigen;
     //! initializer parameters
     int init_min_corners;
     int init_min_tracked;
@@ -144,13 +157,8 @@ private:
     double init_unsigma2;
     int init_max_iters;
 
-    //! FAST detector parameters
-    int image_border;
-    int grid_min_size;
-    int grid_max_fts;
-    int fast_max_threshold;
-    int fast_min_threshold;
-    double fast_min_eigen;
+    //! map
+    double mapping_scale;
 
 };
 

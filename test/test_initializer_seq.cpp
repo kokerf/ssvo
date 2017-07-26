@@ -5,6 +5,7 @@
 #include "feature_detector.hpp"
 #include "initializer.hpp"
 #include "config.hpp"
+#include "bundle_adjustment.hpp"
 #ifdef WIN32
 #include <io.h>
 #else
@@ -50,6 +51,33 @@ void loadImages(const std::string &strFileDirectory, std::vector<string> &vstrIm
     std::sort(vstrImageFilenames.begin(),vstrImageFilenames.end());
 }
 #endif
+
+void evalueErrors(std::vector<cv::Point2d>& fts1, std::vector<cv::Point2d>& fts2, std::vector<Vector3d>& p3ds, Quaterniond& Q, Vector3d& t, double& error)
+{
+    const int N = p3ds.size();
+    double residuals[2] = {0,0};
+    for(int i = 0; i < N; i++)
+    {
+        cv::Point2d &ft1 = fts1[i];
+        cv::Point2d &ft2 = fts2[i];
+        Vector3d &p1 = p3ds[i];
+        Vector3d p2 = Q._transformVector(p1) + t;
+
+        double predicted_x1 = p1[0] / p1[2];
+        double predicted_y1 = p1[1] / p1[2];
+        double dx1 = predicted_x1 - ft1.x;
+        double dy1 = predicted_y1 - ft1.y;
+        residuals[0] += dx1*dx1 + dy1*dy1;
+
+        double predicted_x2 = p2[0] / p2[2];
+        double predicted_y2 = p2[1] / p2[2];
+        double dx2 = predicted_x2 - ft2.x;
+        double dy2 = predicted_y2 - ft2.y;
+        residuals[1] += dx2*dx2 + dy2*dy2;
+    }
+
+    error = 0.5*(residuals[0] + residuals[1]);
+}
 
 std::string ssvo::Config::FileName;
 
@@ -124,8 +152,84 @@ int main(int argc, char const *argv[])
         }
 
         cv::waitKey(fps);
+    }
+
+    std::vector<cv::Point2f> pts1, pts2;
+    std::vector<cv::Point2d> fts1, fts2;
+    std::vector<Vector3d> p3ds;
+    cv::Mat inliers;
+    MatrixXd T;
+    initializer.getResults(pts1, pts2, fts1, fts2, p3ds, inliers, T);
+
+    std::vector<cv::Point2d>::iterator fts1_iter = fts1.begin();
+    std::vector<cv::Point2d>::iterator fts2_iter = fts2.begin();
+    std::vector<Vector3d>::iterator p3ds_iter = p3ds.begin();
+
+    const uchar* inliers_ptr = inliers.ptr<uchar>(0);
+    for(int j = 0; p3ds_iter != p3ds.end() ; ++j)
+    {
+        if(!inliers_ptr[j])
+        {
+            fts1_iter = fts1.erase(fts1_iter);
+            fts2_iter = fts2.erase(fts2_iter);
+            p3ds_iter = p3ds.erase(p3ds_iter);
+            continue;
+        }
+
+        fts1_iter++;
+        fts2_iter++;
+        p3ds_iter++;
+    }
+
+    Matrix3d R = T.block(0,0,3,3);
+    Vector3d t = T.block(0,3,3,1);
+    Quaterniond Q2(R);
+
+    double error = 0;
+    evalueErrors(fts1, fts2, p3ds, Q2, t, error);
+    std::cout << "Error before BA: " << error << std::endl;
+
+
+    //! full BA
+    ceres::Problem problem;
+    ceres::LocalParameterization* local_parameterization = new ceres::QuaternionParameterization();
+    double Q1_arr[4] = {1,0,0,0};
+    double Q2_arr[4] = {Q2.w(), Q2.x(), Q2.y(), Q2.z()};
+    double t1_arr[3] = {0,0,0};
+    double t2_arr[3] = {t[0], t[1], t[2]};
+
+    problem.AddParameterBlock(Q1_arr, 4, local_parameterization);
+    problem.AddParameterBlock(Q2_arr, 4, local_parameterization);
+    problem.AddParameterBlock(t1_arr, 3);
+    problem.AddParameterBlock(t2_arr, 3);
+    problem.SetParameterBlockConstant(Q1_arr);
+    problem.SetParameterBlockConstant(t1_arr);
+    for(int id = 0; id < p3ds.size();id++)
+    {
+        cv::Point2d &ft1 = fts1[id];
+        cv::Point2d &ft2 = fts2[id];
+
+        ceres::CostFunction* cost_function2 = ssvo::ReprojectionError::Create(ft2.x, ft2.y);
+        problem.AddResidualBlock(cost_function2, NULL, Q2_arr, t2_arr, p3ds[id].data());
+
+        ceres::CostFunction* cost_function1 = ssvo::ReprojectionError::Create(ft1.x, ft1.y);
+        problem.AddResidualBlock(cost_function1, NULL, Q1_arr, t1_arr, p3ds[id].data());
 
     }
+
+    ceres::Solver::Options options;
+    options.linear_solver_type = ceres::DENSE_SCHUR;
+    options.minimizer_progress_to_stdout = true;
+    options.max_solver_time_in_seconds = 0.2;
+    ceres::Solver::Summary summary;
+    ceres::Solve(options, &problem, &summary);
+
+    Quaterniond Q2_(Q2_arr[0], Q2_arr[1], Q2_arr[2], Q2_arr[3]);
+    Vector3d t_(t2_arr);
+    evalueErrors(fts1, fts2, p3ds, Q2_, t_, error);
+    std::cout << "Error after BA: " << error << std::endl;
+
+    std::cout << summary.FullReport() << "\n";
 
     cv::waitKey(0);
 

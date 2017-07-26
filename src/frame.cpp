@@ -5,13 +5,18 @@
 
 namespace ssvo{
 
-long int Frame::frameId = 0;
+long int Frame::frame_id_ = 0;
 
 Frame::Frame(const cv::Mat& img, const double timestamp, CameraPtr cam):
-    id_(frameId++), timestamp_(timestamp)
+    id_(frame_id_++), timestamp_(timestamp)
 {
     cam_ = cam;
     pyr_levels_ = createPyramid(img, img_pyr_);
+}
+
+void Frame::addFeature(Feature* ft)
+{
+    fts_.push_back(ft);
 }
 
 int Frame::createPyramid(const cv::Mat& img, std::vector<cv::Mat>& img_pyr, const uint16_t nlevels, const cv::Size min_size)
@@ -39,13 +44,6 @@ int Frame::createPyramid(const cv::Mat& img, std::vector<cv::Mat>& img_pyr, cons
     }
 
     return nlevels;
-}
-
-int Frame::detectFeatures(FastDetector& detector)
-{
-    std::vector<cv::KeyPoint> kps_tracked;
-    cv::KeyPoint::convert(pts_, kps_tracked);
-    return detector.detectByImage(img_pyr_, kps_, kps_tracked);
 }
 
 }

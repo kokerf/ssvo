@@ -18,14 +18,6 @@ Camera.height: 480
 # Camera frames per second
 Camera.fps: 30.0
 
-# Initialization
-Initializer.min_corners: 200
-Initializer.min_tracked: 150
-Initializer.min_inliers: 80
-Initializer.min_disparity: 50
-Initializer.sigma: 1.0
-Initializer.ransac_max_iters: 1000
-
 # Fast detector
 FastDetector.image_border: 4
 FastDetector.grid_min_size: 8
@@ -33,5 +25,16 @@ FastDetector.grid_max_fts: 3
 FastDetector.fast_max_threshold: 20
 FastDetector.fast_min_threshold: 7
 FastDetector.fast_min_eigen: 30.0
+
+# Initialization
+Initializer.min_corners: 200
+Initializer.min_tracked: 150
+Initializer.min_inliers: 80
+Initializer.min_disparity: 30
+Initializer.sigma: 1.0
+Initializer.ransac_max_iters: 1000
+
+# Map
+Mapping.scale: 1
 
 

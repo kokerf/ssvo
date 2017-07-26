@@ -27,7 +27,7 @@ public:
     InitResult addSecondImage(const cv::Mat& img);
 
     void getResults(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur,
-    std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur, std::vector<Vector3d>& p3ds, cv::Mat& inliers) const;
+    std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur, std::vector<Vector3d>& p3ds, cv::Mat& inliers, MatrixXd& T) const;
 
     void getUndistInilers(std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur) const;
 
@@ -64,6 +64,7 @@ private:
     std::vector<Vector3d> p3ds_;
     std::vector<std::pair<int, float> > disparities_;
     cv::Mat inliers_;
+    MatrixXd T_;
 
     bool finished_;
 };

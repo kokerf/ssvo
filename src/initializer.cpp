@@ -111,16 +111,15 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
     Vector3d t;
     Fundamental::decomposeEssentialMat(E, R1, R2, t);
 
-    MatrixXd T;
     Matrix3d K = Matrix3d::Identity(3,3);
-    bool succeed = findBestRT(R1, R2, t, K, K, fts_ref_, fts_cur_, inliers_, p3ds_, T);
+    bool succeed = findBestRT(R1, R2, t, K, K, fts_ref_, fts_cur_, inliers_, p3ds_, T_);
     if(!succeed) return FAILURE;
     SSVO_INFO_STREAM("[INIT] Inliers after cheirality check: " << cv::countNonZero(inliers_));
 
     double t5 = (double)cv::getTickCount();
 
     //! [5] reprojective check
-    inliers_count = checkReprejectErr(pts_ref_, pts_cur_, fts_ref_, fts_cur_, T, inliers_, p3ds_, Config::initUnSigma2()*4);
+    inliers_count = checkReprejectErr(pts_ref_, pts_cur_, fts_ref_, fts_cur_, T_, inliers_, p3ds_, Config::initUnSigma2()*4);
     SSVO_INFO_STREAM("[INIT] Inliers after reprojective check: " << inliers_count);
     if(inliers_count < Config::initMinInliers()) return FAILURE;
 
@@ -139,7 +138,7 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
 }
 
 void Initializer::getResults(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur,
-    std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur, std::vector<Vector3d>& p3ds, cv::Mat& inliers) const
+    std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur, std::vector<Vector3d>& p3ds, cv::Mat& inliers, MatrixXd& T) const
 {
     if(!finished_)
     {
@@ -153,6 +152,7 @@ void Initializer::getResults(std::vector<cv::Point2f>& pts_ref, std::vector<cv::
     fts_cur = fts_cur_;
     p3ds = p3ds_;
     inliers = inliers_.clone();
+    T = T_;
 }
 
 void Initializer::getUndistInilers(std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur) const

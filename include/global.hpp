@@ -5,12 +5,17 @@
 #include <cmath>
 #include <cstdlib>
 #include <stdint.h>
+#include <random>
+#include <memory>
+
+static std::mt19937_64 rd;
+static std::uniform_real_distribution<double> distribution(0.0, std::nextafter(1, std::numeric_limits<double>::max()));
 
 inline double Rand(double min, double max)
-{ return (((double)rand()/((double)RAND_MAX + 1.0)) * (max - min + 1)) + min;}
+{ return (((double)distribution(rd) * (max - min + 1))) + min;}
 
 inline int Rand(int min, int max)
-{ return (((double)rand()/((double)RAND_MAX + 1.0)) * (max - min + 1)) + min;}
+{ return (((double)distribution(rd) * (max - min + 1))) + min;}
 
 #ifndef MIN
     #define MIN(a,b)  ((a) > (b) ? (b) : (a))
@@ -31,5 +36,14 @@ inline int Rand(int min, int max)
 #endif
 
 typedef std::vector<cv::Mat> ImgPyr;
+
+namespace ssvo{
+
+class Feature;
+class MapPoint;
+class Frame;
+typedef std::shared_ptr<Frame> FramePtr;
+
+}
 
 #endif
