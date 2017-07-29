@@ -11,8 +11,12 @@ using namespace Eigen;
 namespace ssvo {
 
 class Camera {
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 public:
+
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+    typedef std::shared_ptr<Camera> Ptr;
+
     Camera(int width, int height, double fx, double fy, double cx, double cy,
            double k1 = 0.0, double k2 = 0.0, double p1 = 0.0, double p2 = 0.0);
 
@@ -50,6 +54,12 @@ public:
 
     inline const Matrix3d Kinv() { return K_inv_; }
 
+    inline static Camera::Ptr create(int width, int height, double fx, double fy, double cx, double cy, double k1 = 0.0, double k2 = 0.0, double p1 = 0.0, double p2 = 0.0)
+    {return Camera::Ptr(new Camera(width, height, fx, fy, cx, cy, k1, k2, p1, p2));}
+
+    inline static Camera::Ptr create(int width, int height, cv::Mat& K, cv::Mat& D)
+    {return Camera::Ptr(new Camera(width, height, K, D));}
+
 
 private:
     int width_;
@@ -66,8 +76,6 @@ private:
     Matrix3d K_inv_;
 
 };
-
-typedef std::shared_ptr<Camera> CameraPtr;
 
 }
 

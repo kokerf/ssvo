@@ -1,4 +1,3 @@
-#include <iostream>
 #include <opencv2/imgproc.hpp>
 
 #include "feature_detector.hpp"

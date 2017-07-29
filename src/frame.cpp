@@ -5,21 +5,26 @@
 
 namespace ssvo{
 
-long int Frame::frame_id_ = 0;
+uint64_t Frame::next_id_ = 0;
 
-Frame::Frame(const cv::Mat& img, const double timestamp, CameraPtr cam):
-    id_(frame_id_++), timestamp_(timestamp)
+Frame::Frame(const cv::Mat& img, const double timestamp, Camera::Ptr cam):
+    id_(next_id_++), timestamp_(timestamp), cam_(cam)
 {
-    cam_ = cam;
-    pyr_levels_ = createPyramid(img, img_pyr_);
+    createPyramid(img, img_pyr_);
 }
 
-void Frame::addFeature(Feature* ft)
+Frame::Frame(const ImgPyr& img_pyr, const double timestamp, Camera::Ptr cam):
+        id_(next_id_++), timestamp_(timestamp), cam_(cam)
+{
+    img_pyr_ = img_pyr;
+}
+
+void Frame::addFeature(const Feature::Ptr ft)
 {
     fts_.push_back(ft);
 }
 
-int Frame::createPyramid(const cv::Mat& img, std::vector<cv::Mat>& img_pyr, const uint16_t nlevels, const cv::Size min_size)
+int createPyramid(const cv::Mat& img, std::vector<cv::Mat>& img_pyr, const uint16_t nlevels, const cv::Size min_size)
 {
     assert(!img.empty());
 

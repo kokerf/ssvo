@@ -69,26 +69,25 @@ private:
     bool finished_;
 };
 
-class Fundamental
+namespace Fundamental
 {
-public:
-    static int findFundamentalMat(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, Matrix3d &F,
-                                        cv::Mat& inliers, const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
 
-    static inline void computeErrors(const cv::Point2d& p1, const cv::Point2d& p2, Matrix3d& F, double& err1, double& err2);
+int findFundamentalMat(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, Matrix3d &F,
+                                    cv::Mat& inliers, const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
 
-    static void Normalize(const std::vector<cv::Point2d>& pts, std::vector<cv::Point2d>& pts_norm, Matrix3d& T);
+inline void computeErrors(const cv::Point2d& p1, const cv::Point2d& p2, Matrix3d& F, double& err1, double& err2);
 
-    static void run8point(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, Matrix3d& F, const bool bE = false);
+void Normalize(const std::vector<cv::Point2d>& pts, std::vector<cv::Point2d>& pts_norm, Matrix3d& T);
 
-    static int runRANSAC(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, Matrix3d& F, cv::Mat& inliers,
-                         const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
+void run8point(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, Matrix3d& F, const bool bE = false);
 
-    static void decomposeEssentialMat(const Matrix3d& E, Matrix3d& R1, Matrix3d& R2, Vector3d& t);
+int runRANSAC(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, Matrix3d& F, cv::Mat& inliers,
+                     const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
 
-};
+void decomposeEssentialMat(const Matrix3d& E, Matrix3d& R1, Matrix3d& R2, Vector3d& t);
 
-}
+}//! namespace Fundamental
 
+}//! namspace ssvo
 
 #endif

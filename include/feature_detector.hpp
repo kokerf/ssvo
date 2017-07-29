@@ -1,8 +1,6 @@
 #ifndef _FEATURE_DETECTOR_HPP_
 #define _FEATURE_DETECTOR_HPP_
 
-#include <vector>
-#include <opencv2/core.hpp>
 #include "fast/fast.h"
 
 #include "global.hpp"

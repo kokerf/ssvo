@@ -83,10 +83,14 @@ LIST(APPEND LINK_LIBS
 
 # Set sourcefiles
 LIST(APPEND SOURCEFILES
-    src/feature_detector.cpp
     src/camera.cpp
+    src/map_point.cpp
     src/frame.cpp
-    src/initializer.cpp)
+    src/keyframe.cpp
+    src/map.cpp
+    src/feature_detector.cpp
+    src/initializer.cpp
+    src/bundle_adjustment.cpp)
 
 add_library(${PROJECT_NAME} SHARED ${SOURCEFILES})
 target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})

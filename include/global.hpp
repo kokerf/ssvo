@@ -1,21 +1,25 @@
 #ifndef _GLOBAL_HPP_
 #define _GLOBAL_HPP_
 
-#include <iostream>
-#include <cmath>
 #include <cstdlib>
 #include <stdint.h>
-#include <random>
+#include <assert.h>
+#include <cmath>
+#include <sys/time.h>
+
+#include <iostream>
 #include <memory>
+#include <random>
+#include <list>
+#include <vector>
+#include <unordered_set>
+#include <unordered_map>
 
-static std::mt19937_64 rd;
-static std::uniform_real_distribution<double> distribution(0.0, std::nextafter(1, std::numeric_limits<double>::max()));
+#include <opencv2/core.hpp>
 
-inline double Rand(double min, double max)
-{ return (((double)distribution(rd) * (max - min + 1))) + min;}
+#include <Eigen/Dense>
 
-inline int Rand(int min, int max)
-{ return (((double)distribution(rd) * (max - min + 1))) + min;}
+using namespace Eigen;
 
 #ifndef MIN
     #define MIN(a,b)  ((a) > (b) ? (b) : (a))
@@ -39,10 +43,21 @@ typedef std::vector<cv::Mat> ImgPyr;
 
 namespace ssvo{
 
-class Feature;
-class MapPoint;
-class Frame;
-typedef std::shared_ptr<Frame> FramePtr;
+static std::mt19937_64 rd;
+static std::uniform_real_distribution<double> distribution(0.0, std::nextafter(1, std::numeric_limits<double>::max()));
+
+inline double Rand(double min, double max)
+{ return (((double)distribution(rd) * (max - min + 1))) + min;}
+
+inline int Rand(int min, int max)
+{ return (((double)distribution(rd) * (max - min + 1))) + min;}
+
+inline double getSystemTime()
+{
+    timeval tv;
+    gettimeofday(&tv, NULL);
+    return (tv.tv_sec + 0.000001*tv.tv_usec);
+}
 
 }
 
