@@ -63,17 +63,14 @@ bool twoViewBA(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Map::Ptr map)
     ceres::Solve(options, &problem, &summary);
 
     //! update pose
-    kf1->setRotation(kf1_pose.Q[0], kf1_pose.Q[1], kf1_pose.Q[2], kf1_pose.Q[3]);
-    kf1->setTranslation(kf1_pose.t[0], kf1_pose.t[1], kf1_pose.t[2]);
-    kf2->setRotation(kf2_pose.Q[0], kf2_pose.Q[1], kf2_pose.Q[2], kf2_pose.Q[3]);
-    kf2->setTranslation(kf2_pose.t[0], kf2_pose.t[1], kf2_pose.t[2]);
+    //kf1_pose.update();
+    kf2_pose.update();
 
     std::vector<MapPointPose>::iterator mpts_pose_iter = mpts_pose.begin();
     std::vector<MapPointPose>::iterator mpts_pose_end = mpts_pose.end();
     for(; mpts_pose_iter != mpts_pose_end ; ++mpts_pose_iter)
     {
-        MapPointPose &pose = *mpts_pose_iter;
-        mpts_pose_iter->mpt->setPose(pose.t[0], pose.t[1], pose.t[2]);
+        mpts_pose_iter->update();
     }
 
     sloveReport(summary, true);

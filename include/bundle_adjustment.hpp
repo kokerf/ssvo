@@ -57,6 +57,12 @@ struct KeyFramePose{
         t[2] = translation[2];
     }
 
+    inline void update()
+    {
+        kf->setRotation(Q[0], Q[1], Q[2], Q[3]);
+        kf->setTranslation(t[0], t[1], t[2]);
+    }
+
     KeyFrame::Ptr kf;
     double Q[4];
     double t[3];
@@ -70,6 +76,11 @@ struct MapPointPose{
         t[0] = translation[0];
         t[1] = translation[1];
         t[2] = translation[2];
+    }
+
+    inline void update()
+    {
+        mpt->setPose(t[0], t[1], t[2]);
     }
 
     MapPoint::Ptr mpt;
