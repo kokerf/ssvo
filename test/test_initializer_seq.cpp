@@ -92,8 +92,9 @@ std::string ssvo::Config::FileName;
 
 int main(int argc, char const *argv[])
 {
-    if (argc != 2) {
+    if (argc != 3) {
         std::cout << "Usge: ./test_initializer path_to_sequence configflie" << std::endl;
+        return -1;
     }
 
     ssvo::Config::FileName = std::string(argv[2]);

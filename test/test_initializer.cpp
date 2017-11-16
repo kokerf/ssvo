@@ -12,6 +12,7 @@ int main(int argc, char const *argv[])
 {
     if (argc != 4) {
         std::cout << "Usge: ./test_initializer image0 image1 configflie" << std::endl;
+        return -1;
     }
 
     cv::Mat ref_img = cv::imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
@@ -37,13 +38,35 @@ int main(int argc, char const *argv[])
     cv::Mat DistCoef = ssvo::Config::cameraDistCoef();
     ssvo::Camera camera(ssvo::Config::imageWidth(), ssvo::Config::imageHeight(), K, DistCoef);
 
+    cv::Mat temp;
+    const int n = 1000;
+    double time_accumulator = 0;
+    int nlevel = 0;
+    cv::Mat map1, map2;
+    cv::initUndistortRectifyMap(K, DistCoef, cv::Matx33d::eye(), K, ref_img.size(), CV_32FC1, map1, map2 );
+    for(int i = 0; i < n; ++i)
+    {
+        double t = (double)cv::getTickCount();
+        //cv::fisheye::undistortImage(ref_img, temp, K, DistCoef, K);
+        cv::remap(ref_img, temp, map1, map2, cv::INTER_LINEAR);
+        time_accumulator +=  ((cv::getTickCount() - t) / cv::getTickFrequency());
+    }
+    std::cout << " took " <<  time_accumulator/((double)n)*1000.0
+              << " ms (average over " << n << " trials)." << std::endl;
+    std::cout << " all levels: " << nlevel << std::endl;
+
+    cv::imshow("sss", ref_img);
+    cv::imshow("sss1", temp);
+    cv::waitKey(0);
+
+
     std::vector<cv::KeyPoint> kps;
     std::vector<cv::KeyPoint> kps_old;
     std::vector<cv::Point2f> pts, upts;
     std::vector<cv::Point2d> fts;
     ImgPyr img_pyr;
     ssvo::FastDetector fast_detector(1000, 3);
-    ssvo::Frame::createPyramid(ref_img, img_pyr);
+    ssvo::createPyramid(ref_img, img_pyr);
     fast_detector.detectByImage(img_pyr, kps, kps_old);
     cv::KeyPoint::convert(kps, pts);
     cv::undistortPoints(pts, upts, K, DistCoef);

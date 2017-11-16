@@ -92,17 +92,17 @@ LIST(APPEND SOURCEFILES
     src/initializer.cpp
     src/bundle_adjustment.cpp)
 
-add_library(${PROJECT_NAME} SHARED ${SOURCEFILES})
-target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})
+#add_library(${PROJECT_NAME} SHARED ${SOURCEFILES})
+#target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})
 
 ## -----------------------
 ## Build test
 ## -----------------------
-add_executable(test_feature_detector test/test_feature_detector.cpp)
-target_link_libraries(test_feature_detector ${PROJECT_NAME})
+add_executable(test_feature_detector test/test_feature_detector.cpp ${SOURCEFILES})
+target_link_libraries(test_feature_detector ${LINK_LIBS})
 
-add_executable(test_initializer test/test_initializer.cpp)
-target_link_libraries(test_initializer  ${PROJECT_NAME})
+add_executable(test_initializer test/test_initializer.cpp ${SOURCEFILES})
+target_link_libraries(test_initializer  ${LINK_LIBS})
 
-add_executable(test_initializer_seq test/test_initializer_seq.cpp src/initializer.cpp)
-target_link_libraries(test_initializer_seq  ${PROJECT_NAME})
+add_executable(test_initializer_seq test/test_initializer_seq.cpp src/initializer.cpp ${SOURCEFILES})
+target_link_libraries(test_initializer_seq  ${LINK_LIBS})
