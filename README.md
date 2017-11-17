@@ -2,10 +2,12 @@
 
 Semi-direct sparse odometry
 
-## Prerequisites
+## 1.Prerequisites
 
 ### [OpenCV](http://opencv.org)
 
-### Eigen3
+### [Eigen3](http://eigen.tuxfamily.org/index.php?title=Main_Page)
+
+### [glog](https://github.com/google/glog)
 
 ### [Ceres](http://ceres-solver.org/installation.html)

@@ -87,7 +87,7 @@ struct MapPointPose{
     double t[3];
 };
 
-bool twoViewBA(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Map::Ptr map);
+void twoViewBA(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Map::Ptr map);
 
 void setOptions(ceres::Solver::Options& options, bool output = false);
 

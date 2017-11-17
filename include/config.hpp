@@ -5,6 +5,7 @@
 #include <string>
 
 #include <opencv2/core.hpp>
+#include <glog/logging.h>
 
 namespace ssvo{
 
@@ -120,6 +121,25 @@ private:
 
         //! map
         mapping_scale = (double)fs["Mapping.scale"];
+
+        //! glog
+        if(!fs["Glog.alsologtostderr"].empty())
+            fs["Glog.alsologtostderr"] >> FLAGS_alsologtostderr;
+
+        if(!fs["Glog.colorlogtostderr"].empty())
+            fs["Glog.colorlogtostderr"] >> FLAGS_colorlogtostderr;
+
+        if(!fs["Glog.stderrthreshold"].empty())
+            fs["Glog.stderrthreshold"] >> FLAGS_stderrthreshold;
+
+        if(!fs["Glog.minloglevel"].empty())
+            fs["Glog.minloglevel"] >> FLAGS_minloglevel;
+
+        if(!fs["Glog.log_prefix"].empty())
+            fs["Glog.log_prefix"] >> FLAGS_log_prefix;
+
+        if(!fs["Glog.log_dir"].empty())
+            fs["Glog.log_dir"] >> FLAGS_log_dir;
 
         fs.release();
     }

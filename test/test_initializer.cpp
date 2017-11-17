@@ -10,6 +10,8 @@ std::string ssvo::Config::FileName;
 
 int main(int argc, char const *argv[])
 {
+    google::InitGoogleLogging(argv[0]);
+
     if (argc != 4) {
         std::cout << "Usge: ./test_initializer image0 image1 configflie" << std::endl;
         return -1;
@@ -19,8 +21,6 @@ int main(int argc, char const *argv[])
     cv::Mat cur_img = cv::imread(argv[2], CV_LOAD_IMAGE_GRAYSCALE);
 
     ssvo::Config::FileName = std::string(argv[3]);
-
-    //std::cout << "Config: " << ssvo::Config::initMinCorners() << std::endl;
 
     if(ref_img.empty())
     {

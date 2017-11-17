@@ -16,7 +16,7 @@ void sloveReport(ceres::Solver::Summary& summary, bool output)
     if(output) std::cout << summary.FullReport() << std::endl;
 }
 
-bool twoViewBA(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Map::Ptr map)
+void twoViewBA(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Map::Ptr map)
 {
     ceres::Problem problem;
     ceres::LocalParameterization* local_parameterization = new ceres::QuaternionParameterization();
@@ -35,7 +35,7 @@ bool twoViewBA(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Map::Ptr map)
     std::vector<MapPointPose> mpts_pose;
     mpts_pose.reserve(fts1.size());
 
-    for(int id = 0; id < fts1.size();id++)
+    for(size_t id = 0; id < fts1.size();id++)
     {
         Feature::Ptr ft1 = fts1[id];
         MapPoint::Ptr mpt = ft1->mpt;

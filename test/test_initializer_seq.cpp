@@ -92,6 +92,8 @@ std::string ssvo::Config::FileName;
 
 int main(int argc, char const *argv[])
 {
+    google::InitGoogleLogging(argv[0]);
+
     if (argc != 3) {
         std::cout << "Usge: ./test_initializer path_to_sequence configflie" << std::endl;
         return -1;
@@ -135,7 +137,7 @@ int main(int argc, char const *argv[])
             cv::undistortPoints(pts, upts, K, DistCoef);
             fts.clear();fts.reserve(kps.size());
             std::for_each(upts.begin(), upts.end(), [&](cv::Point2f& pt){fts.push_back(cv::Point2d((double)pt.x, (double)pt.y));});
-            std::cout << "All corners: " << pts.size() <<std::endl;
+            LOG(INFO) << "All corners: " << pts.size();
             int succeed = initializer.addFirstImage(cur_img, pts, fts);
             if(succeed == ssvo::SUCCESS) initial = 1;
         }
@@ -153,7 +155,7 @@ int main(int argc, char const *argv[])
             initializer.getTrackedPoints(pts_ref, pts_cur);
 
             cv::Mat match_img = img.clone();
-            for(int i=0; i<pts_ref.size();i++)
+            for(size_t i=0; i<pts_ref.size();i++)
             {
                 cv::line(match_img, pts_ref[i], pts_cur[i],cv::Scalar(0,0,70));
             }
@@ -180,7 +182,7 @@ int main(int argc, char const *argv[])
     std::vector<Vector3d>::iterator p3ds_iter = p3ds.begin();
 
     const uchar* inliers_ptr = inliers.ptr<uchar>(0);
-    for(int j = 0; p3ds_iter != p3ds.end() ; ++j, fts1_iter++, fts2_iter++, pts1_iter++, pts2_iter++, p3ds_iter++)
+    for(size_t j = 0; p3ds_iter != p3ds.end() ; ++j, fts1_iter++, fts2_iter++, pts1_iter++, pts2_iter++, p3ds_iter++)
     {
         if(!inliers_ptr[j])
         {
@@ -206,12 +208,12 @@ int main(int argc, char const *argv[])
 
     double error = 0;
     evalueErrors(keyframe1, keyframe2, error);
-    std::cout << "Error before BA: " << error << std::endl;
+    LOG(INFO) << "Error before BA: " << error;
 
     ssvo::BA::twoViewBA(keyframe1, keyframe2, nullptr);
 
     evalueErrors(keyframe1, keyframe2, error);
-    std::cout << "Error after BA: " << error << std::endl;
+    LOG(INFO) << "Error after BA: " << error;
 
 
     cv::waitKey(0);

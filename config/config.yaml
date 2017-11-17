@@ -37,4 +37,10 @@ Initializer.ransac_max_iters: 1000
 # Map
 Mapping.scale: 1
 
-
+# glog
+Glog.alsologtostderr: 0
+Glog.colorlogtostderr: 1
+Glog.stderrthreshold: 1  # Copy log messages at or above this level to stderr in addition to logfiles. The numbers of severity levels INFO, WARNING, ERROR, and FATAL are 0, 1, 2, and 3, respectively.
+Glog.minloglevel: 0      # Log messages at or above this level. Again, the numbers of severity levels INFO, WARNING, ERROR, and FATAL are 0, 1, 2, and 3, respectively.
+Glog.log_prefix: 1       # Set whether the log prefix should be prepended to each line of output.
+Glog.log_dir: "/home/neu/workspace/ssvo/log" # If specified, logfiles are written into this directory instead of the default logging directory.

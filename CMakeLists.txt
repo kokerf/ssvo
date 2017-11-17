@@ -61,9 +61,14 @@ endif()
 find_package(Eigen3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
 
+# glog
+find_package(glog 0.3.5 REQUIRED)
+include_directories(${GLOG_INCLUDE_DIR})
+
 # Ceres
 find_package(Ceres REQUIRED)
 include_directories(${CERES_INCLUDE_DIRS})
+message(${GLOG_INCLUDE_DIRS})
 
 include_directories(
     ${PROJECT_SOURCE_DIR}
@@ -72,9 +77,10 @@ include_directories(
 )
 
 LIST(APPEND LINK_LIBS
-  ${OpenCV_LIBS}
-  ${CERES_LIBRARIES}
-  ${PROJECT_SOURCE_DIR}/Thirdparty/fast/build/libfast.so
+    ${OpenCV_LIBS}
+    ${GLOG_LIBRARY}
+    ${CERES_LIBRARIES}
+    ${PROJECT_SOURCE_DIR}/Thirdparty/fast/build/libfast.so
 )
 
 ## -----------------------
@@ -106,3 +112,6 @@ target_link_libraries(test_initializer  ${LINK_LIBS})
 
 add_executable(test_initializer_seq test/test_initializer_seq.cpp src/initializer.cpp ${SOURCEFILES})
 target_link_libraries(test_initializer_seq  ${LINK_LIBS})
+
+add_executable(test_glog test/test_glog.cpp)
+target_link_libraries(test_glog  ${LINK_LIBS})
