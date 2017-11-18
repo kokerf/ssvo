@@ -19,9 +19,10 @@ Camera.height: 480
 Camera.fps: 30.0
 
 # Fast detector
-FastDetector.image_border: 4
+FastDetector.image_border: 8
+FastDetector.grid_size: 20
 FastDetector.grid_min_size: 8
-FastDetector.grid_max_fts: 3
+#FastDetector.grid_max_fts: 3
 FastDetector.fast_max_threshold: 20
 FastDetector.fast_min_threshold: 7
 FastDetector.fast_min_eigen: 30.0
@@ -38,7 +39,7 @@ Initializer.ransac_max_iters: 1000
 Mapping.scale: 1
 
 # glog
-Glog.alsologtostderr: 0
+Glog.alsologtostderr: 1
 Glog.colorlogtostderr: 1
 Glog.stderrthreshold: 1  # Copy log messages at or above this level to stderr in addition to logfiles. The numbers of severity levels INFO, WARNING, ERROR, and FATAL are 0, 1, 2, and 3, respectively.
 Glog.minloglevel: 0      # Log messages at or above this level. Again, the numbers of severity levels INFO, WARNING, ERROR, and FATAL are 0, 1, 2, and 3, respectively.

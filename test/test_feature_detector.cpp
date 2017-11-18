@@ -1,6 +1,7 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 
+#include "config.hpp"
 #include "feature_detector.hpp"
 
 using namespace cv;
@@ -16,77 +17,51 @@ int main(int argc, char const *argv[])
         std::cout << "Usge: ./test_feature_detector image configfile" << std::endl;
     }
 
+    google::InitGoogleLogging(argv[0]);
+
     cv::Mat image = cv::imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
 
-    if(image.empty())
-    {
-        std::cout << "Can not open:" << argv[1] << std::endl;
-    }
+    LOG_IF(FATAL, image.empty()) << "Can not open:" << argv[1];
 
     ssvo::Config::FileName = std::string(argv[2]);
+    int width = ssvo::Config::imageWidth();
+    int height = ssvo::Config::imageHeight();
+    int image_border = ssvo::Config::imageBorder();
+    int grid_size = ssvo::Config::gridSize();
+    int grid_min_size = ssvo::Config::gridMinSize();
+    int fast_max_threshold = ssvo::Config::fastMaxThreshold();
+    int fast_min_threshold = ssvo::Config::fastMinThreshold();
+    double fast_min_eigen = ssvo::Config::fastMinEigen();
 
     std::vector<cv::Mat> image_pyramid;
-    int nlevels = 1 + computePyramid(image, image_pyramid, 2, 4, cv::Size(40, 40));
+    int top_level = computePyramid(image, image_pyramid, 2, 4, cv::Size(40, 40));
 
-    std::vector<cv::KeyPoint> all_keypoints0, all_keypoints1, old_keypoints;
-    ssvo::FastDetector fast(100, nlevels);
+    std::vector<ssvo::Corner> corners, old_corners;
+    ssvo::FastDetector fast(width, height, image_border, top_level, 1000, grid_size, grid_min_size);
 
-    std::cout << "=== FAST Detector ===" << std::endl;
-    std::cout << " ** detectByImage **" << std::endl;
+    LOG(WARNING) << "=== This is a FAST corner detector demo ===";
     const int n_trials = 1000;
     double time_accumulator = 0;
     for(int i = 0; i < n_trials; ++i)
     {
-        all_keypoints0.clear();
         double t = (double)cv::getTickCount();
-        fast.detectByImage(image_pyramid, all_keypoints0, old_keypoints);
+        fast.detect(image_pyramid, corners, old_corners, fast_max_threshold, fast_min_threshold, fast_min_eigen);
         time_accumulator +=  ((cv::getTickCount() - t) / cv::getTickFrequency());
+        LOG_EVERY_N(WARNING, n_trials/20) << " i: " << i << ", corners: " << corners.size();
     }
-    std::cout << " took " <<  time_accumulator/((double)n_trials)*1000.0
+    LOG(WARNING) << " took " <<  time_accumulator/((double)n_trials)*1000.0
               << " ms (average over " << n_trials << " trials)." << std::endl;
-    std::cout << " All: " << all_keypoints0.size()
-              << " Old: " << old_keypoints.size()
-              << " New: " << fast.new_coners_ << std::endl;
 
-    std::cout << " ** detectByGrid **" << std::endl;
-    time_accumulator = 0;
-    for(int i = 0; i < n_trials; ++i)
-    {
-        all_keypoints1.clear();
-        double t = (double)cv::getTickCount();
-        fast.detectByGrid(image_pyramid, all_keypoints1, old_keypoints);
-        time_accumulator +=  ((cv::getTickCount() - t) / cv::getTickFrequency());
-    }
-    std::cout << " took " <<  time_accumulator/((double)n_trials)*1000.0
-              << " ms (average over " << n_trials << " trials)." << std::endl;
-    std::cout << " All: " << all_keypoints1.size()
-              << " Old: " << old_keypoints.size()
-              << " New: " << fast.new_coners_ << std::endl;
+    cv::Mat kps_img;
+    std::vector<cv::KeyPoint> keypoints;
+    std::for_each(corners.begin(), corners.end(), [&](ssvo::Corner corner){
+        cv::KeyPoint kp(corner.x, corner.y, 0);
+        keypoints.push_back(kp);
+    });
+    cv::drawKeypoints(image, keypoints, kps_img);
 
-    std::cout << " ** detectByGrid (with old keypoints) ** " << std::endl;
-    std::for_each(all_keypoints1.begin(), all_keypoints1.end(), [&](cv::KeyPoint& kp){old_keypoints.push_back(kp);});
-    old_keypoints.resize(old_keypoints.size()/3*2);
-    time_accumulator = 0;
-    for(int i = 0; i < n_trials; ++i)
-    {
-        all_keypoints1.clear();
-        double t = (double)cv::getTickCount();
-        fast.detectByGrid(image_pyramid, all_keypoints1, old_keypoints);
-        time_accumulator +=  ((cv::getTickCount() - t) / cv::getTickFrequency());
-    }
-    std::cout << " took " <<  time_accumulator/((double)n_trials)*1000.0
-              << " ms (average over " << n_trials << " trials)." << std::endl;
-    std::cout << " All: " << all_keypoints1.size()
-              << " Old: " << old_keypoints.size()
-              << " New: " << fast.new_coners_ << std::endl;
-
-    cv::Mat kps_img0, kps_img1;
-    cv::drawKeypoints(image, all_keypoints0, kps_img0);
-    cv::drawKeypoints(image, all_keypoints1, kps_img1);
-    fast.drawGrid(kps_img0, kps_img0);
-    fast.drawGrid(kps_img1, kps_img1);
-    cv::imshow("KeyPoints detectByImage", kps_img0);
-    cv::imshow("KeyPoints detectByGrid", kps_img1);
+    fast.drawGrid(kps_img, kps_img);
+    cv::imshow("KeyPoints detectByImage", kps_img);
     cv::waitKey(0);
 
     return 0;
@@ -94,8 +69,8 @@ int main(int argc, char const *argv[])
 
 int computePyramid(const cv::Mat& image, std::vector<cv::Mat>& image_pyramid, const float scale_factor, const uint16_t level, const cv::Size min_size)
 {
-    assert(scale_factor > 1.0);
-    assert(!image.empty());
+    LOG_ASSERT(scale_factor > 1.0);
+    LOG_ASSERT(!image.empty());
 
     image_pyramid.resize(level + 1);
 

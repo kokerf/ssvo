@@ -100,6 +100,15 @@ int main(int argc, char const *argv[])
     }
 
     ssvo::Config::FileName = std::string(argv[2]);
+    int fps = ssvo::Config::cameraFps();
+    int width = ssvo::Config::imageWidth();
+    int height = ssvo::Config::imageHeight();
+    int image_border = ssvo::Config::imageBorder();
+    int grid_size = ssvo::Config::gridSize();
+    int grid_min_size = ssvo::Config::gridMinSize();
+    int fast_max_threshold = ssvo::Config::fastMaxThreshold();
+    int fast_min_threshold = ssvo::Config::fastMinThreshold();
+    double fast_min_eigen = ssvo::Config::fastMinEigen();
 
     std::string dir_name = argv[1];
     std::vector<string> img_file_names;
@@ -109,15 +118,15 @@ int main(int argc, char const *argv[])
     cv::Mat DistCoef = ssvo::Config::cameraDistCoef();
 
     ssvo::Camera::Ptr camera = ssvo::Camera::create(ssvo::Config::imageWidth(), ssvo::Config::imageHeight(), K, DistCoef);
-    ssvo::FastDetector fast_detector(300, 0, true);
+    ssvo::FastDetector fast(width, height, image_border, 3, 100, grid_size, grid_min_size);
+
     ssvo::Initializer initializer(K, DistCoef);
 
-    int fps = ssvo::Config::cameraFps();
     cv::Mat cur_img;
     cv::Mat ref_img;
     int initial = 0;
-    std::vector<cv::KeyPoint> kps;
-    std::vector<cv::KeyPoint> kps_old;
+    std::vector<ssvo::Corner> corners;
+    std::vector<ssvo::Corner> old_corners;
     std::vector<cv::Point2f> pts, upts;
     std::vector<cv::Point2d> fts;
     for(std::vector<std::string>::iterator i = img_file_names.begin(); i != img_file_names.end(); ++i)
@@ -132,10 +141,11 @@ int main(int argc, char const *argv[])
             ref_img = cur_img.clone();
             ImgPyr img_pyr;
             ssvo::createPyramid(cur_img, img_pyr);
-            fast_detector.detectByImage(img_pyr, kps, kps_old);
-            cv::KeyPoint::convert(kps, pts);
+
+            fast.detect(img_pyr, corners, old_corners, fast_max_threshold, fast_min_threshold, fast_min_eigen);
+            std::for_each(corners.begin(), corners.end(), [&](ssvo::Corner& corner){pts.push_back(cv::Point2f(corner.x, corner.y));});
             cv::undistortPoints(pts, upts, K, DistCoef);
-            fts.clear();fts.reserve(kps.size());
+            fts.clear();fts.reserve(corners.size());
             std::for_each(upts.begin(), upts.end(), [&](cv::Point2f& pt){fts.push_back(cv::Point2d((double)pt.x, (double)pt.y));});
             LOG(INFO) << "All corners: " << pts.size();
             int succeed = initializer.addFirstImage(cur_img, pts, fts);

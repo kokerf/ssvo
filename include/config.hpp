@@ -45,9 +45,11 @@ public:
 
     static int imageBorder(){return getInstance().image_border;}
 
+    static int gridSize(){return getInstance().grid_size;}
+
     static int gridMinSize(){return getInstance().grid_min_size;}
 
-    static int gridMaxFeatures(){return getInstance().grid_max_fts;}
+    //static int gridMaxFeatures(){return getInstance().grid_max_fts;}
 
     static int fastMaxThreshold(){return getInstance().fast_max_threshold;}
 
@@ -102,8 +104,9 @@ private:
 
         //! FAST detector parameters
         image_border = (int)fs["FastDetector.image_border"];
+        grid_size = (int)fs["FastDetector.grid_size"];
         grid_min_size = (int)fs["FastDetector.grid_min_size"];
-        grid_max_fts = (int)fs["FastDetector.grid_max_fts"];
+        //grid_max_fts = (int)fs["FastDetector.grid_max_fts"];
         fast_max_threshold = (int)fs["FastDetector.fast_max_threshold"];
         fast_min_threshold = (int)fs["FastDetector.fast_min_threshold"];
         fast_min_eigen = (double)fs["FastDetector.fast_min_eigen"];
@@ -160,8 +163,9 @@ private:
 
     //! FAST detector parameters
     int image_border;
+    int grid_size;
     int grid_min_size;
-    int grid_max_fts;
+    //int grid_max_fts;
     int fast_max_threshold;
     int fast_min_threshold;
 

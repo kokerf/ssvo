@@ -2,124 +2,94 @@
 #define _FEATURE_DETECTOR_HPP_
 
 #include "fast/fast.h"
-
 #include "global.hpp"
-#include "config.hpp"
 
 //! (u,v) is in the n-level image of pyramid
 //! (x,y) is in the 0-level image of pyramid
 namespace ssvo
 {
 
+struct Corner{
+    float x;        //!< x-coordinate of corner in the image.
+    float y;        //!< y-coordinate of corner in the image.
+    int level;    //!< pyramid level of the corner.
+    float score;  //!< shi-tomasi score of the corner.
+    //float angle;  //!< for gradient-features: dominant gradient angle.
+    Corner() {}
+    Corner(int x, int y, float score, int level) :
+        x(x), y(y), level(level), score(score)
+    {}
+
+    Corner(const Corner& other):
+        x(other.x), y(other.y), level(other.level), score(other.score)
+    {}
+};
+
+class Grid
+{
+public:
+    Grid(int cols, int rows, int grid_size, int grid_min_size);
+
+    inline const int getSize() const {return grid_size_; }
+
+    inline const int getGridIndex(const int x, const int y) const {return y/grid_size_*grid_n_cols_ + x/grid_size_; }
+
+    inline const bool getOccupancy(const int n) const { return occupancy_[n]; }
+
+    inline const bool getOccupancy(const int x, const int y) const { return getOccupancy(getGridIndex(x, y)); }
+
+    const int getCorners(std::vector<Corner> &corners) const;
+
+    void resetOccupancy();
+
+    void resetSize(int grid_size);
+
+    bool setOccupancy(const Corner &corner);
+
+    const int setOccupancy(const std::vector<Corner> &corners);
+
+    const int setOccupancyAdaptive(const std::vector<Corner> &corners, const int N);
+
+
+private:
+    const int cols_;
+    const int rows_;
+    int grid_size_;
+    const int grid_min_size_;
+    int grid_n_cols_;
+    int grid_n_rows_;
+    std::vector<bool> occupancy_;
+    std::vector<Corner> corners_;
+};
+
 class FastDetector
 {
 public:
-    FastDetector(int N, int top_level = 3, bool size_ajust = false);
+    FastDetector(int width, int height, int border, int top_level, int N, int grid_size, int grid_min_size);
 
-    int detectByGrid(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>& all_kps, const std::vector<cv::KeyPoint>& ext_kps);
-
-    int detectByImage(const ImgPyr& img_pyr, std::vector<cv::KeyPoint>& all_kps, const std::vector<cv::KeyPoint>& ext_kps);
+    int detect(const ImgPyr& img_pyr, std::vector<Corner>& corners, const std::vector<Corner>& exist_corners, const int max_threshold = 20, const int min_threshold = 7, const double eigen_threshold = 30.0);
 
     void drawGrid(const cv::Mat& img, cv::Mat& img_grid);
 
 private:
-    int detectByGrid(const cv::Mat& img, int level);
 
-    int detectByImage(const cv::Mat& img, int level);
-
-    void preProccess(const ImgPyr& img_pyr, const std::vector<cv::KeyPoint>& kps);
-
-    void creatGrid();
-
-    void resetGridSize(const int npts=-1);
-
-    void getKeyPointsFromGrid(const cv::Mat& img, std::vector<cv::KeyPoint>& all_kps);
+    int detectInLevel(const cv::Mat& img, int level, const int max_threshold = 20, const int min_threshold = 7, const double eigen_threshold = 30.0);
 
     float shiTomasiScore(const cv::Mat& img, int u, int v);
 
-    inline bool insertToGrid(cv::KeyPoint& kp, int n)
-    {
-        std::vector<cv::KeyPoint> &grid = kps_in_grid_[n];
-
-        if(grid.empty())
-        {
-            grid.push_back(kp);
-            return true;
-        }
-        else
-        {
-            std::vector<cv::KeyPoint>::iterator it;
-            for(it = grid.begin(); it!=grid.end(); it++)
-            {
-                if(it->response < kp.response)
-                    break;
-            }
-
-            grid.insert(it, kp);
-
-            return true;
-        }
-    }
-
-    //! get grid index by pixel in level0
-    inline int getGridIndex(int x, int y)
-    {
-        y = y > offset_rows_ ? y-offset_rows_ : y;
-        x = x > offset_cols_ ? x-offset_cols_ : 0;
-        int n_rows = y/grid_size_;
-        int n_cols = x/grid_size_;
-        n_rows = n_rows >= grid_n_rows_ ? grid_n_rows_-1: n_rows;
-        n_cols = n_cols >= grid_n_cols_ ? grid_n_cols_-1: n_cols;
-
-        return n_rows*grid_n_cols_ + n_cols;
-    }
-
-    //! get grid index by pixel in level
-    inline int getGridIndex(int u, int v, int level)
-    {
-        const int scale = (1<<level);
-        return getGridIndex(u*scale, v*scale);
-    }
-
-    //! set 3×3 mask in mask image
-    inline bool setMask(int u, int v, int level)
-    {
-        //! Attention!!! no boundary check!
-        mask_pyr_[level].ptr<uchar>(v-1)[u-1] = 255;
-        mask_pyr_[level].ptr<uchar>(v-1)[u] = 255;
-        mask_pyr_[level].ptr<uchar>(v-1)[u+1] = 255;
-        mask_pyr_[level].ptr<uchar>(v)[u-1] = 255;
-        mask_pyr_[level].ptr<uchar>(v)[u] = 255;
-        mask_pyr_[level].ptr<uchar>(v)[u+1] = 255;
-        mask_pyr_[level].ptr<uchar>(v+1)[u-1] = 255;
-        mask_pyr_[level].ptr<uchar>(v+1)[u] = 255;
-        mask_pyr_[level].ptr<uchar>(v+1)[u+1] = 255;
-        return true;
-    }
-
-public:
-    int new_coners_;
-
 private:
 
+    const int width_;
+    const int height_;
+    const int border_;
+    const int nlevels_;
     int N_;
-    int nlevels_;
 
-    int width_;
-    int height_;
+    const int grid_min_size_;
+    bool size_adjust_;
 
-    bool size_ajust_;
-    int grid_size_;
-    int grid_n_cols_;
-    int grid_n_rows_;
-    int offset_cols_;
-    int offset_rows_;
-
-    std::vector<int> grid_boundary_x_;
-    std::vector<int> grid_boundary_y_;
-    std::vector<cv::Mat> mask_pyr_;
-    std::vector<int> occupancy_grid_;
-    std::vector<std::vector<cv::KeyPoint> > kps_in_grid_;
+    std::vector<std::vector<Corner> > corners_in_levels_;
+    Grid grid_fliter;
 };
 
 }//! end of ssvo
