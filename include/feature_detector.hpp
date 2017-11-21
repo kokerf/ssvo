@@ -65,15 +65,15 @@ private:
 class FastDetector
 {
 public:
-    FastDetector(int width, int height, int border, int top_level, int N, int grid_size, int grid_min_size);
+    FastDetector(int width, int height, int border, int nlevels, int grid_size, int grid_min_size, int max_threshold = 20, int min_threshold = 7);
 
-    int detect(const ImgPyr& img_pyr, std::vector<Corner>& corners, const std::vector<Corner>& exist_corners, const int max_threshold = 20, const int min_threshold = 7, const double eigen_threshold = 30.0);
+    int detect(const ImgPyr& img_pyr, std::vector<Corner>& corners, const std::vector<Corner>& exist_corners, const int N, const double eigen_threshold = 30.0);
 
     void drawGrid(const cv::Mat& img, cv::Mat& img_grid);
 
 private:
 
-    int detectInLevel(const cv::Mat& img, int level, const int max_threshold = 20, const int min_threshold = 7, const double eigen_threshold = 30.0);
+    int detectInLevel(const cv::Mat& img, int level, const double eigen_threshold = 30.0);
 
     float shiTomasiScore(const cv::Mat& img, int u, int v);
 
@@ -87,6 +87,8 @@ private:
 
     const int grid_min_size_;
     bool size_adjust_;
+    const int max_threshold_;
+    const int min_threshold_;
 
     std::vector<std::vector<Corner> > corners_in_levels_;
     Grid grid_fliter;

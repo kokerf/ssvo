@@ -50,6 +50,8 @@ public:
 
     inline cv::Mat cvK() { return cvK_; }
 
+    inline cv::Mat cvD() { return cvD_; }
+
     inline const Matrix3d K() { return K_; }
 
     inline const Matrix3d Kinv() { return K_inv_; }

@@ -15,15 +15,19 @@ public:
 
     KeyFrame(const Frame::Ptr frame);
 
+    //inline void setPose(const Sophus::SE3d& T) { Tw_ = T; }
+    //using Frame::setPose;
+
     void updateObservation();
 
-    inline static KeyFrame::Ptr create(const Frame::Ptr frame) {return KeyFrame::Ptr(new KeyFrame(frame));}
-
-private:
+    inline static KeyFrame::Ptr create(const Frame::Ptr frame) { return KeyFrame::Ptr(new KeyFrame(frame)); }
+public:
 
     static uint64_t next_id_;
 
-    uint64_t frame_id_;
+    const uint64_t frame_id_;
+
+private:
 };
 
 }

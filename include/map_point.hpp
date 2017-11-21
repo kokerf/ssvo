@@ -26,16 +26,14 @@ public:
 
     inline void setPose(const double x, const double y, const double z)
     {
-        pos_[0] = x;
-        pos_[1] = y;
-        pos_[2] = z;
+        pose_[0] = x;
+        pose_[1] = y;
+        pose_[2] = z;
     }
 
-    inline void setPose(const Vector3d pos) {pos_ = pos;}
+    inline void setPose(const Vector3d pose) {pose_ = pose;}
 
-    inline Vector3d getPose() {return pos_;}
-
-    inline uint64_t  id(){return id_;}
+    inline Vector3d pose() {return pose_;}
 
     inline static MapPoint::Ptr create(const Vector3d p) {return MapPoint::Ptr(new MapPoint(p));}
 
@@ -46,11 +44,10 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     static uint64_t next_id_;
+    const uint64_t id_;
 
 private:
-
-    const uint64_t id_;
-    Vector3d pos_;
+    Vector3d pose_;
     std::unordered_map<std::shared_ptr<KeyFrame>, Feature::Ptr> obs_;
     int n_obs_;
 

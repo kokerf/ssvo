@@ -56,8 +56,8 @@ void evalueErrors(ssvo::KeyFrame::Ptr kf1, ssvo::KeyFrame::Ptr kf2, double& erro
 {
     const int N = kf1->fts_.size();
     double residuals[2] = {0,0};
-    Quaterniond Q = kf2->getRotation();
-    Vector3d t = kf2->getTranslation();
+    Matrix3d R = kf2->pose().rotationMatrix();
+    Vector3d t = kf2->pose().translation();
     for(int i = 0; i < N; i++)
     {
         ssvo::Feature::Ptr ft1 = kf1->fts_[i];
@@ -69,14 +69,15 @@ void evalueErrors(ssvo::KeyFrame::Ptr kf1, ssvo::KeyFrame::Ptr kf2, double& erro
 
         ssvo::Feature::Ptr ft2 = mpt->findObservation(kf2);
 
-        Vector3d p1 = mpt->getPose();
-        Vector3d p2 = Q._transformVector(p1) + t;
+        Vector3d p1 = mpt->pose();
+        Vector3d p2 = R*p1 + t;
 
         double predicted_x1 = p1[0] / p1[2];
         double predicted_y1 = p1[1] / p1[2];
         double dx1 = predicted_x1 - ft1->ft[0];
         double dy1 = predicted_y1 - ft1->ft[1];
         residuals[0] += dx1*dx1 + dy1*dy1;
+        LOG_IF(ERROR, isnan(residuals[0])) << "i: " << i;
 
         double predicted_x2 = p2[0] / p2[2];
         double predicted_y2 = p2[1] / p2[2];
@@ -103,12 +104,12 @@ int main(int argc, char const *argv[])
     int fps = ssvo::Config::cameraFps();
     int width = ssvo::Config::imageWidth();
     int height = ssvo::Config::imageHeight();
+    int levels = ssvo::Config::imageLevels();
     int image_border = ssvo::Config::imageBorder();
     int grid_size = ssvo::Config::gridSize();
     int grid_min_size = ssvo::Config::gridMinSize();
     int fast_max_threshold = ssvo::Config::fastMaxThreshold();
     int fast_min_threshold = ssvo::Config::fastMinThreshold();
-    double fast_min_eigen = ssvo::Config::fastMinEigen();
 
     std::string dir_name = argv[1];
     std::vector<string> img_file_names;
@@ -118,101 +119,49 @@ int main(int argc, char const *argv[])
     cv::Mat DistCoef = ssvo::Config::cameraDistCoef();
 
     ssvo::Camera::Ptr camera = ssvo::Camera::create(ssvo::Config::imageWidth(), ssvo::Config::imageHeight(), K, DistCoef);
-    ssvo::FastDetector fast(width, height, image_border, 3, 100, grid_size, grid_min_size);
+    ssvo::FastDetector fast(width, height, image_border, levels+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
 
-    ssvo::Initializer initializer(K, DistCoef);
+    ssvo::Initializer initializer(&fast);
 
-    cv::Mat cur_img;
-    cv::Mat ref_img;
     int initial = 0;
     std::vector<ssvo::Corner> corners;
     std::vector<ssvo::Corner> old_corners;
-    std::vector<cv::Point2f> pts, upts;
-    std::vector<cv::Point2d> fts;
+    ssvo::Frame::Ptr frame_ref, frame_cur;
     for(std::vector<std::string>::iterator i = img_file_names.begin(); i != img_file_names.end(); ++i)
     {
         cv::Mat img = cv::imread(*i, CV_LOAD_IMAGE_UNCHANGED);
         if(img.empty()) throw std::runtime_error("Could not open image: " + *i);
 
+        cv::Mat cur_img;
         cv::cvtColor(img, cur_img, cv::COLOR_RGB2GRAY);
 
         if(initial == 0)
         {
-            ref_img = cur_img.clone();
-            ImgPyr img_pyr;
-            ssvo::createPyramid(cur_img, img_pyr);
-
-            fast.detect(img_pyr, corners, old_corners, fast_max_threshold, fast_min_threshold, fast_min_eigen);
-            std::for_each(corners.begin(), corners.end(), [&](ssvo::Corner& corner){pts.push_back(cv::Point2f(corner.x, corner.y));});
-            cv::undistortPoints(pts, upts, K, DistCoef);
-            fts.clear();fts.reserve(corners.size());
-            std::for_each(upts.begin(), upts.end(), [&](cv::Point2f& pt){fts.push_back(cv::Point2d((double)pt.x, (double)pt.y));});
-            LOG(INFO) << "All corners: " << pts.size();
-            int succeed = initializer.addFirstImage(cur_img, pts, fts);
-            if(succeed == ssvo::SUCCESS) initial = 1;
+            frame_ref = ssvo::Frame::create(cur_img, 0, camera);
+            if(initializer.addFirstImage(frame_ref) == ssvo::SUCCESS)
+                initial = 1;
         }
         else if(initial == 1)
         {
-            ssvo::InitResult result = initializer.addSecondImage(cur_img);
+            frame_cur = ssvo::Frame::create(cur_img, 1, camera);
+            ssvo::InitResult result = initializer.addSecondImage(frame_cur);
             if(result == ssvo::RESET) {
                 initial = 0;
-                continue;
+                //continue;
             }
             else if(result == ssvo::SUCCESS)
                 break;
 
-            std::vector<cv::Point2f> pts_ref, pts_cur;
-            initializer.getTrackedPoints(pts_ref, pts_cur);
-
-            cv::Mat match_img = img.clone();
-            for(size_t i=0; i<pts_ref.size();i++)
-            {
-                cv::line(match_img, pts_ref[i], pts_cur[i],cv::Scalar(0,0,70));
-            }
-
-            cv::imshow("KeyPoints detectByImage", match_img);
+            cv::Mat klt_img;
+            initializer.drowOpticalFlow(img, klt_img);
+            cv::imshow("KLTracking", klt_img);
         }
 
         cv::waitKey(fps);
     }
 
-    ssvo::Frame::Ptr frame1 = ssvo::Frame::create(ref_img, 0, camera);
-    ssvo::Frame::Ptr frame2 = ssvo::Frame::create(cur_img, 0, camera);
-    std::vector<cv::Point2f> pts1, pts2;
-    std::vector<cv::Point2d> fts1, fts2;
-    std::vector<Vector3d> p3ds;
-    cv::Mat inliers;
-    MatrixXd T;
-    initializer.getResults(pts1, pts2, fts1, fts2, p3ds, inliers, T);
-
-    std::vector<cv::Point2d>::iterator fts1_iter = fts1.begin();
-    std::vector<cv::Point2f>::iterator pts1_iter = pts1.begin();
-    std::vector<cv::Point2d>::iterator fts2_iter = fts2.begin();
-    std::vector<cv::Point2f>::iterator pts2_iter = pts2.begin();
-    std::vector<Vector3d>::iterator p3ds_iter = p3ds.begin();
-
-    const uchar* inliers_ptr = inliers.ptr<uchar>(0);
-    for(size_t j = 0; p3ds_iter != p3ds.end() ; ++j, fts1_iter++, fts2_iter++, pts1_iter++, pts2_iter++, p3ds_iter++)
-    {
-        if(!inliers_ptr[j])
-        {
-            continue;
-        }
-        Vector3d ft1(fts1_iter->x, fts1_iter->y, 1);
-        Vector3d ft2(fts2_iter->x, fts2_iter->y, 1);
-        Vector2d px1(pts1_iter->x, pts1_iter->y);
-        Vector2d px2(pts2_iter->x, pts2_iter->y);
-
-        ssvo::MapPoint::Ptr mpt = ssvo::MapPoint::create(*p3ds_iter);
-        frame1->fts_.push_back(ssvo::Feature::create(px1, ft1,0,mpt));
-        frame2->fts_.push_back(ssvo::Feature::create(px2, ft2,0,mpt));
-    }
-    frame1->setRotation(Quaterniond::Identity());
-    frame1->setTranslation(0,0,0);
-    frame2->setPose(T);
-
-    ssvo::KeyFrame::Ptr keyframe1 = ssvo::KeyFrame::create(frame1);
-    ssvo::KeyFrame::Ptr keyframe2 = ssvo::KeyFrame::create(frame2);
+    ssvo::KeyFrame::Ptr keyframe1 = ssvo::KeyFrame::create(frame_ref);
+    ssvo::KeyFrame::Ptr keyframe2 = ssvo::KeyFrame::create(frame_cur);
     keyframe1->updateObservation();
     keyframe2->updateObservation();
 

@@ -10,7 +10,6 @@ namespace ssvo{
 class Map
 {
 public:
-
     typedef std::shared_ptr<Map> Ptr;
 
     void insertKeyFrame(const KeyFrame::Ptr kf);
@@ -20,6 +19,8 @@ public:
     void insertMapPoint(const MapPoint::Ptr mpt);
 
     void deleteMapPoint(const MapPoint::Ptr mpt);
+
+    Map &operator=(const Map&) = delete; //! copy denied
 
 public:
 

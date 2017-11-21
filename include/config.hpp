@@ -23,6 +23,8 @@ public:
 
     static int imageHeight(){return getInstance().height;}
 
+    static double imageLevels(){return getInstance().levels;}
+
     static double cameraFps(){return getInstance().fps;}
 
     static int initMinCorners(){return getInstance().init_min_corners;}
@@ -98,8 +100,9 @@ private:
         DistCoef.at<double>(2) = p1;
         DistCoef.at<double>(3) = p2;
 
-        width = (int)fs["Camera.width"];
-        height = (int)fs["Camera.height"];
+        width = (int)fs["Image.width"];
+        height = (int)fs["Image.height"];
+        levels = (int)fs["Image.pyramid_levels"];
         fps = (double)fs["Camera.fps"];
 
         //! FAST detector parameters
@@ -159,6 +162,7 @@ private:
     cv::Mat DistCoef;
     int width;
     int height;
+    int levels;
     double fps;
 
     //! FAST detector parameters

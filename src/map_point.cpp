@@ -6,12 +6,12 @@ namespace ssvo
 unsigned long int MapPoint::next_id_ = 0;
 
 MapPoint::MapPoint(const Vector3d p) :
-        id_(next_id_++), pos_{p}, n_obs_(0)
+        id_(next_id_++), pose_{p}, n_obs_(0)
 {
 }
 
 MapPoint::MapPoint(const Vector3d p, const std::shared_ptr<KeyFrame> kf, const Feature::Ptr ft) :
-        id_(next_id_++), pos_{p}, n_obs_(0)
+        id_(next_id_++), pose_{p}, n_obs_(0)
 {
     addObservation(kf, ft);
 }

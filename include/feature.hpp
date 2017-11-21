@@ -19,11 +19,11 @@ struct Feature
 
     Vector2d px;
     Vector3d ft;
-    std::shared_ptr<MapPoint> mpt;
     uint8_t level;
+    std::shared_ptr<MapPoint> mpt;
 
-    Feature(const Vector2d _px, const Vector3d _fx, const int _level = 0, const std::shared_ptr<MapPoint> _mpt= nullptr):
-            px(_px), ft(_fx), mpt(_mpt), level(_level)
+    Feature(const Vector2d _px, const Vector3d _ft, const int _level = 0, const std::shared_ptr<MapPoint> _mpt= nullptr):
+            px(_px), ft(_ft), level(_level), mpt(_mpt)
     {}
 
     inline static Feature::Ptr create(const Vector2d _px, const Vector3d _fx, const int _level = 0, const std::shared_ptr<MapPoint> _mpt= nullptr) {return Feature::Ptr(new Feature(_px, _fx, _level, _mpt));}

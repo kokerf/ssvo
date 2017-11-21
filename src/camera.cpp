@@ -40,20 +40,20 @@ Camera::Camera(int width, int height, cv::Mat& K, cv::Mat& D):
 
 Vector3d Camera::lift(Vector2d &px) const
 {
-    double x = (px[0] - cx_) / fx_;
-    double y = (px[0] - cy_) / fy_;
+    Vector3d xyz;
+    xyz[0] = (px[0] - cx_) / fx_;
+    xyz[1] = (px[0] - cy_) / fy_;
+    xyz[2] = 1.0;
     if(distortion_)
     {
-        double pt_u_arr[2] = {x, y};
-        double pt_d_arr[2];
-        cv::Mat pt_u(1, 1, CV_64FC2, pt_u_arr);
-        cv::Mat pt_d(1, 1, CV_64FC2, pt_d_arr);
+        //double pt_u_arr[2] = {px.x, px.y};
+        //double pt_d_arr[2];
+        cv::Mat pt_u(1, 1, CV_64FC2, px.data());
+        cv::Mat pt_d(1, 1, CV_64FC2, xyz.data());
         cv::undistortPoints(pt_u, pt_d, cvK_, cvD_);
-        x = pt_d_arr[0];
-        y = pt_d_arr[1];
     }
 
-    return Vector3d(x,y,1);
+    return xyz.normalized();
 }
 
 Vector2d Camera::project(Vector3d &P) const

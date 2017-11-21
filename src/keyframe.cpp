@@ -4,17 +4,12 @@ namespace ssvo{
 
 uint64_t KeyFrame::next_id_ = 0;
 
-KeyFrame::KeyFrame(const Frame::Ptr frame)
+KeyFrame::KeyFrame(const Frame::Ptr frame):
+    Frame(frame->img_pyr_, next_id_++, frame->timestamp_, frame->cam_), frame_id_(frame->id_)
 {
-    id_ = next_id_++;
-    frame_id_ = frame->id();
-    timestamp_ = frame->timeStamp();
-    cam_ = frame->cam_;
-    img_pyr_ = frame->img_pyr_;
     fts_ = frame->fts_;
     mpts_ = frame->mpts_;
-    q_ = frame->getRotation();
-    t_ = frame->getTranslation();
+    setPose(frame->pose());
 }
 
 void KeyFrame::updateObservation()

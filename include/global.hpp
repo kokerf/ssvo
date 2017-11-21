@@ -17,6 +17,7 @@
 
 #include <opencv2/core.hpp>
 #include <Eigen/Dense>
+#include <sophus/se3.hpp>
 #include <glog/logging.h>
 
 using namespace Eigen;

@@ -8,17 +8,12 @@
 
 namespace ssvo{
 
-Initializer::Initializer(const cv::Mat& K, const cv::Mat& D)
-{
-    finished_ = false;
-    K_ = K.clone();
-    D_ = D.clone();
-}
+Initializer::Initializer(FastDetector* fast_detector):
+    fast_detector_(fast_detector)
+{};
 
-InitResult Initializer::addFirstImage(const cv::Mat& img_ref, std::vector<cv::Point2f>& pts, std::vector<cv::Point2d>& fts)
+InitResult Initializer::addFirstImage(Frame::Ptr frame_ref)
 {
-    assert(pts.size() == fts.size());
-    //! reset
     pts_ref_.clear();
     fts_ref_.clear();
     pts_cur_.clear();
@@ -28,44 +23,58 @@ InitResult Initializer::addFirstImage(const cv::Mat& img_ref, std::vector<cv::Po
     inliers_.release();
     finished_ = false;
 
+    LOG(WARNING) << "[INIT][*] -- Added first image --";
+    //! get refrence frame
+    frame_ref_ = frame_ref;
+
+    std::vector<ssvo::Corner> corners;
+    std::vector<ssvo::Corner> old_corners;
+    fast_detector_->detect(frame_ref_->img_pyr_, corners, old_corners, 1.5*Config::initMinCorners(), Config::fastMinEigen());
+
     //! check corner number of first image
-    if(pts.size() < Config::initMinCorners())
+    const int N = corners.size();
+    if(N < Config::initMinCorners())
     {
-        LOG(WARNING) << "[INIT] First image has too less corners !!!";
+        LOG(WARNING) << "[INIT][0] First image has too less corners(" << corners.size() << ") !!!";
         return RESET;
     }
+    LOG(INFO) << "[INIT][0] Detect corners: " << corners.size();
 
-    //! get refrence image
-    img_ref_ = img_ref.clone();
-    //! set initial flow
-    pts_ref_.resize(pts.size());
-    fts_ref_.resize(pts.size());
-    pts_cur_.resize(pts.size());
-    std::copy(pts.begin(), pts.end(), pts_ref_.begin());
-    std::copy(fts.begin(), fts.end(), fts_ref_.begin());
-    std::copy(pts.begin(), pts.end(), pts_cur_.begin());
+    //! create inital optical flow
+    pts_ref_.reserve(N);
+    pts_cur_.reserve(N);
+    fts_ref_.reserve(N);
+    for(const Corner &corner: corners)
+    {
+        pts_ref_.push_back(cv::Point2f(corner.x, corner.y));
+        pts_cur_.push_back(cv::Point2f(corner.x, corner.y));
+    }
+    std::vector<cv::Point2f> temp_udist;
+    cv::undistortPoints(pts_ref_, temp_udist, frame_ref_->cam_->cvK(), frame_ref_->cam_->cvD());
+    for(const cv::Point2f &p: temp_udist)
+    {
+        fts_ref_.push_back(cv::Point2d(p.x, p.y));
+    }
 
     return SUCCESS;
 }
 
-InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
+InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
 {
     if(finished_)
     {
-        LOG(WARNING) << "[INIT] Last initialization is succeed! Plesase reset!";
+        LOG(ERROR) << "[INIT][*] Last initialization is succeed! Plesase reset!";
         return RESET;
     }
 
-    img_cur_ = img_cur;
-
-    LOG(INFO) << "[INIT] Processing second image";
+    LOG(INFO) << "[INIT][*] -- Processing second image --";
 
     double t1 = (double)cv::getTickCount();
 
     //! [1] KLT tracking
-    kltTrack(img_ref_, img_cur_, pts_ref_, pts_cur_, inliers_);
+    kltTrack(frame_ref_->img_pyr_[0], frame_cur->img_pyr_[0], pts_ref_, pts_cur_, inliers_);
     calcDisparity(pts_ref_, pts_cur_, inliers_, disparities_);
-    LOG(INFO) << "[INIT] KLT tracking points: " << disparities_.size();
+    LOG(INFO) << "[INIT][1] KLT tracking points: " << disparities_.size();
     if(disparities_.size() < Config::initMinTracked()) return RESET;
 
     double t2 = (double)cv::getTickCount();
@@ -87,12 +96,12 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
 
     //! get undistorted points
     std::vector<cv::Point2f> temp_udist;
-    cv::undistortPoints(pts_cur_, temp_udist, K_, D_);
-    fts_cur_.resize(pts_cur_.size());
+    cv::undistortPoints(pts_cur_, temp_udist, frame_cur->cam_->cvK(), frame_cur->cam_->cvD());
+    fts_cur_.resize(fts_ref_.size());
     int idx = 0;
     std::for_each(temp_udist.begin(), temp_udist.end(), [&](cv::Point2f& pt){fts_cur_[idx].x = pt.x; fts_cur_[idx].y = pt.y; idx++;});
 
-    LOG(INFO) << "[INIT] Avage disparity: " << disparity;
+    LOG(INFO) << "[INIT][2] Avage disparity: " << disparity;
     if(disparity < Config::initMinDisparity()) return FAILURE;
 
     double t3 = (double)cv::getTickCount();
@@ -101,7 +110,7 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
     Matrix3d E;
     int inliers_count = Fundamental::findFundamentalMat(fts_ref_, fts_cur_, E, inliers_, Config::initUnSigma2(), Config::initMaxRansacIters(), true);
 
-    LOG(INFO)<< "[INIT] Inliers after epipolar geometry check: " << inliers_count;
+    LOG(INFO)<< "[INIT][3] Inliers after epipolar geometry check: " << inliers_count;
     if(inliers_count < Config::initMinInliers()) return FAILURE;
 
     double t4 = (double)cv::getTickCount();
@@ -114,68 +123,49 @@ InitResult Initializer::addSecondImage(const cv::Mat& img_cur)
     Matrix3d K = Matrix3d::Identity(3,3);
     bool succeed = findBestRT(R1, R2, t, K, K, fts_ref_, fts_cur_, inliers_, p3ds_, T_);
     if(!succeed) return FAILURE;
-    LOG(INFO) << "[INIT] Inliers after cheirality check: " << cv::countNonZero(inliers_);
+    LOG(INFO) << "[INIT][4] Inliers after cheirality check: " << cv::countNonZero(inliers_);
 
     double t5 = (double)cv::getTickCount();
 
     //! [5] reprojective check
     inliers_count = checkReprejectErr(pts_ref_, pts_cur_, fts_ref_, fts_cur_, T_, inliers_, p3ds_, Config::initUnSigma2()*4);
-    LOG(INFO) << "[INIT] Inliers after reprojective check: " << inliers_count;
+    LOG(INFO) << "[INIT][5] Inliers after reprojective check: " << inliers_count;
     if(inliers_count < Config::initMinInliers()) return FAILURE;
 
     double t6 = (double)cv::getTickCount();
-    LOG(INFO) << "[INIT] Time: " << (t2-t1)/cv::getTickFrequency() << " "
-                                << (t3-t2)/cv::getTickFrequency() << " "
-                                << (t4-t3)/cv::getTickFrequency() << " "
-                                << (t5-t4)/cv::getTickFrequency() << " "
-                                << (t6-t5)/cv::getTickFrequency();
 
-    LOG(INFO) << "[INIT] Initialization succeed!";
+    //! [6] create inital map
+    inliers_ptr = inliers_.ptr<uchar>(0);
+    for(size_t i = 0; i < pts_ref_.size(); ++i)
+    {
+        if(inliers_ptr[i])
+        {
+            Vector2d px_ref(pts_ref_[i].x, pts_ref_[i].y);
+            Vector2d px_cur(pts_cur_[i].x, pts_cur_[i].y);
+            Vector3d ft_ref(fts_ref_[i].x, fts_ref_[i].y, 1);
+            Vector3d ft_cur(fts_cur_[i].x, fts_cur_[i].y, 1);
+
+            ssvo::MapPoint::Ptr mpt = ssvo::MapPoint::create(p3ds_[i]);
+
+            frame_ref_->fts_.push_back(Feature::create(px_ref, ft_ref.normalized(), 0, mpt));
+            frame_cur->fts_.push_back(Feature::create(px_cur, ft_cur.normalized(), 0, mpt));
+        }
+    }
+
+    frame_ref_->setPose(Matrix3d::Identity(), Vector3d::Zero());
+    frame_cur->setPose(T_.topLeftCorner(3,3), T_.rightCols(1));
+    LOG(INFO) << "[INIT][6] Initialization succeed, and creating inital map with " << frame_ref_->fts_.size()<< " map points";
+
+    double t7 = (double)cv::getTickCount();
+    LOG(INFO) << "[INIT][*] Time: " << (t2-t1)/cv::getTickFrequency() << " "
+              << (t3-t2)/cv::getTickFrequency() << " "
+              << (t4-t3)/cv::getTickFrequency() << " "
+              << (t5-t4)/cv::getTickFrequency() << " "
+              << (t6-t5)/cv::getTickFrequency() << " "
+              << (t7-t6)/cv::getTickFrequency();
 
     finished_ = true;
     return SUCCESS;
-
-}
-
-void Initializer::getResults(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur,
-    std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur, std::vector<Vector3d>& p3ds, cv::Mat& inliers, MatrixXd& T) const
-{
-    if(!finished_)
-    {
-        LOG(ERROR) << "[INIT] Please waiting until inintialization finished!";
-        return;
-    }
-
-    pts_ref = pts_ref_;
-    pts_cur = pts_cur_;
-    fts_ref = fts_ref_;
-    fts_cur = fts_cur_;
-    p3ds = p3ds_;
-    inliers = inliers_.clone();
-    T = T_;
-}
-
-void Initializer::getUndistInilers(std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur) const
-{
-    if(!finished_)
-    {
-        LOG(ERROR) << "[INIT] Please waiting until inintialization finished!";
-        return;
-    }
-
-    const int N = pts_ref_.size();
-    fts_ref.reserve(N);
-    fts_cur.reserve(N);
-
-    const uchar* inliers_ptr = inliers_.ptr<uchar>(0);
-    for(int i = 0; i < N; ++i)
-    {
-        if(!inliers_ptr[i])
-            continue;
-
-        fts_ref.push_back(fts_ref_[i]);
-        fts_cur.push_back(fts_cur_[i]);
-    }
 }
 
 void Initializer::getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur) const
@@ -192,6 +182,18 @@ void Initializer::getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vecto
 
         pts_ref.push_back(pts_ref_[i]);
         pts_cur.push_back(pts_cur_[i]);
+    }
+}
+
+void Initializer::drowOpticalFlow(const cv::Mat &src, cv::Mat &dst) const
+{
+    std::vector<cv::Point2f> pts_ref, pts_cur;
+    getTrackedPoints(pts_ref, pts_cur);
+
+    dst = src.clone();
+    for(size_t i=0; i<pts_ref.size();i++)
+    {
+        cv::line(dst, pts_ref[i], pts_cur[i],cv::Scalar(0,0,70));
     }
 }
 
@@ -285,7 +287,7 @@ void Initializer::calcDisparity(const std::vector<cv::Point2f>& pts1, const std:
 }
 
 bool Initializer::findBestRT(const Matrix3d& R1, const Matrix3d& R2, const Vector3d& t, const Matrix3d& K1, const Matrix3d& K2,
-                             const std::vector<cv::Point2d>& fts1, const std::vector<cv::Point2d>& fts2, cv::Mat& mask, std::vector<Vector3d>& P3Ds, MatrixXd& T)
+                             const std::vector<cv::Point2d>& fts1, const std::vector<cv::Point2d>& fts2, cv::Mat& mask, std::vector<Vector3d>& P3Ds, Matrix<double, 3, 4>& T)
 {
     const size_t N = fts1.size();
     assert(N == fts2.size());
@@ -420,7 +422,7 @@ bool Initializer::findBestRT(const Matrix3d& R1, const Matrix3d& R2, const Vecto
 }
 
 int Initializer::checkReprejectErr(const std::vector<cv::Point2f>& pts_ref, const std::vector<cv::Point2f>& pts_cur, const  std::vector<cv::Point2d>& fts_ref, const std::vector<cv::Point2d>& fts_cur,
-                       const MatrixXd& T, cv::Mat& mask, std::vector<Vector3d>& p3ds, const double sigma2)
+                       const Matrix<double, 3, 4>& T, cv::Mat& mask, std::vector<Vector3d>& p3ds, const double sigma2)
 {
     const int size = pts_ref_.size();
 
@@ -468,7 +470,7 @@ int Initializer::checkReprejectErr(const std::vector<cv::Point2f>& pts_ref, cons
     return inliers_count;
 }
 
-void Initializer::triangulate(const MatrixXd& P1, const MatrixXd& P2, const cv::Point2d& ft1, const cv::Point2d& ft2, Vector4d& P3D)
+void Initializer::triangulate(const Matrix<double, 3, 4>& P1, const Matrix<double, 3, 4>& P2, const cv::Point2d& ft1, const cv::Point2d& ft2, Vector4d& P3D)
 {
     MatrixXd A(4,4);
     A.row(0) = ft1.x*P1.row(2)-P1.row(0);

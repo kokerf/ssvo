@@ -12,11 +12,13 @@ Camera.p1: -0.005358
 Camera.p2: 0.002628
 Camera.k3: 1.163314
 
-Camera.width: 640
-Camera.height: 480
-
 # Camera frames per second
 Camera.fps: 30.0
+
+# Image
+Image.width: 640
+Image.height: 480
+Image.pyramid_levels: 3  # 0-based
 
 # Fast detector
 FastDetector.image_border: 8

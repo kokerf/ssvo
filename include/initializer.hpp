@@ -20,18 +20,15 @@ class Initializer
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 public:
 
-    Initializer(const cv::Mat& K, const cv::Mat& D);
+    Initializer(FastDetector* fast_detector);
 
-    InitResult addFirstImage(const cv::Mat& img_ref, std::vector<cv::Point2f>& pts, std::vector<cv::Point2d>& fts);
+    InitResult addFirstImage(Frame::Ptr frame_ref);
 
-    InitResult addSecondImage(const cv::Mat& img);
-
-    void getResults(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur,
-    std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur, std::vector<Vector3d>& p3ds, cv::Mat& inliers, MatrixXd& T) const;
-
-    void getUndistInilers(std::vector<cv::Point2d>& fts_ref, std::vector<cv::Point2d>& fts_cur) const;
+    InitResult addSecondImage(Frame::Ptr frame_cur);
 
     void getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur) const;
+
+    void drowOpticalFlow(const cv::Mat& src, cv::Mat& dst) const;
 
 private:
 
@@ -40,12 +37,12 @@ private:
     void calcDisparity(const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, const cv::Mat& inliers, std::vector<std::pair<int, float> >& disparities);
 
     bool findBestRT(const Matrix3d& R1, const Matrix3d& R2, const Vector3d& t, const Matrix3d& K1, const Matrix3d& K2,
-                              const std::vector<cv::Point2d>& fts1, const std::vector<cv::Point2d>& fts2, cv::Mat& mask, std::vector<Vector3d>& P3Ds, MatrixXd& T);
+                              const std::vector<cv::Point2d>& fts1, const std::vector<cv::Point2d>& fts2, cv::Mat& mask, std::vector<Vector3d>& P3Ds, Matrix<double, 3, 4>& T);
 
     int checkReprejectErr(const std::vector<cv::Point2f>& pts_ref, const std::vector<cv::Point2f>& pts_cur, const  std::vector<cv::Point2d>& fts_ref, const std::vector<cv::Point2d>& fts_cur,
-                          const MatrixXd& T, cv::Mat& mask, std::vector<Vector3d>& p3ds, const double sigma2);
+                          const Matrix<double, 3, 4>& T, cv::Mat& mask, std::vector<Vector3d>& p3ds, const double sigma2);
 
-    void triangulate(const MatrixXd& P1, const MatrixXd& P2, const cv::Point2d& ft1, const cv::Point2d& ft2, Vector4d& P3D);
+    void triangulate(const Matrix<double, 3, 4>& P1, const Matrix<double, 3, 4>& P2, const cv::Point2d& ft1, const cv::Point2d& ft2, Vector4d& P3D);
 
     void reduceVecor(std::vector<cv::Point2f>& pts, const cv::Mat& inliers);
 
@@ -53,9 +50,8 @@ private:
 
 private:
 
-    cv::Mat K_, D_;
-    cv::Mat img_ref_;
-    cv::Mat img_cur_;
+    FastDetector* fast_detector_;
+    Frame::Ptr frame_ref_;
 
     std::vector<cv::Point2f> pts_ref_;
     std::vector<cv::Point2f> pts_cur_;
@@ -64,7 +60,7 @@ private:
     std::vector<Vector3d> p3ds_;
     std::vector<std::pair<int, float> > disparities_;
     cv::Mat inliers_;
-    MatrixXd T_;
+    Matrix<double, 3, 4> T_;
 
     bool finished_;
 };

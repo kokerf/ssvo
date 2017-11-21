@@ -16,7 +16,6 @@ int createPyramid(const cv::Mat& img, ImgPyr& img_pyr, const uint16_t nlevels = 
 
 class Frame
 {
-
 public:
 
     typedef std::shared_ptr<Frame> Ptr;
@@ -27,65 +26,39 @@ public:
 
     Frame(const ImgPyr& img_pyr, const double timestamp, Camera::Ptr cam);
 
+    Frame(const ImgPyr& img_pyr, const uint64_t id, const double timestamp, Camera::Ptr cam);
+
     Frame &operator=(const Frame&) = delete; //! copy denied
 
     void addFeature(const Feature::Ptr ft);
 
-    inline void setPose(const MatrixXd T)
-    {
-        Matrix3d R = T.block(0,0,3,3);
-        q_ = Quaterniond(R);
-        t_ = T.block(0,3,3,1);
-    }
+    inline void setPose(const Sophus::SE3d& T) { Tw_ = T; }
 
-    inline void setRotation(const double w, const double x, const double y, const double z)
-    {
-        q_.w() = w;
-        q_.x() = x;
-        q_.y() = y;
-        q_.z() = z;
-    }
+    inline void setPose(const Matrix3d& R, const Vector3d& t) { Tw_ = Sophus::SE3d(R, t); }
 
-    inline void setTranslation(const double x, const double y, const double z){
-        t_[0] = x;
-        t_[1] = y;
-        t_[2] = z;
-    }
+    inline Sophus::SE3d pose() { return Tw_; }
 
-    inline void setRotation(const Quaterniond q) {q_= q;}
+    inline static Frame::Ptr create(const cv::Mat& img, const double timestamp, Camera::Ptr cam) { return Frame::Ptr(new Frame(img, timestamp, cam)); }
 
-    inline void setTranslation(const Vector3d t) {t_ = t;}
-
-    inline Quaterniond getRotation() {return q_;}
-
-    inline Vector3d getTranslation() {return t_;}
-
-    inline long unsigned int id() {return id_;}
-
-    inline double timeStamp() {return timestamp_;}
-
-    inline static Frame::Ptr create(const cv::Mat& img, const double timestamp, Camera::Ptr cam) {return Frame::Ptr(new Frame(img, timestamp, cam));}
-
-    inline static Frame::Ptr create(const ImgPyr& img_pyr, const double timestamp, Camera::Ptr cam) {return Frame::Ptr(new Frame(img_pyr, timestamp, cam));}
+    inline static Frame::Ptr create(const ImgPyr& img_pyr, const double timestamp, Camera::Ptr cam) { return Frame::Ptr(new Frame(img_pyr, timestamp, cam)); }
 
 public:
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     static uint64_t next_id_;
+    const uint64_t id_;
+    const double timestamp_;
 
     Camera::Ptr cam_;
+
     ImgPyr img_pyr_;
     Features fts_;
     MapPoints mpts_;
 
 protected:
 
-    uint64_t id_;
-    double timestamp_;
-
-    Quaterniond q_;
-    Vector3d t_;
+    Sophus::SE3d Tw_;
 
 };
 

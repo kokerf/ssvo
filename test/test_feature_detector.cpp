@@ -26,6 +26,7 @@ int main(int argc, char const *argv[])
     ssvo::Config::FileName = std::string(argv[2]);
     int width = ssvo::Config::imageWidth();
     int height = ssvo::Config::imageHeight();
+    int levels = ssvo::Config::imageLevels();
     int image_border = ssvo::Config::imageBorder();
     int grid_size = ssvo::Config::gridSize();
     int grid_min_size = ssvo::Config::gridMinSize();
@@ -37,7 +38,7 @@ int main(int argc, char const *argv[])
     int top_level = computePyramid(image, image_pyramid, 2, 4, cv::Size(40, 40));
 
     std::vector<ssvo::Corner> corners, old_corners;
-    ssvo::FastDetector fast(width, height, image_border, top_level, 1000, grid_size, grid_min_size);
+    ssvo::FastDetector fast(width, height, image_border, levels+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
 
     LOG(WARNING) << "=== This is a FAST corner detector demo ===";
     const int n_trials = 1000;
@@ -45,7 +46,7 @@ int main(int argc, char const *argv[])
     for(int i = 0; i < n_trials; ++i)
     {
         double t = (double)cv::getTickCount();
-        fast.detect(image_pyramid, corners, old_corners, fast_max_threshold, fast_min_threshold, fast_min_eigen);
+        fast.detect(image_pyramid, corners, old_corners, 100, fast_min_eigen);
         time_accumulator +=  ((cv::getTickCount() - t) / cv::getTickFrequency());
         LOG_EVERY_N(WARNING, n_trials/20) << " i: " << i << ", corners: " << corners.size();
     }

@@ -14,10 +14,12 @@ Frame::Frame(const cv::Mat& img, const double timestamp, Camera::Ptr cam):
 }
 
 Frame::Frame(const ImgPyr& img_pyr, const double timestamp, Camera::Ptr cam):
-        id_(next_id_++), timestamp_(timestamp), cam_(cam)
-{
-    img_pyr_ = img_pyr;
-}
+    id_(next_id_++), timestamp_(timestamp), cam_(cam), img_pyr_(img_pyr)
+{}
+
+Frame::Frame(const ImgPyr& img_pyr, const uint64_t id, const double timestamp, Camera::Ptr cam):
+    id_(id), timestamp_(timestamp), cam_(cam), img_pyr_(img_pyr)
+{}
 
 void Frame::addFeature(const Feature::Ptr ft)
 {

@@ -114,16 +114,17 @@ const int Grid::setOccupancyAdaptive(const std::vector<Corner> &corners, const i
 }
 
 //! FastDetector
-FastDetector::FastDetector(int width, int height, int border, int top_level, int N, int grid_size, int grid_min_size):
-    width_(width), height_(height), border_(border), nlevels_(top_level+1), N_(N), grid_min_size_(grid_min_size),
-    size_adjust_(grid_size!=grid_min_size),
+FastDetector::FastDetector(int width, int height, int border, int nlevels,
+                           int grid_size, int grid_min_size, int max_threshold, int min_threshold):
+    width_(width), height_(height), border_(border), nlevels_(nlevels), grid_min_size_(grid_min_size),
+    max_threshold_(max_threshold), min_threshold_(min_threshold), size_adjust_(grid_size!=grid_min_size),
     grid_fliter(width, height, grid_size, grid_min_size)
 {
     corners_in_levels_.resize(nlevels_);
 }
 
 int FastDetector::detect(const ImgPyr& img_pyr, std::vector<Corner>& corners, const std::vector<Corner>& exist_corners,
-                         const int max_threshold, const int min_threshold, const double eigen_threshold)
+                         const int N, const double eigen_threshold)
 {
     LOG_ASSERT(img_pyr.size() == nlevels_) << "Unmatch size of ImgPyr(" << img_pyr.size() << ") with nlevel(" << nlevels_ << ")";
     LOG_ASSERT(img_pyr[0].size() == cv::Size(width_, height_)) << "Error cv::Mat size: " << img_pyr[0].size();
@@ -136,7 +137,7 @@ int FastDetector::detect(const ImgPyr& img_pyr, std::vector<Corner>& corners, co
     int new_coners_ = 0;
     for(int level = 0; level < nlevels_; level++)
     {
-        detectInLevel(img_pyr[level], level, max_threshold, min_threshold, eigen_threshold);
+        detectInLevel(img_pyr[level], level, eigen_threshold);
 
         new_coners_ += new_grid_fliter.setOccupancy(corners_in_levels_[level]);
     }
@@ -146,15 +147,15 @@ int FastDetector::detect(const ImgPyr& img_pyr, std::vector<Corner>& corners, co
     //! if adjust the grid size
     if(size_adjust_)
     {
-        grid_fliter.setOccupancyAdaptive(corners, N_);
+        grid_fliter.setOccupancyAdaptive(corners, N);
         grid_fliter.getCorners(corners);
     }
     else
     {
-        if(corners.size() + exist_corners.size() > N_)
+        if(corners.size() + exist_corners.size() > N)
         {
             std::sort(corners.begin(), corners.end(), [](Corner c1, Corner c2){return c1.score>c2.score;});
-            corners.resize(N_-exist_corners.size());
+            corners.resize(N-exist_corners.size());
         }
 
         std::for_each(exist_corners.begin(), exist_corners.end(), [&](Corner corner){
@@ -165,7 +166,7 @@ int FastDetector::detect(const ImgPyr& img_pyr, std::vector<Corner>& corners, co
     return corners.size();
 }
 
-int FastDetector::detectInLevel(const cv::Mat& img, int level, const int max_threshold, const int min_threshold, const double eigen_threshold)
+int FastDetector::detectInLevel(const cv::Mat& img, int level, const double eigen_threshold)
 {
     LOG_ASSERT(img.type() == CV_8UC1) << "Error cv::Mat type:" << img.type();
 
@@ -180,26 +181,26 @@ int FastDetector::detectInLevel(const cv::Mat& img, int level, const int max_thr
     //cv::waitKey(0);
 
 #if __SSE2__
-    fast::fast_corner_detect_10_sse2(img.data, cols, rows, stride, max_threshold, fast_corners);
+    fast::fast_corner_detect_10_sse2(img.data, cols, rows, stride, max_threshold_, fast_corners);
 #elif HAVE_FAST_NEON
-    fast::fast_corner_detect_9_neon(image.data, cols, rows, stride, max_threshold, fast_corners);
+    fast::fast_corner_detect_9_neon(image.data, cols, rows, stride, max_threshold_, fast_corners);
 #else
-    fast::fast_corner_detect_10( image.data, cols, rows, stride, max_threshold, fast_corners);
+    fast::fast_corner_detect_10( image.data, cols, rows, stride, max_threshold_, fast_corners);
 #endif
 
     if(fast_corners.empty())
     {
 #if __SSE2__
-        fast::fast_corner_detect_10_sse2(img.data, cols, rows, stride, min_threshold, fast_corners);
+        fast::fast_corner_detect_10_sse2(img.data, cols, rows, stride, min_threshold_, fast_corners);
 #elif HAVE_FAST_NEON
-        fast::fast_corner_detect_9_neon(image.data, cols, rows, stride, min_threshold, fast_corners);
+        fast::fast_corner_detect_9_neon(image.data, cols, rows, stride, min_threshold_, fast_corners);
 #else
-        fast::fast_corner_detect_10(image.data, cols, rows, stride, min_threshold, fast_corners);
+        fast::fast_corner_detect_10(image.data, cols, rows, stride, min_threshold_, fast_corners);
 #endif
     }
 
     std::vector<int> scores, nm_corners;
-    fast::fast_corner_score_10(img.data, stride, fast_corners, max_threshold, scores);
+    fast::fast_corner_score_10(img.data, stride, fast_corners, max_threshold_, scores);
     fast::fast_nonmax_3x3(fast_corners, scores, nm_corners);
 
     std::vector<Corner> &corners = corners_in_levels_[level];
