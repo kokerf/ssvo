@@ -5,6 +5,11 @@
 data/
 bin/
 lib/
-*log*/
 *build*/
 .idea/
+
+# for logging
+*INFO*
+*WARNING*
+*ERROR*
+*FATAL*
