@@ -8,7 +8,7 @@
 
 namespace ssvo{
 
-Initializer::Initializer(FastDetector* fast_detector):
+Initializer::Initializer(FastDetector::Ptr fast_detector):
     fast_detector_(fast_detector)
 {};
 
@@ -135,25 +135,7 @@ InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
     double t6 = (double)cv::getTickCount();
 
     //! [6] create inital map
-    inliers_ptr = inliers_.ptr<uchar>(0);
-    for(size_t i = 0; i < pts_ref_.size(); ++i)
-    {
-        if(inliers_ptr[i])
-        {
-            Vector2d px_ref(pts_ref_[i].x, pts_ref_[i].y);
-            Vector2d px_cur(pts_cur_[i].x, pts_cur_[i].y);
-            Vector3d ft_ref(fts_ref_[i].x, fts_ref_[i].y, 1);
-            Vector3d ft_cur(fts_cur_[i].x, fts_cur_[i].y, 1);
-
-            ssvo::MapPoint::Ptr mpt = ssvo::MapPoint::create(p3ds_[i]);
-
-            frame_ref_->fts_.push_back(Feature::create(px_ref, ft_ref.normalized(), 0, mpt));
-            frame_cur->fts_.push_back(Feature::create(px_cur, ft_cur.normalized(), 0, mpt));
-        }
-    }
-
-    frame_ref_->setPose(Matrix3d::Identity(), Vector3d::Zero());
-    frame_cur->setPose(T_.topLeftCorner(3,3), T_.rightCols(1));
+    createInitalMap(frame_ref_, frame_cur, pts_ref_, pts_cur_, fts_ref_, fts_cur_, p3ds_, inliers_, T_, Config::mapScale());
     LOG(INFO) << "[INIT][6] Initialization succeed, and creating inital map with " << frame_ref_->fts_.size()<< " map points";
 
     double t7 = (double)cv::getTickCount();
@@ -197,7 +179,8 @@ void Initializer::drowOpticalFlow(const cv::Mat &src, cv::Mat &dst) const
     }
 }
 
-void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, const std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, cv::Mat& inliers)
+void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur,
+                           const std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, cv::Mat& inliers)
 {
     const int N = pts_ref.size();
     const int klt_win_size = 21;
@@ -268,7 +251,8 @@ void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur, const
     }
 }
 
-void Initializer::calcDisparity(const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2, const cv::Mat& inliers, std::vector<std::pair<int, float> >& disparities)
+void Initializer::calcDisparity(const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2,
+                                const cv::Mat& inliers, std::vector<std::pair<int, float> >& disparities)
 {
     const int N = pts1.size();
 
@@ -286,8 +270,11 @@ void Initializer::calcDisparity(const std::vector<cv::Point2f>& pts1, const std:
     }
 }
 
-bool Initializer::findBestRT(const Matrix3d& R1, const Matrix3d& R2, const Vector3d& t, const Matrix3d& K1, const Matrix3d& K2,
-                             const std::vector<cv::Point2d>& fts1, const std::vector<cv::Point2d>& fts2, cv::Mat& mask, std::vector<Vector3d>& P3Ds, Matrix<double, 3, 4>& T)
+bool Initializer::findBestRT(const Matrix3d& R1, const Matrix3d& R2, const Vector3d& t,
+                             const Matrix3d& K1, const Matrix3d& K2,
+                             const std::vector<cv::Point2d>& fts1, const std::vector<cv::Point2d>& fts2,
+                             cv::Mat& mask, std::vector<Vector3d>& P3Ds,
+                             Matrix<double, 3, 4>& T)
 {
     const size_t N = fts1.size();
     assert(N == fts2.size());
@@ -421,10 +408,12 @@ bool Initializer::findBestRT(const Matrix3d& R1, const Matrix3d& R2, const Vecto
     return true;
 }
 
-int Initializer::checkReprejectErr(const std::vector<cv::Point2f>& pts_ref, const std::vector<cv::Point2f>& pts_cur, const  std::vector<cv::Point2d>& fts_ref, const std::vector<cv::Point2d>& fts_cur,
-                       const Matrix<double, 3, 4>& T, cv::Mat& mask, std::vector<Vector3d>& p3ds, const double sigma2)
+int Initializer::checkReprejectErr(const std::vector<cv::Point2f>& pts_ref, const std::vector<cv::Point2f>& pts_cur,
+                                   const  std::vector<cv::Point2d>& fts_ref, const std::vector<cv::Point2d>& fts_cur,
+                                   const Matrix<double, 3, 4>& T, cv::Mat& mask, std::vector<Vector3d>& p3ds,
+                                   const double sigma2)
 {
-    const int size = pts_ref_.size();
+    const int size = pts_ref.size();
 
     int inliers_count = 0;
     uchar* mask_ptr = mask.ptr<uchar>(0);
@@ -470,7 +459,8 @@ int Initializer::checkReprejectErr(const std::vector<cv::Point2f>& pts_ref, cons
     return inliers_count;
 }
 
-void Initializer::triangulate(const Matrix<double, 3, 4>& P1, const Matrix<double, 3, 4>& P2, const cv::Point2d& ft1, const cv::Point2d& ft2, Vector4d& P3D)
+void Initializer::triangulate(const Matrix<double, 3, 4>& P1, const Matrix<double, 3, 4>& P2,
+                              const cv::Point2d& ft1, const cv::Point2d& ft2, Vector4d& P3D)
 {
     MatrixXd A(4,4);
     A.row(0) = ft1.x*P1.row(2)-P1.row(0);
@@ -483,6 +473,54 @@ void Initializer::triangulate(const Matrix<double, 3, 4>& P1, const Matrix<doubl
 
     P3D = V.col(3);
     P3D = P3D/P3D(3);
+}
+
+void Initializer::createInitalMap(Frame::Ptr frame_ref, Frame::Ptr frame_cur,
+                                  const std::vector<cv::Point2f> &pts_ref, const std::vector<cv::Point2f> &pts_cur,
+                                  const std::vector<cv::Point2d> &fts_ref, const std::vector<cv::Point2d> &fts_cur,
+                                  const std::vector<Vector3d> &P3Ds, const cv::Mat &inliers,
+                                  const Matrix<double, 3, 4> &T, double map_scale)
+{
+    const size_t N = pts_ref.size();
+
+    //! calculate mean depth
+    double mean_depth = 0.0;
+    size_t count = 0;
+    const uchar* inliers_ptr = inliers.ptr<uchar>(0);
+    for(size_t i = 0; i < N; ++i)
+    {
+        if(inliers_ptr[i])
+        {
+            mean_depth += P3Ds[i][2];
+            count++;
+        }
+    }
+    double scale = map_scale*count/mean_depth;
+
+    //! create and rescale map points
+    frame_ref->fts_.clear();
+    frame_cur->fts_.clear();
+    frame_ref->fts_.reserve(N);
+    frame_cur->fts_.reserve(N);
+    for(size_t i = 0; i < N; ++i)
+    {
+        if(!inliers_ptr[i])
+            continue;
+
+        Vector2d px_ref(pts_ref[i].x, pts_ref[i].y);
+        Vector2d px_cur(pts_cur[i].x, pts_cur[i].y);
+        Vector3d ft_ref(fts_ref[i].x, fts_ref[i].y, 1);
+        Vector3d ft_cur(fts_cur[i].x, fts_cur[i].y, 1);
+
+        ssvo::MapPoint::Ptr mpt = ssvo::MapPoint::create(P3Ds[i]*scale);
+
+        frame_ref->fts_.push_back(Feature::create(px_ref, ft_ref.normalized(), 0, mpt));
+        frame_cur->fts_.push_back(Feature::create(px_cur, ft_cur.normalized(), 0, mpt));
+    }
+
+    //! rescale frame pose
+    frame_ref->setPose(Matrix3d::Identity(), Vector3d::Zero());
+    frame_cur->setPose(T.topLeftCorner(3,3), T.rightCols(1)*scale);
 }
 
 void Initializer::reduceVecor(std::vector<cv::Point2f>& pts, const cv::Mat& inliers)

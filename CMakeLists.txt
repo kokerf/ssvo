@@ -100,7 +100,7 @@ LIST(APPEND SOURCEFILES
     src/map.cpp
     src/feature_detector.cpp
     src/initializer.cpp
-    src/bundle_adjustment.cpp)
+    src/optimizer.cpp)
 
 #add_library(${PROJECT_NAME} SHARED ${SOURCEFILES})
 #target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})

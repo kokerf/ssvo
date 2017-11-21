@@ -5,7 +5,7 @@
 #include "feature_detector.hpp"
 #include "initializer.hpp"
 #include "config.hpp"
-#include "bundle_adjustment.hpp"
+#include "optimizer.hpp"
 #ifdef WIN32
 #include <io.h>
 #else
@@ -119,9 +119,9 @@ int main(int argc, char const *argv[])
     cv::Mat DistCoef = ssvo::Config::cameraDistCoef();
 
     ssvo::Camera::Ptr camera = ssvo::Camera::create(ssvo::Config::imageWidth(), ssvo::Config::imageHeight(), K, DistCoef);
-    ssvo::FastDetector fast(width, height, image_border, levels+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
+    ssvo::FastDetector::Ptr detector = ssvo::FastDetector::create(width, height, image_border, levels+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
 
-    ssvo::Initializer initializer(&fast);
+    ssvo::Initializer initializer(detector);
 
     int initial = 0;
     std::vector<ssvo::Corner> corners;
@@ -169,7 +169,9 @@ int main(int argc, char const *argv[])
     evalueErrors(keyframe1, keyframe2, error);
     LOG(INFO) << "Error before BA: " << error;
 
-    ssvo::BA::twoViewBA(keyframe1, keyframe2, nullptr);
+    ssvo::Optimizer optimizer;
+    optimizer.twoViewBundleAdjustment(keyframe1, keyframe2, nullptr);
+    optimizer.report(true);
 
     evalueErrors(keyframe1, keyframe2, error);
     LOG(INFO) << "Error after BA: " << error;

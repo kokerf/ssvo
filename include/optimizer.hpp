@@ -1,5 +1,5 @@
-#ifndef _BUNDLE_ADJUSTMENT_HPP_
-#define _BUNDLE_ADJUSTMENT_HPP_
+#ifndef _OPTIMIZER_HPP_
+#define _OPTIMIZER_HPP_
 
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
@@ -9,11 +9,9 @@
 #include "map.hpp"
 #include "global.hpp"
 
-namespace ceres {
+namespace ssvo {
 
-using Sophus::SE3d;
-using Sophus::Vector6d;
-
+// https://github.com/strasdat/Sophus/blob/v1.0.0/test/ceres/local_parameterization_se3.hpp
 class SE3Parameterization : public ceres::LocalParameterization {
 public:
     virtual ~SE3Parameterization() {}
@@ -24,10 +22,10 @@ public:
     //
     virtual bool Plus(double const* T_raw, double const* delta_raw,
                       double* T_plus_delta_raw) const {
-        Eigen::Map<SE3d const> const T(T_raw);
-        Eigen::Map<Vector6d const> const delta(delta_raw);
-        Eigen::Map<SE3d> T_plus_delta(T_plus_delta_raw);
-        T_plus_delta = T * SE3d::exp(delta);
+        Eigen::Map<Sophus::SE3d const> const T(T_raw);
+        Eigen::Map<Sophus::Vector6d const> const delta(delta_raw);
+        Eigen::Map<Sophus::SE3d> T_plus_delta(T_plus_delta_raw);
+        T_plus_delta = T * Sophus::SE3d::exp(delta);
         return true;
     }
 
@@ -37,21 +35,16 @@ public:
     //
     virtual bool ComputeJacobian(double const* T_raw,
                                  double* jacobian_raw) const {
-        Eigen::Map<SE3d const> T(T_raw);
+        Eigen::Map<Sophus::SE3d const> T(T_raw);
         Eigen::Map<Eigen::Matrix<double, 6, 7> > jacobian(jacobian_raw);
         jacobian = T.internalJacobian().transpose();
         return true;
     }
 
-    virtual int GlobalSize() const { return SE3d::num_parameters; }
+    virtual int GlobalSize() const { return Sophus::SE3d::num_parameters; }
 
-    virtual int LocalSize() const { return SE3d::DoF; }
+    virtual int LocalSize() const { return Sophus::SE3d::DoF; }
 };
-
-}
-
-
-namespace ssvo {
 
 struct ReprojectionError {
     ReprojectionError(double observed_x, double observed_y)
@@ -81,53 +74,22 @@ struct ReprojectionError {
     double observed_y_;
 };
 
-namespace BA
-{
 
-struct KeyFramePose{
-    KeyFramePose(KeyFrame::Ptr keyframe, Sophus::SE3d T)
-    {
-        kf = keyframe;
-        se3 = T;
-    }
+class Optimizer {
+public:
+    Optimizer();
 
-    inline void update()
-    {
-        kf->setPose(se3);
-    }
+    void twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Map::Ptr map);
 
-    KeyFrame::Ptr kf;
-    Sophus::SE3d se3;
+    void report(bool with_residual = false);
+
+    static Vector2d reprojectionError(const ceres::Problem &problem, ceres::ResidualBlockId id);
+
+private:
+    ceres::Problem problem_;
+    ceres::Solver::Options options_;
+    ceres::Solver::Summary summary_;
 };
-
-struct MapPointPose{
-    MapPointPose(MapPoint::Ptr mappoint, Vector3d translation)
-    {
-        mpt = mappoint;
-
-        t[0] = translation[0];
-        t[1] = translation[1];
-        t[2] = translation[2];
-    }
-
-    inline void update()
-    {
-        mpt->setPose(t[0], t[1], t[2]);
-    }
-
-    MapPoint::Ptr mpt;
-    double t[3];
-};
-
-void twoViewBA(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Map::Ptr map);
-
-void setOptions(ceres::Solver::Options& options, bool output = false);
-
-void sloveReport(ceres::Solver::Summary& summary, bool output = false);
-
-Vector2d reprojectionError(const ceres::Problem& problem, ceres::ResidualBlockId id);
-
-}
 
 }
 

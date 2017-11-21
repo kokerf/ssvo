@@ -46,6 +46,8 @@ public:
     static uint64_t next_id_;
     const uint64_t id_;
 
+    Vector3d optimal_pose_;
+
 private:
     Vector3d pose_;
     std::unordered_map<std::shared_ptr<KeyFrame>, Feature::Ptr> obs_;
