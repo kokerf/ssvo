@@ -165,14 +165,14 @@ int main(int argc, char const *argv[])
     LOG_ASSERT(kfs[0]->id_ == 0 && kfs[1]->id_ == 1) << "Error id of keyframe: " << kfs[0]->id_ << ", " << kfs[0]->id_;
 
     double error = 0;
-    evalueErrors(kfs[0], kfs[0], error);
+    evalueErrors(kfs[0], kfs[1], error);
     LOG(INFO) << "Error before BA: " << error;
 
     Optimizer optimizer;
-    optimizer.twoViewBundleAdjustment(kfs[0], kfs[0], nullptr);
+    optimizer.twoViewBundleAdjustment(kfs[0], kfs[1], nullptr);
     optimizer.report(true);
 
-    evalueErrors(kfs[0], kfs[0], error);
+    evalueErrors(kfs[0], kfs[1], error);
     LOG(INFO) << "Error after BA: " << error;
 
 

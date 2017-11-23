@@ -192,7 +192,7 @@ void Initializer::createInitalMap(Map::Ptr map, double map_scale)
 
         ssvo::MapPoint::Ptr mpt = ssvo::MapPoint::create(p3ds_[i]*scale);
         Feature::Ptr feature_ref = Feature::create(px_ref, ft_ref.normalized(), 0, mpt);
-        Feature::Ptr feature_cur = Feature::create(px_ref, ft_ref.normalized(), 0, mpt);
+        Feature::Ptr feature_cur = Feature::create(px_cur, ft_cur.normalized(), 0, mpt);
 
         map->insertMapPoint(mpt);
 
