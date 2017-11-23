@@ -71,7 +71,7 @@ public:
     void drawGrid(const cv::Mat& img, cv::Mat& img_grid);
 
     inline static FastDetector::Ptr create(int width, int height, int border, int nlevels, int grid_size, int grid_min_size, int max_threshold = 20, int min_threshold = 7)
-    {return std::make_shared<FastDetector>(FastDetector(width, height, border, nlevels, grid_size, grid_min_size, max_threshold, min_threshold));}
+    {return FastDetector::Ptr(new FastDetector(width, height, border, nlevels, grid_size, grid_min_size, max_threshold, min_threshold));}
 
 private:
     FastDetector(int width, int height, int border, int nlevels, int grid_size, int grid_min_size, int max_threshold, int min_threshold);

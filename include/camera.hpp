@@ -6,12 +6,15 @@
 #include <Eigen/Eigen>
 #include <opencv2/opencv.hpp>
 
+#include "global.hpp"
+
 using namespace Eigen;
 
 namespace ssvo {
 
 // once created, never changed
-class Camera {
+class Camera : public noncopyable
+{
 public:
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -61,10 +64,10 @@ public:
     }
 
     inline static Camera::Ptr create(int width, int height, double fx, double fy, double cx, double cy, double k1 = 0.0, double k2 = 0.0, double p1 = 0.0, double p2 = 0.0)
-    {return std::make_shared<Camera>(Camera(width, height, fx, fy, cx, cy, k1, k2, p1, p2));}
+    {return Camera::Ptr(new Camera(width, height, fx, fy, cx, cy, k1, k2, p1, p2));}
 
     inline static Camera::Ptr create(int width, int height, const cv::Mat& K, const cv::Mat& D)
-    {return std::make_shared<Camera>(Camera(width, height, K, D));}
+    {return Camera::Ptr(new Camera(width, height, K, D));}
 
 private:
     Camera(int width, int height, double fx, double fy, double cx, double cy,

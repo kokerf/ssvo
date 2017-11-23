@@ -11,7 +11,7 @@ namespace ssvo{
 
 int createPyramid(const cv::Mat& img, ImgPyr& img_pyr, const uint16_t nlevels = 4, const cv::Size min_size = cv::Size(40, 40));
 
-class Frame: public noncopyable
+class Frame//: private noncopyable
 {
 public:
 
@@ -34,6 +34,7 @@ public:
     { return std::make_shared<Frame>(Frame(img_pyr, timestamp, cam)); }
 
 protected:
+
     Frame(const cv::Mat& img, const double timestamp, const Camera::Ptr cam);
 
     Frame(const ImgPyr& img_pyr, const double timestamp, const Camera::Ptr cam);

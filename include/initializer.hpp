@@ -61,7 +61,7 @@ public:
     static void reduceVecor(std::vector<cv::Point2d>& fts, const cv::Mat& inliers);
 
     inline static Initializer::Ptr create(FastDetector::Ptr fast_detector)
-    {return std::make_shared<Initializer>(Initializer(fast_detector));}
+    {return Initializer::Ptr(new Initializer(fast_detector));}
 
 private:
     Initializer(FastDetector::Ptr fast_detector);

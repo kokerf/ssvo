@@ -58,8 +58,7 @@ protected:
     noncopyable() = default;
     ~noncopyable() = default;
 
-    //! enable reference, dis
-    //noncopyable(const noncopyable&) = delete;
+    noncopyable(const noncopyable&) = delete;
     noncopyable &operator=(const noncopyable&) = delete;
 };
 

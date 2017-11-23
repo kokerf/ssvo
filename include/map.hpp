@@ -32,7 +32,7 @@ public:
 
     uint64_t MapPointsInMap() {return mpts_.size();}
 
-    inline static Map::Ptr create() {return std::make_shared<Map>();}
+    inline static Map::Ptr create() {return Map::Ptr(new Map());}
 
 private:
 

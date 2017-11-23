@@ -8,7 +8,7 @@ namespace ssvo {
 
 class KeyFrame;
 
-class MapPoint: public noncopyable
+class MapPoint
 {
 public:
 
