@@ -10,15 +10,16 @@ uint64_t Frame::next_id_ = 0;
 Frame::Frame(const cv::Mat& img, const double timestamp, Camera::Ptr cam):
     id_(next_id_++), timestamp_(timestamp), cam_(cam)
 {
+    Tw_ = Sophus::SE3d(Matrix3d::Identity(), Vector3d::Zero());
     createPyramid(img, img_pyr_);
 }
 
 Frame::Frame(const ImgPyr& img_pyr, const double timestamp, Camera::Ptr cam):
-    id_(next_id_++), timestamp_(timestamp), cam_(cam), img_pyr_(img_pyr)
+    id_(next_id_++), timestamp_(timestamp), cam_(cam), img_pyr_(img_pyr), Tw_(Sophus::SE3d(Matrix3d::Identity(), Vector3d::Zero()))
 {}
 
 Frame::Frame(const ImgPyr& img_pyr, const uint64_t id, const double timestamp, Camera::Ptr cam):
-    id_(id), timestamp_(timestamp), cam_(cam), img_pyr_(img_pyr)
+    id_(id), timestamp_(timestamp), cam_(cam), img_pyr_(img_pyr), Tw_(Sophus::SE3d(Matrix3d::Identity(), Vector3d::Zero()))
 {}
 
 int createPyramid(const cv::Mat& img, std::vector<cv::Mat>& img_pyr, const uint16_t nlevels, const cv::Size min_size)

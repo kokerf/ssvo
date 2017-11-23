@@ -25,10 +25,12 @@ System::System(std::string config_file)
     const int fast_max_threshold = Config::fastMaxThreshold();
     const int fast_min_threshold = Config::fastMinThreshold();
 
+    map_ = Map::create();
     camera_ = Camera::create(width, height, K, DistCoef);
     fast_detector_ = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
     initializer_ = Initializer::create(fast_detector_);
-    map_ = Map::create();
+    viewer_ = Viewer::create(map_);
+
     stage_ = STAGE_INITAL_RESET;
 
 }
@@ -45,7 +47,7 @@ void System::process(const cv::Mat &image, const double timestamp)
 
     if(STAGE_TRACKING == stage_)
     {
-
+        cv::waitKey(0);
     }
     else if(STAGE_INITAL_PROCESS== stage_)
     {
@@ -59,6 +61,9 @@ void System::process(const cv::Mat &image, const double timestamp)
     {
 
     }
+
+    viewer_->showImage(image);
+    viewer_->setCurrentCameraPose(current_frame_->pose().matrix());
 
     LOG(WARNING) << "System Stage: " << stage_;
 }
@@ -98,6 +103,9 @@ System::Stage System::processSecondFrame()
     optimizer.report(true);
 
     LOG(WARNING) << "End of two-view BA";
+
+    reference_keyframe_ = kfs[1];
+    current_frame_->setPose(reference_keyframe_->pose());
 
     return STAGE_TRACKING;
 }

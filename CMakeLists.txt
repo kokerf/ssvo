@@ -73,6 +73,10 @@ find_package(glog 0.3.5 REQUIRED)
 find_package(Ceres REQUIRED)
 include_directories(${CERES_INCLUDE_DIRS})
 
+# Pangolin
+find_package(Pangolin 0.4 REQUIRED)
+include_directories(${Pangolin_INCLUDE_DIRS})
+
 include_directories(
     ${PROJECT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/include
@@ -84,6 +88,7 @@ LIST(APPEND LINK_LIBS
     ${Sophus_LIBRARIES}
     ${GLOG_LIBRARY}
     ${CERES_LIBRARIES}
+    ${Pangolin_LIBRARIES}
     ${PROJECT_SOURCE_DIR}/Thirdparty/fast/build/libfast.so
 )
 
@@ -101,7 +106,8 @@ LIST(APPEND SOURCEFILES
     src/feature_detector.cpp
     src/initializer.cpp
     src/optimizer.cpp
-    src/system.cpp)
+    src/system.cpp
+    src/viewer.cpp)
 
 #add_library(${PROJECT_NAME} SHARED ${SOURCEFILES})
 #target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})

@@ -8,6 +8,7 @@
 #include "initializer.hpp"
 #include "feature_detector.hpp"
 #include "optimizer.hpp"
+#include "viewer.hpp"
 
 namespace ssvo {
 
@@ -35,15 +36,18 @@ private:
 
     Stage stage_;
 
-    cv::Mat image_;
     Camera::Ptr camera_;
+    Map::Ptr map_;
+    FastDetector::Ptr fast_detector_;
+    Initializer::Ptr initializer_;
+    Viewer::Ptr viewer_;
+
+    std::thread viewer_thread_;
+
+    cv::Mat image_;
     Frame::Ptr current_frame_;
     Frame::Ptr last_frame_;
     KeyFrame::Ptr reference_keyframe_;
-    Map::Ptr map_;
-
-    FastDetector::Ptr fast_detector_;
-    Initializer::Ptr initializer_;
 };
 
 }// namespce ssvo

@@ -28,9 +28,9 @@ public:
 
     std::vector<MapPoint::Ptr> getAllMapPoints();
 
-    inline uint64_t KeyFramesInMap() {return kfs_.size();}
+    uint64_t KeyFramesInMap();
 
-    uint64_t MapPointsInMap() {return mpts_.size();}
+    uint64_t MapPointsInMap();
 
     inline static Map::Ptr create() {return Map::Ptr(new Map());}
 
@@ -39,6 +39,9 @@ private:
     std::unordered_set<KeyFrame::Ptr> kfs_;
 
     std::unordered_set<MapPoint::Ptr> mpts_;
+
+    std::mutex mutex_kf_;
+    std::mutex mutex_mpt_;
 };
 
 }
