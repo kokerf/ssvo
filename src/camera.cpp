@@ -15,7 +15,7 @@ Camera::Camera(int width, int height, double fx, double fy, double cx, double cy
     cvD_ = (cv::Mat_<double>(1, 4) << k1_, k2_, p1_, p2_);
 }
 
-Camera::Camera(int width, int height, cv::Mat& K, cv::Mat& D):
+Camera::Camera(int width, int height, const cv::Mat& K, const cv::Mat& D):
         width_(width), height_(height)
 {
     assert(K.cols == 3 && K.rows == 3);
@@ -38,7 +38,7 @@ Camera::Camera(int width, int height, cv::Mat& K, cv::Mat& D):
     distortion_ = (fabs(k1_) > 0.0000001);
 }
 
-Vector3d Camera::lift(Vector2d &px) const
+Vector3d Camera::lift(const Vector2d &px) const
 {
     Vector3d xyz;
     xyz[0] = (px[0] - cx_) / fx_;
@@ -46,17 +46,15 @@ Vector3d Camera::lift(Vector2d &px) const
     xyz[2] = 1.0;
     if(distortion_)
     {
-        //double pt_u_arr[2] = {px.x, px.y};
-        //double pt_d_arr[2];
-        cv::Mat pt_u(1, 1, CV_64FC2, px.data());
-        cv::Mat pt_d(1, 1, CV_64FC2, xyz.data());
-        cv::undistortPoints(pt_u, pt_d, cvK_, cvD_);
+        cv::Mat pt_d = (cv::Mat_<double>(1, 2) << px[0], px[1]);
+        cv::Mat pt_u = (cv::Mat_<double>(1, 2) << xyz[0], xyz[1]);
+        cv::undistortPoints(pt_d, pt_u, cvK_, cvD_);
     }
 
     return xyz.normalized();
 }
 
-Vector2d Camera::project(Vector3d &P) const
+Vector2d Camera::project(const Vector3d &P) const
 {
     Vector2d px = P.head<2>() / P[2];
     if(distortion_)

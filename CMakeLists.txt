@@ -100,7 +100,8 @@ LIST(APPEND SOURCEFILES
     src/map.cpp
     src/feature_detector.cpp
     src/initializer.cpp
-    src/optimizer.cpp)
+    src/optimizer.cpp
+    src/system.cpp)
 
 #add_library(${PROJECT_NAME} SHARED ${SOURCEFILES})
 #target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})
@@ -116,3 +117,9 @@ target_link_libraries(test_initializer_seq  ${LINK_LIBS})
 
 add_executable(test_glog test/test_glog.cpp)
 target_link_libraries(test_glog  ${LINK_LIBS})
+
+## -----------------------
+## Build VO
+## -----------------------
+add_executable(monoVO demo/monoVO.cpp ${SOURCEFILES})
+target_link_libraries(monoVO ${LINK_LIBS})

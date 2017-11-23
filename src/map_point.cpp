@@ -1,4 +1,5 @@
 #include "map_point.hpp"
+#include "keyframe.hpp"
 
 namespace ssvo
 {
@@ -10,22 +11,26 @@ MapPoint::MapPoint(const Vector3d p) :
 {
 }
 
-MapPoint::MapPoint(const Vector3d p, const std::shared_ptr<KeyFrame> kf, const Feature::Ptr ft) :
+MapPoint::MapPoint(const Vector3d p, const KeyFrame::Ptr kf, const Feature::Ptr ft) :
         id_(next_id_++), pose_{p}, n_obs_(0)
 {
     addObservation(kf, ft);
 }
 
-void MapPoint::addObservation(const std::shared_ptr<KeyFrame> kf, const Feature::Ptr ft)
+void MapPoint::addObservation(const KeyFrame::Ptr kf, const Feature::Ptr ft)
 {
     obs_.insert(std::make_pair(kf, ft));
     n_obs_++;
 }
 
-Feature::Ptr MapPoint::findObservation(const std::shared_ptr<KeyFrame> kf)
+std::map<KeyFrame::Ptr, Feature::Ptr> MapPoint::getObservations()
 {
+    return std::map<KeyFrame::Ptr, Feature::Ptr>(obs_.begin(), obs_.end());
+}
 
-    std::unordered_map<std::shared_ptr<KeyFrame>, Feature::Ptr>::iterator it = obs_.find(kf);
+Feature::Ptr MapPoint::findObservation(const KeyFrame::Ptr kf)
+{
+    std::unordered_map<KeyFrame::Ptr, Feature::Ptr>::iterator it = obs_.find(kf);
     if(it == obs_.end())
         return nullptr;
     else

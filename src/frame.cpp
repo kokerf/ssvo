@@ -21,11 +21,6 @@ Frame::Frame(const ImgPyr& img_pyr, const uint64_t id, const double timestamp, C
     id_(id), timestamp_(timestamp), cam_(cam), img_pyr_(img_pyr)
 {}
 
-void Frame::addFeature(const Feature::Ptr ft)
-{
-    fts_.push_back(ft);
-}
-
 int createPyramid(const cv::Mat& img, std::vector<cv::Mat>& img_pyr, const uint16_t nlevels, const cv::Size min_size)
 {
     assert(!img.empty());

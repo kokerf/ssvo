@@ -1,32 +1,46 @@
 #ifndef _KEYFRAME_HPP_
 #define _KEYFRAME_HPP_
 
-#include "frame.hpp"
 #include "global.hpp"
+#include "frame.hpp"
 
 namespace ssvo
 {
 
-class KeyFrame: public Frame
+class Map;
+
+class KeyFrame: public Frame, public std::enable_shared_from_this<KeyFrame>
 {
 public:
 
     typedef std::shared_ptr<KeyFrame> Ptr;
 
+    void updateConnections();
+
+    MapPoints getMapPoints();
+
+    inline static KeyFrame::Ptr create(const Frame::Ptr frame)
+    { return std::make_shared<KeyFrame>(KeyFrame(frame)); }
+
+private:
     KeyFrame(const Frame::Ptr frame);
 
-    void updateObservation();
+    void addConnection(KeyFrame::Ptr kf, const int& weight);
 
-    inline static KeyFrame::Ptr create(const Frame::Ptr frame) { return KeyFrame::Ptr(new KeyFrame(frame)); }
+    void updateOrderedConnections();
+
 public:
 
     static uint64_t next_id_;
 
     const uint64_t frame_id_;
 
+    std::map<KeyFrame::Ptr, int> connectedKeyFrames_;
+
+    std::multimap<int, KeyFrame::Ptr> orderedConnectedKeyFrames_;
+
     Sophus::SE3d optimal_Tw_;//! for optimization
 
-private:
 };
 
 }

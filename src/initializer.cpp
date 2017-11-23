@@ -14,21 +14,14 @@ Initializer::Initializer(FastDetector::Ptr fast_detector):
 
 InitResult Initializer::addFirstImage(Frame::Ptr frame_ref)
 {
-    pts_ref_.clear();
-    fts_ref_.clear();
-    pts_cur_.clear();
-    fts_cur_.clear();
-    p3ds_.clear();
-    disparities_.clear();
-    inliers_.release();
-    finished_ = false;
+    reset();
 
     LOG(WARNING) << "[INIT][*] -- Added first image --";
     //! get refrence frame
     frame_ref_ = frame_ref;
 
-    std::vector<ssvo::Corner> corners;
-    std::vector<ssvo::Corner> old_corners;
+    Corners corners;
+    Corners old_corners;
     fast_detector_->detect(frame_ref_->img_pyr_, corners, old_corners, 1.5*Config::initMinCorners(), Config::fastMinEigen());
 
     //! check corner number of first image
@@ -59,6 +52,20 @@ InitResult Initializer::addFirstImage(Frame::Ptr frame_ref)
     return SUCCESS;
 }
 
+void Initializer::reset()
+{
+    pts_ref_.clear();
+    fts_ref_.clear();
+    pts_cur_.clear();
+    fts_cur_.clear();
+    p3ds_.clear();
+    disparities_.clear();
+    inliers_.release();
+    finished_ = false;
+
+    frame_ref_.reset();
+}
+
 InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
 {
     if(finished_)
@@ -69,10 +76,12 @@ InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
 
     LOG(INFO) << "[INIT][*] -- Processing second image --";
 
+    frame_cur_ = frame_cur;
+
     double t1 = (double)cv::getTickCount();
 
     //! [1] KLT tracking
-    kltTrack(frame_ref_->img_pyr_[0], frame_cur->img_pyr_[0], pts_ref_, pts_cur_, inliers_);
+    kltTrack(frame_ref_->img_pyr_[0], frame_cur_->img_pyr_[0], pts_ref_, pts_cur_, inliers_);
     calcDisparity(pts_ref_, pts_cur_, inliers_, disparities_);
     LOG(INFO) << "[INIT][1] KLT tracking points: " << disparities_.size();
     if(disparities_.size() < Config::initMinTracked()) return RESET;
@@ -96,7 +105,7 @@ InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
 
     //! get undistorted points
     std::vector<cv::Point2f> temp_udist;
-    cv::undistortPoints(pts_cur_, temp_udist, frame_cur->cam_->cvK(), frame_cur->cam_->cvD());
+    cv::undistortPoints(pts_cur_, temp_udist, frame_cur_->cam_->cvK(), frame_cur_->cam_->cvD());
     fts_cur_.resize(fts_ref_.size());
     int idx = 0;
     std::for_each(temp_udist.begin(), temp_udist.end(), [&](cv::Point2f& pt){fts_cur_[idx].x = pt.x; fts_cur_[idx].y = pt.y; idx++;});
@@ -133,21 +142,76 @@ InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
     if(inliers_count < Config::initMinInliers()) return FAILURE;
 
     double t6 = (double)cv::getTickCount();
-
-    //! [6] create inital map
-    createInitalMap(frame_ref_, frame_cur, pts_ref_, pts_cur_, fts_ref_, fts_cur_, p3ds_, inliers_, T_, Config::mapScale());
-    LOG(INFO) << "[INIT][6] Initialization succeed, and creating inital map with " << frame_ref_->fts_.size()<< " map points";
-
-    double t7 = (double)cv::getTickCount();
     LOG(INFO) << "[INIT][*] Time: " << (t2-t1)/cv::getTickFrequency() << " "
               << (t3-t2)/cv::getTickFrequency() << " "
               << (t4-t3)/cv::getTickFrequency() << " "
               << (t5-t4)/cv::getTickFrequency() << " "
-              << (t6-t5)/cv::getTickFrequency() << " "
-              << (t7-t6)/cv::getTickFrequency();
+              << (t6-t5)/cv::getTickFrequency();
 
     finished_ = true;
     return SUCCESS;
+}
+
+void Initializer::createInitalMap(Map::Ptr map, double map_scale)
+{
+    //! [6] create inital map
+    const size_t N = pts_ref_.size();
+
+    //! calculate mean depth
+    double mean_depth = 0.0;
+    size_t count = 0;
+    const uchar* inliers_ptr = inliers_.ptr<uchar>(0);
+    for(size_t i = 0; i < N; ++i)
+    {
+        if(inliers_ptr[i])
+        {
+            mean_depth += p3ds_[i][2];
+            count++;
+        }
+    }
+    double scale = map_scale*count/mean_depth;
+
+    //! rescale frame pose
+    frame_ref_->setPose(Matrix3d::Identity(), Vector3d::Zero());
+    frame_cur_->setPose(T_.topLeftCorner(3,3), T_.rightCols(1)*scale);
+
+    //! create Key Frame
+    KeyFrame::Ptr keyframe_ref = ssvo::KeyFrame::create(frame_ref_);
+    KeyFrame::Ptr keyframe_cur = ssvo::KeyFrame::create(frame_cur_);
+
+    //! create and rescale map points
+    for(size_t i = 0; i < N; ++i)
+    {
+        if(!inliers_ptr[i])
+            continue;
+
+        Vector2d px_ref(pts_ref_[i].x, pts_ref_[i].y);
+        Vector2d px_cur(pts_cur_[i].x, pts_cur_[i].y);
+        Vector3d ft_ref(fts_ref_[i].x, fts_ref_[i].y, 1);
+        Vector3d ft_cur(fts_cur_[i].x, fts_cur_[i].y, 1);
+
+        ssvo::MapPoint::Ptr mpt = ssvo::MapPoint::create(p3ds_[i]*scale);
+        Feature::Ptr feature_ref = Feature::create(px_ref, ft_ref.normalized(), 0, mpt);
+        Feature::Ptr feature_cur = Feature::create(px_ref, ft_ref.normalized(), 0, mpt);
+
+        map->insertMapPoint(mpt);
+
+        keyframe_ref->addFeature(feature_ref);
+        keyframe_cur->addFeature(feature_cur);
+
+        mpt->addObservation(keyframe_ref, feature_ref);
+        mpt->addObservation(keyframe_cur, feature_cur);
+    }
+
+    map->insertKeyFrame(keyframe_ref);
+    map->insertKeyFrame(keyframe_cur);
+
+    keyframe_ref->updateConnections();
+    keyframe_cur->updateConnections();
+
+    size_t n = map->MapPointsInMap();
+
+    LOG(INFO) << "[INIT][6] Initialization succeed, and creating inital map with "  << " map points";
 }
 
 void Initializer::getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur) const
@@ -473,54 +537,6 @@ void Initializer::triangulate(const Matrix<double, 3, 4>& P1, const Matrix<doubl
 
     P3D = V.col(3);
     P3D = P3D/P3D(3);
-}
-
-void Initializer::createInitalMap(Frame::Ptr frame_ref, Frame::Ptr frame_cur,
-                                  const std::vector<cv::Point2f> &pts_ref, const std::vector<cv::Point2f> &pts_cur,
-                                  const std::vector<cv::Point2d> &fts_ref, const std::vector<cv::Point2d> &fts_cur,
-                                  const std::vector<Vector3d> &P3Ds, const cv::Mat &inliers,
-                                  const Matrix<double, 3, 4> &T, double map_scale)
-{
-    const size_t N = pts_ref.size();
-
-    //! calculate mean depth
-    double mean_depth = 0.0;
-    size_t count = 0;
-    const uchar* inliers_ptr = inliers.ptr<uchar>(0);
-    for(size_t i = 0; i < N; ++i)
-    {
-        if(inliers_ptr[i])
-        {
-            mean_depth += P3Ds[i][2];
-            count++;
-        }
-    }
-    double scale = map_scale*count/mean_depth;
-
-    //! create and rescale map points
-    frame_ref->fts_.clear();
-    frame_cur->fts_.clear();
-    frame_ref->fts_.reserve(N);
-    frame_cur->fts_.reserve(N);
-    for(size_t i = 0; i < N; ++i)
-    {
-        if(!inliers_ptr[i])
-            continue;
-
-        Vector2d px_ref(pts_ref[i].x, pts_ref[i].y);
-        Vector2d px_cur(pts_cur[i].x, pts_cur[i].y);
-        Vector3d ft_ref(fts_ref[i].x, fts_ref[i].y, 1);
-        Vector3d ft_cur(fts_cur[i].x, fts_cur[i].y, 1);
-
-        ssvo::MapPoint::Ptr mpt = ssvo::MapPoint::create(P3Ds[i]*scale);
-
-        frame_ref->fts_.push_back(Feature::create(px_ref, ft_ref.normalized(), 0, mpt));
-        frame_cur->fts_.push_back(Feature::create(px_cur, ft_cur.normalized(), 0, mpt));
-    }
-
-    //! rescale frame pose
-    frame_ref->setPose(Matrix3d::Identity(), Vector3d::Zero());
-    frame_cur->setPose(T.topLeftCorner(3,3), T.rightCols(1)*scale);
 }
 
 void Initializer::reduceVecor(std::vector<cv::Point2f>& pts, const cv::Mat& inliers)

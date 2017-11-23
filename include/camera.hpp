@@ -10,6 +10,7 @@ using namespace Eigen;
 
 namespace ssvo {
 
+// once created, never changed
 class Camera {
 public:
 
@@ -17,51 +18,59 @@ public:
 
     typedef std::shared_ptr<Camera> Ptr;
 
-    Camera(int width, int height, double fx, double fy, double cx, double cy,
-           double k1 = 0.0, double k2 = 0.0, double p1 = 0.0, double p2 = 0.0);
-
-    Camera(int width, int height, cv::Mat& K, cv::Mat& D);
-
-    Vector3d lift(Vector2d& px) const;
+    Vector3d lift(const Vector2d& px) const;
 
     void liftPoints(std::vector<Vector2f>& pxs, std::vector<Vector3f>& fts) const;
 
-    Vector2d project(Vector3d& P) const;
+    Vector2d project(const Vector3d& P) const;
 
-    inline const int width() { return width_; }
+    inline const int width() const { return width_; }
 
-    inline const int height() { return height_; }
+    inline const int height() const { return height_; }
 
-    inline const double fx() { return fx_; };
+    inline const double fx() const { return fx_; };
 
-    inline const double fy() { return fy_; };
+    inline const double fy() const { return fy_; };
 
-    inline const double cx() { return cx_; };
+    inline const double cx() const { return cx_; };
 
-    inline const double cy() { return cy_; };
+    inline const double cy() const { return cy_; };
 
-    inline const double d0() { return k1_; };
+    inline const double d0() const { return k1_; };
 
-    inline const double d1() { return k2_; };
+    inline const double d1() const { return k2_; };
 
-    inline const double d2() { return p1_; };
+    inline const double d2() const { return p1_; };
 
-    inline const double d3() { return p2_; };
+    inline const double d3() const { return p2_; };
 
-    inline cv::Mat cvK() { return cvK_; }
+    inline cv::Mat cvK() const { return cvK_; }
 
-    inline cv::Mat cvD() { return cvD_; }
+    inline cv::Mat cvD() const { return cvD_; }
 
-    inline const Matrix3d K() { return K_; }
+    inline const Matrix3d K() const { return K_; }
 
-    inline const Matrix3d Kinv() { return K_inv_; }
+    inline const Matrix3d Kinv() const { return K_inv_; }
+
+    inline bool observable(const Vector2i & obs, int boundary=0) const
+    {
+        if(obs[0]>=boundary && obs[0]<width()-boundary
+            && obs[1]>=boundary && obs[1]<height()-boundary)
+            return true;
+        return false;
+    }
 
     inline static Camera::Ptr create(int width, int height, double fx, double fy, double cx, double cy, double k1 = 0.0, double k2 = 0.0, double p1 = 0.0, double p2 = 0.0)
-    {return Camera::Ptr(new Camera(width, height, fx, fy, cx, cy, k1, k2, p1, p2));}
+    {return std::make_shared<Camera>(Camera(width, height, fx, fy, cx, cy, k1, k2, p1, p2));}
 
-    inline static Camera::Ptr create(int width, int height, cv::Mat& K, cv::Mat& D)
-    {return Camera::Ptr(new Camera(width, height, K, D));}
+    inline static Camera::Ptr create(int width, int height, const cv::Mat& K, const cv::Mat& D)
+    {return std::make_shared<Camera>(Camera(width, height, K, D));}
 
+private:
+    Camera(int width, int height, double fx, double fy, double cx, double cy,
+           double k1 = 0.0, double k2 = 0.0, double p1 = 0.0, double p2 = 0.0);
+
+    Camera(int width, int height, const cv::Mat& K, const cv::Mat& D);
 
 private:
     int width_;
@@ -76,7 +85,6 @@ private:
 
     Matrix3d K_;
     Matrix3d K_inv_;
-
 };
 
 }

@@ -8,21 +8,19 @@ namespace ssvo {
 
 class KeyFrame;
 
-class MapPoint
+class MapPoint: public noncopyable
 {
 public:
 
     typedef std::shared_ptr<MapPoint> Ptr;
 
-    MapPoint(const Vector3d p);
+    typedef std::shared_ptr<KeyFrame> KeyFramePtr;
 
-    MapPoint(const Vector3d p, const std::shared_ptr<KeyFrame> kf, const Feature::Ptr ft);
+    void addObservation(const KeyFramePtr kf, const Feature::Ptr ft);
 
-    MapPoint &operator=(const MapPoint&) = delete; //! copy denied
+    std::map<KeyFramePtr, Feature::Ptr> getObservations();
 
-    void addObservation(const std::shared_ptr<KeyFrame> kf, const Feature::Ptr ft);
-
-    Feature::Ptr findObservation(const std::shared_ptr<KeyFrame> kf);
+    Feature::Ptr findObservation(const KeyFramePtr kf);
 
     inline void setPose(const double x, const double y, const double z)
     {
@@ -35,9 +33,16 @@ public:
 
     inline Vector3d pose() {return pose_;}
 
-    inline static MapPoint::Ptr create(const Vector3d p) {return MapPoint::Ptr(new MapPoint(p));}
+    inline static MapPoint::Ptr create(const Vector3d p)
+    {return std::make_shared<MapPoint>(MapPoint(p));}
 
-    inline static MapPoint::Ptr create(const Vector3d p, const std::shared_ptr<KeyFrame> kf, const Feature::Ptr ft) {return MapPoint::Ptr(new MapPoint(p, kf, ft));}
+    inline static MapPoint::Ptr create(const Vector3d p, const KeyFramePtr kf, const Feature::Ptr ft)
+    {return std::make_shared<MapPoint>(MapPoint(p, kf, ft));}
+
+private:
+    MapPoint(const Vector3d p);
+
+    MapPoint(const Vector3d p, const KeyFramePtr kf, const Feature::Ptr ft);
 
 public:
 
@@ -50,10 +55,12 @@ public:
 
 private:
     Vector3d pose_;
-    std::unordered_map<std::shared_ptr<KeyFrame>, Feature::Ptr> obs_;
+    std::unordered_map<KeyFramePtr, Feature::Ptr> obs_;
     int n_obs_;
 
 };
+
+typedef std::vector<MapPoint::Ptr> MapPoints;
 
 }
 

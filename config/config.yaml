@@ -39,6 +39,7 @@ Initializer.ransac_max_iters: 1000
 
 # Map
 Mapping.scale: 1
+Mapping.min_connection_observations: 15
 
 # glog
 Glog.alsologtostderr: 1

@@ -8,6 +8,7 @@
 
 #include "frame.hpp"
 #include "config.hpp"
+#include "map.hpp"
 
 using namespace Eigen;
 
@@ -15,16 +16,22 @@ namespace ssvo{
 
 enum InitResult {RESET=-1, FAILURE=0, SUCCESS=1};
 
-class Initializer
+class Initializer: public noncopyable
 {
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-    Initializer(FastDetector::Ptr fast_detector);
+    typedef std::shared_ptr<Initializer> Ptr;
 
     InitResult addFirstImage(Frame::Ptr frame_ref);
 
     InitResult addSecondImage(Frame::Ptr frame_cur);
+
+    void reset();
+
+    void createInitalMap(Map::Ptr map, double map_scale=1.0);
+
+    Frame::Ptr getReferenceFrame(){return frame_ref_;}
 
     void getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur) const;
 
@@ -49,20 +56,21 @@ public:
     static void triangulate(const Matrix<double, 3, 4>& P1, const Matrix<double, 3, 4>& P2,
                             const cv::Point2d& ft1, const cv::Point2d& ft2, Vector4d& P3D);
 
-    static void createInitalMap(Frame::Ptr frame_ref, Frame::Ptr frame_cur,
-                                const std::vector<cv::Point2f>& pts_ref, const std::vector<cv::Point2f>& pts_cur,
-                                const std::vector<cv::Point2d>& fts_ref, const std::vector<cv::Point2d>& fts_cur,
-                                const std::vector<Vector3d>& P3Ds, const cv::Mat& inliers,
-                                const Matrix<double, 3, 4>& T, double map_scale = 1.0);
-
     static void reduceVecor(std::vector<cv::Point2f>& pts, const cv::Mat& inliers);
 
     static void reduceVecor(std::vector<cv::Point2d>& fts, const cv::Mat& inliers);
+
+    inline static Initializer::Ptr create(FastDetector::Ptr fast_detector)
+    {return std::make_shared<Initializer>(Initializer(fast_detector));}
+
+private:
+    Initializer(FastDetector::Ptr fast_detector);
 
 private:
 
     FastDetector::Ptr fast_detector_;
     Frame::Ptr frame_ref_;
+    Frame::Ptr frame_cur_;
 
     std::vector<cv::Point2f> pts_ref_;
     std::vector<cv::Point2f> pts_cur_;

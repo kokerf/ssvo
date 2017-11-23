@@ -117,7 +117,7 @@ const int Grid::setOccupancyAdaptive(const std::vector<Corner> &corners, const i
 FastDetector::FastDetector(int width, int height, int border, int nlevels,
                            int grid_size, int grid_min_size, int max_threshold, int min_threshold):
     width_(width), height_(height), border_(border), nlevels_(nlevels), grid_min_size_(grid_min_size),
-    max_threshold_(max_threshold), min_threshold_(min_threshold), size_adjust_(grid_size!=grid_min_size),
+    size_adjust_(grid_size!=grid_min_size), max_threshold_(max_threshold), min_threshold_(min_threshold),
     grid_fliter(width, height, grid_size, grid_min_size)
 {
     corners_in_levels_.resize(nlevels_);

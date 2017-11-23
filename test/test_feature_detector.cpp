@@ -5,8 +5,7 @@
 #include "feature_detector.hpp"
 
 using namespace cv;
-
-std::string ssvo::Config::FileName;
+using namespace ssvo;
 
 int computePyramid(const cv::Mat& image, std::vector<cv::Mat>& image_pyramid, const float scale_factor, const uint16_t level, const cv::Size min_size);
 
@@ -23,22 +22,22 @@ int main(int argc, char const *argv[])
 
     LOG_IF(FATAL, image.empty()) << "Can not open:" << argv[1];
 
-    ssvo::Config::FileName = std::string(argv[2]);
-    int width = ssvo::Config::imageWidth();
-    int height = ssvo::Config::imageHeight();
-    int levels = ssvo::Config::imageLevels();
-    int image_border = ssvo::Config::imageBorder();
-    int grid_size = ssvo::Config::gridSize();
-    int grid_min_size = ssvo::Config::gridMinSize();
-    int fast_max_threshold = ssvo::Config::fastMaxThreshold();
-    int fast_min_threshold = ssvo::Config::fastMinThreshold();
-    double fast_min_eigen = ssvo::Config::fastMinEigen();
+    Config::FileName = std::string(argv[2]);
+    int width = Config::imageWidth();
+    int height = Config::imageHeight();
+    int level = Config::imageTopLevel();
+    int image_border = Config::imageBorder();
+    int grid_size = Config::gridSize();
+    int grid_min_size = Config::gridMinSize();
+    int fast_max_threshold = Config::fastMaxThreshold();
+    int fast_min_threshold = Config::fastMinThreshold();
+    double fast_min_eigen = Config::fastMinEigen();
 
     std::vector<cv::Mat> image_pyramid;
     int top_level = computePyramid(image, image_pyramid, 2, 4, cv::Size(40, 40));
 
-    std::vector<ssvo::Corner> corners, old_corners;
-    ssvo::FastDetector fast(width, height, image_border, levels+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
+    std::vector<Corner> corners, old_corners;
+    FastDetector::Ptr fast_detector = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
 
     LOG(WARNING) << "=== This is a FAST corner detector demo ===";
     const int n_trials = 1000;
@@ -46,7 +45,7 @@ int main(int argc, char const *argv[])
     for(int i = 0; i < n_trials; ++i)
     {
         double t = (double)cv::getTickCount();
-        fast.detect(image_pyramid, corners, old_corners, 100, fast_min_eigen);
+        fast_detector->detect(image_pyramid, corners, old_corners, 100, fast_min_eigen);
         time_accumulator +=  ((cv::getTickCount() - t) / cv::getTickFrequency());
         LOG_EVERY_N(WARNING, n_trials/20) << " i: " << i << ", corners: " << corners.size();
     }
@@ -55,13 +54,13 @@ int main(int argc, char const *argv[])
 
     cv::Mat kps_img;
     std::vector<cv::KeyPoint> keypoints;
-    std::for_each(corners.begin(), corners.end(), [&](ssvo::Corner corner){
+    std::for_each(corners.begin(), corners.end(), [&](Corner corner){
         cv::KeyPoint kp(corner.x, corner.y, 0);
         keypoints.push_back(kp);
     });
     cv::drawKeypoints(image, keypoints, kps_img);
 
-    fast.drawGrid(kps_img, kps_img);
+    fast_detector->drawGrid(kps_img, kps_img);
     cv::imshow("KeyPoints detectByImage", kps_img);
     cv::waitKey(0);
 

@@ -7,26 +7,38 @@
 
 namespace ssvo{
 
-class Map
+class Map: public noncopyable
 {
 public:
     typedef std::shared_ptr<Map> Ptr;
 
+    void clear();
+
     void insertKeyFrame(const KeyFrame::Ptr kf);
 
-    void deleteKeyFrame(const KeyFrame::Ptr kf);
+    void removeKeyFrame(const KeyFrame::Ptr kf);
 
     void insertMapPoint(const MapPoint::Ptr mpt);
 
-    void deleteMapPoint(const MapPoint::Ptr mpt);
+    void removeMapPoint(const MapPoint::Ptr mpt);
 
-    Map &operator=(const Map&) = delete; //! copy denied
+    std::vector<KeyFrame::Ptr> getAllKeyFrames();
 
-public:
+    std::vector<KeyFrame::Ptr> getAllKeyFramesOrderedByID();
 
-    std::unordered_map<uint64_t, KeyFrame::Ptr> kfs_;
+    std::vector<MapPoint::Ptr> getAllMapPoints();
 
-    std::unordered_map<uint64_t, MapPoint::Ptr> mpts_;
+    inline uint64_t KeyFramesInMap() {return kfs_.size();}
+
+    uint64_t MapPointsInMap() {return mpts_.size();}
+
+    inline static Map::Ptr create() {return std::make_shared<Map>();}
+
+private:
+
+    std::unordered_set<KeyFrame::Ptr> kfs_;
+
+    std::unordered_set<MapPoint::Ptr> mpts_;
 };
 
 }

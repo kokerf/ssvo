@@ -13,6 +13,7 @@
 #endif
 
 using std::string;
+using namespace ssvo;
 
 #ifdef WIN32
 void loadImages(const string &file_directory, std::vector<string> &image_filenames)
@@ -52,22 +53,20 @@ void loadImages(const std::string &strFileDirectory, std::vector<string> &vstrIm
 }
 #endif
 
-void evalueErrors(ssvo::KeyFrame::Ptr kf1, ssvo::KeyFrame::Ptr kf2, double& error)
+void evalueErrors(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, double& error)
 {
-    const int N = kf1->fts_.size();
+    Features fts1 = kf1->getFeatures();
     double residuals[2] = {0,0};
     Matrix3d R = kf2->pose().rotationMatrix();
     Vector3d t = kf2->pose().translation();
-    for(int i = 0; i < N; i++)
+    for(Feature::Ptr ft1:fts1)
     {
-        ssvo::Feature::Ptr ft1 = kf1->fts_[i];
-
-        ssvo::MapPoint::Ptr mpt = ft1->mpt;
+        MapPoint::Ptr mpt = ft1->mpt;
 
         if(mpt == nullptr)
             continue;
 
-        ssvo::Feature::Ptr ft2 = mpt->findObservation(kf2);
+        Feature::Ptr ft2 = mpt->findObservation(kf2);
 
         Vector3d p1 = mpt->pose();
         Vector3d p2 = R*p1 + t;
@@ -77,7 +76,6 @@ void evalueErrors(ssvo::KeyFrame::Ptr kf1, ssvo::KeyFrame::Ptr kf2, double& erro
         double dx1 = predicted_x1 - ft1->ft[0];
         double dy1 = predicted_y1 - ft1->ft[1];
         residuals[0] += dx1*dx1 + dy1*dy1;
-        LOG_IF(ERROR, isnan(residuals[0])) << "i: " << i;
 
         double predicted_x2 = p2[0] / p2[2];
         double predicted_y2 = p2[1] / p2[2];
@@ -89,8 +87,6 @@ void evalueErrors(ssvo::KeyFrame::Ptr kf1, ssvo::KeyFrame::Ptr kf2, double& erro
     error = 0.5*(residuals[0] + residuals[1]);
 }
 
-std::string ssvo::Config::FileName;
-
 int main(int argc, char const *argv[])
 {
     google::InitGoogleLogging(argv[0]);
@@ -100,33 +96,33 @@ int main(int argc, char const *argv[])
         return -1;
     }
 
-    ssvo::Config::FileName = std::string(argv[2]);
-    int fps = ssvo::Config::cameraFps();
-    int width = ssvo::Config::imageWidth();
-    int height = ssvo::Config::imageHeight();
-    int levels = ssvo::Config::imageLevels();
-    int image_border = ssvo::Config::imageBorder();
-    int grid_size = ssvo::Config::gridSize();
-    int grid_min_size = ssvo::Config::gridMinSize();
-    int fast_max_threshold = ssvo::Config::fastMaxThreshold();
-    int fast_min_threshold = ssvo::Config::fastMinThreshold();
+    Config::FileName = std::string(argv[2]);
+    int fps = Config::cameraFps();
+    int width = Config::imageWidth();
+    int height = Config::imageHeight();
+    int levels = Config::imageTopLevel();
+    int image_border = Config::imageBorder();
+    int grid_size = Config::gridSize();
+    int grid_min_size = Config::gridMinSize();
+    int fast_max_threshold = Config::fastMaxThreshold();
+    int fast_min_threshold = Config::fastMinThreshold();
 
     std::string dir_name = argv[1];
     std::vector<string> img_file_names;
     loadImages(dir_name, img_file_names);
 
-    cv::Mat K = ssvo::Config::cameraIntrinsic();
-    cv::Mat DistCoef = ssvo::Config::cameraDistCoef();
+    cv::Mat K = Config::cameraIntrinsic();
+    cv::Mat DistCoef = Config::cameraDistCoef();
 
-    ssvo::Camera::Ptr camera = ssvo::Camera::create(ssvo::Config::imageWidth(), ssvo::Config::imageHeight(), K, DistCoef);
-    ssvo::FastDetector::Ptr detector = ssvo::FastDetector::create(width, height, image_border, levels+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
+    Camera::Ptr camera = Camera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef);
+    FastDetector::Ptr detector = FastDetector::create(width, height, image_border, levels+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
 
-    ssvo::Initializer initializer(detector);
+    Initializer::Ptr initializer = Initializer::create(detector);
 
     int initial = 0;
-    std::vector<ssvo::Corner> corners;
-    std::vector<ssvo::Corner> old_corners;
-    ssvo::Frame::Ptr frame_ref, frame_cur;
+    std::vector<Corner> corners;
+    std::vector<Corner> old_corners;
+    Frame::Ptr frame_ref, frame_cur;
     for(std::vector<std::string>::iterator i = img_file_names.begin(); i != img_file_names.end(); ++i)
     {
         cv::Mat img = cv::imread(*i, CV_LOAD_IMAGE_UNCHANGED);
@@ -137,43 +133,46 @@ int main(int argc, char const *argv[])
 
         if(initial == 0)
         {
-            frame_ref = ssvo::Frame::create(cur_img, 0, camera);
-            if(initializer.addFirstImage(frame_ref) == ssvo::SUCCESS)
+            frame_ref = Frame::create(cur_img, 0, camera);
+            if(initializer->addFirstImage(frame_ref) == SUCCESS)
                 initial = 1;
         }
         else if(initial == 1)
         {
-            frame_cur = ssvo::Frame::create(cur_img, 1, camera);
-            ssvo::InitResult result = initializer.addSecondImage(frame_cur);
-            if(result == ssvo::RESET) {
+            frame_cur = Frame::create(cur_img, 1, camera);
+            InitResult result = initializer->addSecondImage(frame_cur);
+            if(result == RESET) {
                 initial = 0;
                 //continue;
             }
-            else if(result == ssvo::SUCCESS)
+            else if(result == SUCCESS)
                 break;
 
             cv::Mat klt_img;
-            initializer.drowOpticalFlow(img, klt_img);
+            initializer->drowOpticalFlow(img, klt_img);
             cv::imshow("KLTracking", klt_img);
         }
 
         cv::waitKey(fps);
     }
 
-    ssvo::KeyFrame::Ptr keyframe1 = ssvo::KeyFrame::create(frame_ref);
-    ssvo::KeyFrame::Ptr keyframe2 = ssvo::KeyFrame::create(frame_cur);
-    keyframe1->updateObservation();
-    keyframe2->updateObservation();
+
+    ssvo::Map::Ptr map = ssvo::Map::create();
+    initializer->createInitalMap(map, 1.0);
+
+    std::vector<KeyFrame::Ptr> kfs = map->getAllKeyFramesOrderedByID();
+    LOG_ASSERT(kfs.size() == 2) << "Error number of keyframes in map after initailizer: " << kfs.size();
+    LOG_ASSERT(kfs[0]->id_ == 0 && kfs[1]->id_ == 1) << "Error id of keyframe: " << kfs[0]->id_ << ", " << kfs[0]->id_;
 
     double error = 0;
-    evalueErrors(keyframe1, keyframe2, error);
+    evalueErrors(kfs[0], kfs[0], error);
     LOG(INFO) << "Error before BA: " << error;
 
-    ssvo::Optimizer optimizer;
-    optimizer.twoViewBundleAdjustment(keyframe1, keyframe2, nullptr);
+    Optimizer optimizer;
+    optimizer.twoViewBundleAdjustment(kfs[0], kfs[0], nullptr);
     optimizer.report(true);
 
-    evalueErrors(keyframe1, keyframe2, error);
+    evalueErrors(kfs[0], kfs[0], error);
     LOG(INFO) << "Error after BA: " << error;
 
 

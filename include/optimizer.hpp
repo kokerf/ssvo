@@ -75,7 +75,8 @@ struct ReprojectionError {
 };
 
 
-class Optimizer {
+class Optimizer: public noncopyable
+{
 public:
     Optimizer();
 

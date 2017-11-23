@@ -23,7 +23,7 @@ public:
 
     static int imageHeight(){return getInstance().height;}
 
-    static double imageLevels(){return getInstance().levels;}
+    static double imageTopLevel(){return getInstance().top_level;}
 
     static double cameraFps(){return getInstance().fps;}
 
@@ -61,6 +61,8 @@ public:
 
     static double mapScale(){return getInstance().mapping_scale;}
 
+    static int minConnectionObservations(){return getInstance().mapping_min_connection_observations;}
+
 private:
     static Config& getInstance()
     {
@@ -71,11 +73,7 @@ private:
     Config(string& file_name)
     {
         cv::FileStorage fs(file_name.c_str(), cv::FileStorage::READ);
-        if(!fs.isOpened())
-        {
-           std::cerr << "Failed to open settings file at: " << file_name << std::endl;
-           exit(-1);
-        }
+        LOG_ASSERT(fs.isOpened()) << "Failed to open settings file at: " << file_name;
 
         //! camera parameters
         fx = (double)fs["Camera.fx"];
@@ -102,7 +100,7 @@ private:
 
         width = (int)fs["Image.width"];
         height = (int)fs["Image.height"];
-        levels = (int)fs["Image.pyramid_levels"];
+        top_level = (int)fs["Image.pyramid_levels"];
         fps = (double)fs["Camera.fps"];
 
         //! FAST detector parameters
@@ -127,6 +125,7 @@ private:
 
         //! map
         mapping_scale = (double)fs["Mapping.scale"];
+        mapping_min_connection_observations = (int)fs["Mapping.min_connection_observations"];
 
         //! glog
         if(!fs["Glog.alsologtostderr"].empty())
@@ -162,7 +161,7 @@ private:
     cv::Mat DistCoef;
     int width;
     int height;
-    int levels;
+    int top_level;
     double fps;
 
     //! FAST detector parameters
@@ -187,6 +186,7 @@ private:
 
     //! map
     double mapping_scale;
+    int mapping_min_connection_observations;
 
 };
 

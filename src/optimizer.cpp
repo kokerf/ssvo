@@ -36,13 +36,12 @@ void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Ma
     problem_.AddParameterBlock(kf2->optimal_Tw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
     problem_.SetParameterBlockConstant(kf1->optimal_Tw_.data());
 
-    const Features &fts1 = kf1->fts_;
+    const Features fts1 = kf1->getFeatures();
     MapPoints mpts;
     mpts.reserve(fts1.size());
 
-    for(size_t id = 0; id < fts1.size();id++)
+    for(Feature::Ptr ft1 : fts1)
     {
-        Feature::Ptr ft1 = fts1[id];
         MapPoint::Ptr mpt = ft1->mpt;
         if(mpt == nullptr)
             continue;

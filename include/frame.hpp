@@ -9,28 +9,17 @@
 
 namespace ssvo{
 
-typedef std::vector<Feature::Ptr> Features;
-typedef std::vector<MapPoint::Ptr> MapPoints;
-
 int createPyramid(const cv::Mat& img, ImgPyr& img_pyr, const uint16_t nlevels = 4, const cv::Size min_size = cv::Size(40, 40));
 
-class Frame
+class Frame: public noncopyable
 {
 public:
 
     typedef std::shared_ptr<Frame> Ptr;
 
-    Frame() = default;
+    inline Features getFeatures() { return fts_; }
 
-    Frame(const cv::Mat& img, const double timestamp, Camera::Ptr cam);
-
-    Frame(const ImgPyr& img_pyr, const double timestamp, Camera::Ptr cam);
-
-    Frame(const ImgPyr& img_pyr, const uint64_t id, const double timestamp, Camera::Ptr cam);
-
-    Frame &operator=(const Frame&) = delete; //! copy denied
-
-    void addFeature(const Feature::Ptr ft);
+    inline void addFeature(const Feature::Ptr ft) { fts_.push_back(ft); };
 
     inline void setPose(const Sophus::SE3d& T) { Tw_ = T; }
 
@@ -38,9 +27,18 @@ public:
 
     inline Sophus::SE3d pose() { return Tw_; }
 
-    inline static Frame::Ptr create(const cv::Mat& img, const double timestamp, Camera::Ptr cam) { return Frame::Ptr(new Frame(img, timestamp, cam)); }
+    inline static Frame::Ptr create(const cv::Mat& img, const double timestamp, Camera::Ptr cam)
+    { return std::make_shared<Frame>(Frame(img, timestamp, cam)); }
 
-    inline static Frame::Ptr create(const ImgPyr& img_pyr, const double timestamp, Camera::Ptr cam) { return Frame::Ptr(new Frame(img_pyr, timestamp, cam)); }
+    inline static Frame::Ptr create(const ImgPyr& img_pyr, const double timestamp, Camera::Ptr cam)
+    { return std::make_shared<Frame>(Frame(img_pyr, timestamp, cam)); }
+
+protected:
+    Frame(const cv::Mat& img, const double timestamp, const Camera::Ptr cam);
+
+    Frame(const ImgPyr& img_pyr, const double timestamp, const Camera::Ptr cam);
+
+    Frame(const ImgPyr& img_pyr, const uint64_t id, const double timestamp, const Camera::Ptr cam);
 
 public:
 
@@ -53,10 +51,10 @@ public:
     Camera::Ptr cam_;
 
     ImgPyr img_pyr_;
-    Features fts_;
-    MapPoints mpts_;
 
 protected:
+
+    Features fts_;
 
     Sophus::SE3d Tw_;
 
