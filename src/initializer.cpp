@@ -22,7 +22,7 @@ InitResult Initializer::addFirstImage(Frame::Ptr frame_ref)
 
     Corners corners;
     Corners old_corners;
-    fast_detector_->detect(frame_ref_->img_pyr_, corners, old_corners, 1.5*Config::initMinCorners(), Config::fastMinEigen());
+    fast_detector_->detect(frame_ref_->image(), corners, old_corners, 1.5*Config::initMinCorners(), Config::fastMinEigen());
 
     //! check corner number of first image
     const int N = corners.size();
@@ -81,7 +81,7 @@ InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
     double t1 = (double)cv::getTickCount();
 
     //! [1] KLT tracking
-    kltTrack(frame_ref_->img_pyr_[0], frame_cur_->img_pyr_[0], pts_ref_, pts_cur_, inliers_);
+    kltTrack(frame_ref_->getImage(0), frame_cur_->getImage(0), pts_ref_, pts_cur_, inliers_);
     calcDisparity(pts_ref_, pts_cur_, inliers_, disparities_);
     LOG(INFO) << "[INIT][1] KLT tracking points: " << disparities_.size();
     if(disparities_.size() < Config::initMinTracked()) return RESET;
@@ -196,6 +196,7 @@ void Initializer::createInitalMap(Map::Ptr map, double map_scale)
 
         map->insertMapPoint(mpt);
 
+        frame_cur_->addFeature(feature_cur);
         keyframe_ref->addFeature(feature_ref);
         keyframe_cur->addFeature(feature_cur);
 

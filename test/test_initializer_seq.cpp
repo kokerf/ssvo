@@ -55,7 +55,7 @@ void loadImages(const std::string &strFileDirectory, std::vector<string> &vstrIm
 
 void evalueErrors(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, double& error)
 {
-    Features fts1 = kf1->getFeatures();
+    std::vector<Feature::Ptr> fts1 = kf1->getFeatures();
     double residuals[2] = {0,0};
     Matrix3d R = kf2->pose().rotationMatrix();
     Vector3d t = kf2->pose().translation();

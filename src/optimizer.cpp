@@ -27,7 +27,7 @@ void Optimizer::report(bool with_residual)
 
 void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Map::Ptr map)
 {
-    ceres::LocalParameterization* local_parameterization = new ssvo::SE3Parameterization();
+    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
 
     kf1->optimal_Tw_ = kf1->pose();
     kf2->optimal_Tw_ = kf2->pose();
@@ -36,14 +36,14 @@ void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Ma
     problem_.AddParameterBlock(kf2->optimal_Tw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
     problem_.SetParameterBlockConstant(kf1->optimal_Tw_.data());
 
-    const Features fts1 = kf1->getFeatures();
+    const std::vector<Feature::Ptr> fts1 = kf1->getFeatures();
     MapPoints mpts;
     mpts.reserve(fts1.size());
 
     for(Feature::Ptr ft1 : fts1)
     {
         MapPoint::Ptr mpt = ft1->mpt;
-        if(mpt == nullptr)
+        if(mpt == nullptr)//! should not happen
             continue;
 
         Feature::Ptr ft2 = mpt->findObservation(kf2);
@@ -54,10 +54,10 @@ void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Ma
         mpt->optimal_pose_ = mpt->pose();
         mpts.push_back(mpt);
 
-        ceres::CostFunction* cost_function1 = ssvo::ReprojectionError::Create(ft1->ft[0], ft1->ft[1]);
+        ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionError::Create(ft1->ft[0], ft1->ft[1]);
         problem_.AddResidualBlock(cost_function1, NULL, kf1->optimal_Tw_.data(), mpt->optimal_pose_.data());
 
-        ceres::CostFunction* cost_function2 = ssvo::ReprojectionError::Create(ft2->ft[0], ft2->ft[1]);
+        ceres::CostFunction* cost_function2 = ceres_slover::ReprojectionError::Create(ft2->ft[0], ft2->ft[1]);
         problem_.AddResidualBlock(cost_function2, NULL, kf2->optimal_Tw_.data(), mpt->optimal_pose_.data());
     }
 

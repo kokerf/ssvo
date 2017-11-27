@@ -23,7 +23,7 @@ public:
 
     static int imageHeight(){return getInstance().height;}
 
-    static double imageTopLevel(){return getInstance().top_level;}
+    static int imageTopLevel(){return getInstance().top_level;}
 
     static double cameraFps(){return getInstance().fps;}
 
@@ -62,6 +62,10 @@ public:
     static double mapScale(){return getInstance().mapping_scale;}
 
     static int minConnectionObservations(){return getInstance().mapping_min_connection_observations;}
+
+    static int alignTopLevel(){return getInstance().align_top_level;}
+
+    static int alignPatchSize(){return getInstance().align_patch_size;}
 
 private:
     static Config& getInstance()
@@ -127,6 +131,11 @@ private:
         mapping_scale = (double)fs["Mapping.scale"];
         mapping_min_connection_observations = (int)fs["Mapping.min_connection_observations"];
 
+        //! Align
+        align_top_level = (int)fs["Align.top_level"];
+        align_top_level = MIN(align_top_level, top_level);
+        align_patch_size = (int)fs["Align.patch_size"];
+
         //! glog
         if(!fs["Glog.alsologtostderr"].empty())
             fs["Glog.alsologtostderr"] >> FLAGS_alsologtostderr;
@@ -187,6 +196,10 @@ private:
     //! map
     double mapping_scale;
     int mapping_min_connection_observations;
+
+    //! Align
+    int align_top_level;
+    int align_patch_size;
 
 };
 

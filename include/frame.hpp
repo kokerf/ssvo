@@ -9,29 +9,59 @@
 
 namespace ssvo{
 
-int createPyramid(const cv::Mat& img, ImgPyr& img_pyr, const uint16_t nlevels = 4, const cv::Size min_size = cv::Size(40, 40));
-
 class Frame//: private noncopyable
 {
 public:
 
     typedef std::shared_ptr<Frame> Ptr;
 
-    inline Features getFeatures() { return fts_; }
+    const cv::Mat getImage(int level) const;
+
+    const ImgPyr image() const {return img_pyr_;}
+
+    inline Sophus::SE3d pose() const { return Tcw_; }
+
+    inline Sophus::SE3d pose_inverse() const { return Twc_; }
+
+    inline void setPose(const Sophus::SE3d& T) { Tcw_ = T; Twc_ = Tcw_.inverse();}
+
+    inline void setPose(const Matrix3d& R, const Vector3d& t) { Tcw_ = Sophus::SE3d(R, t); Twc_ = Tcw_.inverse();}
+
+    inline Features features() const {return fts_; }
+
+    inline std::vector<Feature::Ptr> getFeatures() const {return std::vector<Feature::Ptr>(fts_.begin(), fts_.end()); }
 
     inline void addFeature(const Feature::Ptr ft) { fts_.push_back(ft); };
 
-    inline void setPose(const Sophus::SE3d& T) { Tw_ = T; }
-
-    inline void setPose(const Matrix3d& R, const Vector3d& t) { Tw_ = Sophus::SE3d(R, t); }
-
-    inline Sophus::SE3d pose() { return Tw_; }
-
-    inline static Frame::Ptr create(const cv::Mat& img, const double timestamp, Camera::Ptr cam)
+    inline static Ptr create(const cv::Mat& img, const double timestamp, Camera::Ptr cam)
     { return std::make_shared<Frame>(Frame(img, timestamp, cam)); }
 
-    inline static Frame::Ptr create(const ImgPyr& img_pyr, const double timestamp, Camera::Ptr cam)
+    inline static Ptr create(const ImgPyr& img_pyr, const double timestamp, Camera::Ptr cam)
     { return std::make_shared<Frame>(Frame(img_pyr, timestamp, cam)); }
+
+    inline static void jacobian_xyz2uv(
+        const Vector3d& xyz_in_f,
+        Matrix<double,2,6>& J)
+    {
+        const double x = xyz_in_f[0];
+        const double y = xyz_in_f[1];
+        const double z_inv = 1./xyz_in_f[2];
+        const double z_inv_2 = z_inv*z_inv;
+
+        J(0,0) = -z_inv;              // -1/z
+        J(0,1) = 0.0;                 // 0
+        J(0,2) = x*z_inv_2;           // x/z^2
+        J(0,3) = y*J(0,2);            // x*y/z^2
+        J(0,4) = -(1.0 + x*J(0,2));   // -(1.0 + x^2/z^2)
+        J(0,5) = y*z_inv;             // y/z
+
+        J(1,0) = 0.0;                 // 0
+        J(1,1) = -z_inv;              // -1/z
+        J(1,2) = y*z_inv_2;           // y/z^2
+        J(1,3) = 1.0 + y*J(1,2);      // 1.0 + y^2/z^2
+        J(1,4) = -J(0,3);             // -x*y/z^2
+        J(1,5) = -x*z_inv;            // x/z
+    }
 
 protected:
 
@@ -51,14 +81,14 @@ public:
 
     Camera::Ptr cam_;
 
-    ImgPyr img_pyr_;
-
 protected:
 
     Features fts_;
 
-    Sophus::SE3d Tw_;
+    ImgPyr img_pyr_;
 
+    Sophus::SE3d Tcw_;
+    Sophus::SE3d Twc_;
 };
 
 }

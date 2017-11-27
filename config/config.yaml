@@ -41,6 +41,10 @@ Initializer.ransac_max_iters: 1000
 Mapping.scale: 1
 Mapping.min_connection_observations: 15
 
+# Align
+Align.top_level: 3   # not big then Image.pyramid_levels
+Align.patch_size: 4
+
 # glog
 Glog.alsologtostderr: 1
 Glog.colorlogtostderr: 1

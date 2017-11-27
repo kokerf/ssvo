@@ -89,9 +89,10 @@ void Viewer::run()
 
         {
             std::lock_guard<std::mutex> lock(mutex_image_);
-            imageTexture.Upload(image_.data, GL_RGB, GL_UNSIGNED_BYTE);
-            cv::imshow("image_",image_);
-            cv::waitKey(1);
+            if(!image_.empty())
+                imageTexture.Upload(image_.data, GL_RGB, GL_UNSIGNED_BYTE);
+//            cv::imshow("image_",image_);
+//            cv::waitKey(1);
         }
         image_viewer.Activate();
         glColor3f(1.0,1.0,1.0);
@@ -107,6 +108,7 @@ void Viewer::run()
 void Viewer::showImage(const cv::Mat &image)
 {
     std::lock_guard<std::mutex> lock(mutex_image_);
+    LOG_ASSERT(!image.empty());
     if(image.channels() != 3)
         cv::cvtColor(image, image_, CV_GRAY2RGB);
     else
