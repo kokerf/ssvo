@@ -7,7 +7,6 @@
 #include "map.hpp"
 #include "initializer.hpp"
 #include "feature_detector.hpp"
-#include "optimizer.hpp"
 #include "viewer.hpp"
 
 namespace ssvo {
@@ -29,6 +28,7 @@ public:
 private:
 
     void processFrame();
+    Stage tracking();
     Stage processFirstFrame();
     Stage processSecondFrame();
 

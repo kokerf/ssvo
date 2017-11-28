@@ -41,7 +41,7 @@ public:
 
     inline static void jacobian_xyz2uv(
         const Vector3d& xyz_in_f,
-        Matrix<double,2,6>& J)
+        Matrix<double,2,6,RowMajor>& J)
     {
         const double x = xyz_in_f[0];
         const double y = xyz_in_f[1];

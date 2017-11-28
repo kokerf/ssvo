@@ -74,7 +74,7 @@ int main(int argc, char *argv[])
         cv::Mat image = cv::imread(image_name, CV_LOAD_IMAGE_UNCHANGED);
         vo.process(image, timestamp);
 
-        cv::imshow("Image Show", image);
+        //cv::imshow("Image Show", image);
         cv::waitKey(40);
     }
 

@@ -37,8 +37,7 @@ inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src,
                            Matrix<Td, size, size, RowMajor> &img,
                            Matrix<Td, size, size, RowMajor> &dx,
                            Matrix<Td, size, size, RowMajor> &dy,
-                           const double u,
-                           const double v) {
+                           const double u, const double v) {
     const int iu = floorf(u);
     const int iv = floorf(v);
     const Td subpix_u = u - iu;
@@ -70,17 +69,51 @@ inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src,
 
 template<typename Ts, typename Td, int size>
 inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src,
+                           Matrix<Td, size, size, RowMajor> &img,
+                           const double u, const double v) {
+    const int iu = floorf(u);
+    const int iv = floorf(v);
+    const Td subpix_u = u - iu;
+    const Td subpix_v = v - iv;
+    const Td w_tl = (1.0f - subpix_u) * (1.0f - subpix_v);
+    const Td w_tr = (1.0f - subpix_u) * subpix_v;
+    const Td w_bl = subpix_u * (1.0f - subpix_v);
+    const Td w_br = 1.0f - w_tl - w_tr - w_bl;
+
+    const int half_size = size / 2;
+    const int expand_size = size + 1;
+    const int start_v = iv - half_size;
+    const int start_u = iu - half_size;
+    Matrix<Td, expand_size, expand_size, RowMajor> patch = src.block(start_v, start_u, expand_size, expand_size).template cast<Td>();
+    Matrix<Td, size, size, RowMajor> mat_tl = w_tl * patch.block(0, 0, size, size);
+    Matrix<Td, size, size, RowMajor> mat_tr = w_tr * patch.block(0, 1, size, size);
+    Matrix<Td, size, size, RowMajor> mat_bl = w_bl * patch.block(1, 0, size, size);
+    Matrix<Td, size, size, RowMajor> mat_br = w_br * patch.block(1, 1, size, size);
+
+    img = mat_tl + mat_tr + mat_bl + mat_br;
+}
+
+template<typename Ts, typename Td, int size>
+inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src,
                            Matrix<Td, size * size, 1> &img_vec,
                            Matrix<Td, size * size, 1> &dx_vec,
                            Matrix<Td, size * size, 1> &dy_vec,
-                           const double u,
-                           const double v) {
+                           const double u, const double v) {
     Matrix<Td, size, size, RowMajor> img, dx, dy;
     interpolateMat<Ts, Td, size>(src, img, dx, dy, u, v);
 
     img_vec = Eigen::Map<Matrix<Td, size * size, 1> >(img.data());
     dx_vec = Eigen::Map<Matrix<Td, size * size, 1> >(dx.data());
     dy_vec = Eigen::Map<Matrix<Td, size * size, 1> >(dy.data());
+}
+
+template<typename Ts, typename Td, int size>
+inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src,
+                           Matrix<Td, size * size, 1> &img_vec,
+                           const double u, const double v) {
+    Matrix<Td, size, size, RowMajor> img;
+    interpolateMat<Ts, Td, size>(src, img, u, v);
+    img_vec = Eigen::Map<Matrix<Td, size * size, 1> >(img.data());
 }
 
 }

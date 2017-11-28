@@ -107,6 +107,7 @@ LIST(APPEND SOURCEFILES
     src/initializer.cpp
     src/optimizer.cpp
     src/system.cpp
+    src/alignment.cpp
     src/viewer.cpp)
 
 #add_library(${PROJECT_NAME} SHARED ${SOURCEFILES})
@@ -123,6 +124,9 @@ target_link_libraries(test_initializer_seq  ${LINK_LIBS})
 
 add_executable(test_glog test/test_glog.cpp)
 target_link_libraries(test_glog  ${LINK_LIBS})
+
+add_executable(test_utils test/test_utils.cpp)
+target_link_libraries(test_utils  ${LINK_LIBS})
 
 ## -----------------------
 ## Build VO

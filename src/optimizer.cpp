@@ -7,6 +7,8 @@ Optimizer::Optimizer()
 {
     options_.linear_solver_type = ceres::DENSE_SCHUR;
     options_.minimizer_progress_to_stdout = true;
+    options_.gradient_tolerance = 1e-16;
+    options_.function_tolerance = 1e-16;
     //options_.max_solver_time_in_seconds = 0.2;
 }
 

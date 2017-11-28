@@ -1,5 +1,7 @@
-#include "system.hpp"
 #include "config.hpp"
+#include "system.hpp"
+#include "optimizer.hpp"
+#include "alignment.hpp"
 
 namespace ssvo{
 
@@ -45,8 +47,10 @@ void System::process(const cv::Mat &image, const double timestamp)
 
     current_frame_ = Frame::create(image_, timestamp, camera_);
 
+
     if(STAGE_TRACKING == stage_)
     {
+        tracking();
         cv::waitKey(0);
     }
     else if(STAGE_INITAL_PROCESS== stage_)
@@ -64,6 +68,7 @@ void System::process(const cv::Mat &image, const double timestamp)
 
     viewer_->showImage(image);
     viewer_->setCurrentCameraPose(current_frame_->pose().matrix());
+    last_frame_ = current_frame_;
 
     LOG(WARNING) << "System Stage: " << stage_;
 }
@@ -108,6 +113,13 @@ System::Stage System::processSecondFrame()
     current_frame_->setPose(reference_keyframe_->pose());
 
     return STAGE_TRACKING;
+}
+
+System::Stage System::tracking()
+{
+    current_frame_->setPose(last_frame_->pose());
+    AlignSE3 align(30, 1e-8);
+    align.run(last_frame_, current_frame_);
 }
 
 }
