@@ -20,9 +20,17 @@ Camera::Camera(int width, int height, const cv::Mat& K, const cv::Mat& D):
 {
     assert(K.cols == 3 && K.rows == 3);
     assert(D.cols == 1 || D.rows == 1);
-    cvK_ = K.clone();
+    if(K.type() == CV_64FC1)
+        cvK_ = K.clone();
+    else
+        K.convertTo(cvK_, CV_64FC1);
+
     cvK_inv_ = cvK_.inv();
-    cvD_ = D.clone();
+
+    if(D.type() == CV_64FC1)
+        cvD_ = D.clone();
+    else
+        D.convertTo(cvD_, CV_64FC1);
 
     fx_ = K.at<double>(0,0);
     fy_ = K.at<double>(1,1);
@@ -40,15 +48,18 @@ Camera::Camera(int width, int height, const cv::Mat& K, const cv::Mat& D):
 
 Vector3d Camera::lift(const Vector2d &px) const
 {
-    Vector3d xyz;
-    xyz[0] = (px[0] - cx_) / fx_;
-    xyz[1] = (px[0] - cy_) / fy_;
-    xyz[2] = 1.0;
+    Vector3d xyz(0, 0, 1);
     if(distortion_)
     {
-        cv::Mat pt_d = (cv::Mat_<double>(1, 2) << px[0], px[1]);
-        cv::Mat pt_u = (cv::Mat_<double>(1, 2) << xyz[0], xyz[1]);
+        double p[2] = {px[0], px[1]};
+        cv::Mat pt_d = cv::Mat(1, 1, CV_64FC2, p);
+        cv::Mat pt_u = cv::Mat(1, 1, CV_64FC2, xyz.data());
         cv::undistortPoints(pt_d, pt_u, cvK_, cvD_);
+    }
+    else
+    {
+        xyz[0] = (px[0] - cx_) / fx_;
+        xyz[1] = (px[0] - cy_) / fy_;
     }
 
     return xyz.normalized();
