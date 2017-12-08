@@ -7,8 +7,8 @@ Optimizer::Optimizer()
 {
     options_.linear_solver_type = ceres::DENSE_SCHUR;
     options_.minimizer_progress_to_stdout = true;
-    options_.gradient_tolerance = 1e-16;
-    options_.function_tolerance = 1e-16;
+//    options_.gradient_tolerance = 1e-4;
+//    options_.function_tolerance = 1e-4;
     //options_.max_solver_time_in_seconds = 0.2;
 }
 
@@ -56,10 +56,10 @@ void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Ma
         mpt->optimal_pose_ = mpt->pose();
         mpts.push_back(mpt);
 
-        ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionError::Create(ft1->ft[0], ft1->ft[1]);
+        ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft1->ft[0]/ft1->ft[2], ft1->ft[1]/ft1->ft[2]);
         problem_.AddResidualBlock(cost_function1, NULL, kf1->optimal_Tw_.data(), mpt->optimal_pose_.data());
 
-        ceres::CostFunction* cost_function2 = ceres_slover::ReprojectionError::Create(ft2->ft[0], ft2->ft[1]);
+        ceres::CostFunction* cost_function2 = ceres_slover::ReprojectionErrorSE3::Create(ft2->ft[0]/ft2->ft[2], ft2->ft[1]/ft2->ft[2]);
         problem_.AddResidualBlock(cost_function2, NULL, kf2->optimal_Tw_.data(), mpt->optimal_pose_.data());
     }
 

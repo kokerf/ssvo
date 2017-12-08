@@ -81,6 +81,8 @@ public:
 
     Camera::Ptr cam_;
 
+    Sophus::SE3d optimal_Tw_;//! for optimization
+
 protected:
 
     Features fts_;

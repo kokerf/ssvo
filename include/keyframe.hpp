@@ -39,8 +39,6 @@ public:
 
     std::multimap<int, KeyFrame::Ptr> orderedConnectedKeyFrames_;
 
-    Sophus::SE3d optimal_Tw_;//! for optimization
-
 };
 
 }
