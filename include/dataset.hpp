@@ -9,15 +9,15 @@ namespace ssvo {
 
 class TUMDataReader {
 public:
-    TUMDataReader(const string &dataset_path, const string &association_file)
+    TUMDataReader(const string &dataset_path, const string &association_file, const bool with_ground_truth = false):
+        dataset_path_(dataset_path), association_file_(association_file)
     {
-        std::string path = dataset_path;
         long found = dataset_path.find_last_of("/\\");
         if(found + 1 != dataset_path.size())
-            path += dataset_path.substr(found, 1);
+            dataset_path_ += dataset_path.substr(found, 1);
 
         std::ifstream file_stream;
-        file_stream.open(association_file.c_str());
+        file_stream.open(association_file_.c_str());
         while (!file_stream.eof()) {
             string s;
             getline(file_stream, s);
@@ -29,10 +29,18 @@ public:
                 ss >> time;
                 timestamps_.push_back(time);
                 ss >> rgb;
-                rgb_images_.push_back(path + rgb);
+                rgb_images_.push_back(dataset_path_ + rgb);
                 ss >> time;
                 ss >> depth;
-                depth_images_.push_back(path + depth);
+                depth_images_.push_back(dataset_path_ + depth);
+                ss >> time;
+                if(with_ground_truth)
+                {
+                    std::vector<double> ground_truth(7);
+                    for(int i = 0; i < 7; ++i)
+                       ss >> ground_truth[i];
+                    ground_truth_.push_back(ground_truth);
+                }
             }
         }
         file_stream.close();
@@ -58,11 +66,22 @@ public:
         return true;
     }
 
+    bool readItemWithGroundTruth(long index, std::string &rgb_image, std::string &depth_image, double &timestamp, std::vector<double> &ground_truth) const
+    {
+        if(!readItemByIndex(index, rgb_image, depth_image, timestamp))
+            return false;
+        ground_truth = ground_truth_[index];
+        return true;
+    }
+
 public:
     long N;
+    std::string dataset_path_;
+    std::string association_file_;
     std::vector<double> timestamps_;
     std::vector<std::string> rgb_images_;
     std::vector<std::string> depth_images_;
+    std::vector<std::vector<double> > ground_truth_;
 };
 
 class EuRocDataReader{

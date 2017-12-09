@@ -34,20 +34,15 @@ class SE3Parameterization : public ceres::LocalParameterization {
 public:
     virtual ~SE3Parameterization() {}
 
-    // SE3 plus operation for Ceres
-    //
-    //  T * exp(x)
-    //
     virtual bool Plus(double const *T_raw, double const *delta_raw,
                       double *T_plus_delta_raw) const {
         Eigen::Map<Sophus::SE3d const> const T(T_raw);
         Eigen::Map<Sophus::Vector6d const> const delta(delta_raw);
         Eigen::Map<Sophus::SE3d> T_plus_delta(T_plus_delta_raw);
-        T_plus_delta = T * Sophus::SE3d::exp(delta);
+        T_plus_delta = Sophus::SE3d::exp(delta) * T;
         return true;
     }
 
-    // Jacobian of SE3 plus operation for Ceres
     // Set to Identity, for we have computed in ReprojectionErrorSE3::Evaluate
     virtual bool ComputeJacobian(double const *T_raw,
                                  double *jacobian_raw) const {
@@ -80,8 +75,7 @@ struct ReprojectionError {
         return true;
     }
 
-    static ceres::CostFunction *Create(const double observed_x,
-                                       const double observed_y) {
+    static ceres::CostFunction *Create(const double observed_x, const double observed_y) {
         return (new ceres::AutoDiffCostFunction<ReprojectionError, 2, Sophus::SE3d::num_parameters, 3>(
             new ReprojectionError(observed_x, observed_y)));
     }

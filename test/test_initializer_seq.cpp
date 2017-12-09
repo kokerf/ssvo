@@ -166,12 +166,14 @@ int main(int argc, char const *argv[])
 
     double error = 0;
     evalueErrors(kfs[0], kfs[1], error);
+    LOG(INFO) <<"Pose:\n" << kfs[1]->pose().matrix();
     LOG(INFO) << "Error before BA: " << error;
 
     Optimizer optimizer;
     optimizer.twoViewBundleAdjustment(kfs[0], kfs[1], nullptr);
     optimizer.report(true);
 
+    LOG(INFO) <<"Pose:\n" << kfs[1]->pose().matrix();
     evalueErrors(kfs[0], kfs[1], error);
     LOG(INFO) << "Error after BA: " << error;
 

@@ -71,7 +71,7 @@ int AlignSE3::computeReferencePatches(int level)
     const int cols = ref_img.cols;
     const int rows = ref_img.rows;
     const int border = HalfPatchSize+1;
-    Matrix<uchar , Dynamic, Dynamic, RowMajor> eigen_img = Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> >((uchar*)ref_img.data, rows, cols);
+    Matrix<uchar , Dynamic, Dynamic, RowMajor> ref_eigen_img = Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> >((uchar*)ref_img.data, rows, cols);
     const double scale = 1.0f/(1<<level);
     const double fx = ref_frame_->cam_->fx() * scale;
     const double fy = ref_frame_->cam_->fy() * scale;
@@ -88,8 +88,6 @@ int AlignSE3::computeReferencePatches(int level)
         Vector3d ref_xyz = fts[n]->ft;
         ref_xyz *= depth;
 
-        Vector3d xyz = ref_frame_->pose() * fts[n]->mpt->pose();
-
         ref_feature_cache_.col(feature_counter) = ref_xyz;
 
         //! compute jacbian(with -)
@@ -97,7 +95,7 @@ int AlignSE3::computeReferencePatches(int level)
         Frame::jacobian_xyz2uv(ref_xyz, J);
 
         Matrix<double, PatchArea, 1> img, dx, dy;
-        utils::interpolateMat<uchar, double, PatchSize>(eigen_img, img, dx, dy, ref_px[0], ref_px[1]);
+        utils::interpolateMat<uchar, double, PatchSize>(ref_eigen_img, img, dx, dy, ref_px[0], ref_px[1]);
         ref_patch_cache_.row(feature_counter) = img;
         jacbian_cache_.block(feature_counter*PatchArea, 0, PatchArea, 6) = fx * dx * J.row(0) + fy * dy * J.row(1);
 
@@ -115,7 +113,7 @@ double AlignSE3::computeResidual(int level, int N)
     const int cols = cur_img.cols;
     const int rows = cur_img.rows;
     const int border = HalfPatchSize+1;
-    Matrix<uchar , Dynamic, Dynamic, RowMajor> eigen_img = Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> >((uchar*)cur_img.data, rows, cols);
+    Matrix<uchar , Dynamic, Dynamic, RowMajor> cur_eigen_img = Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> >((uchar*)cur_img.data, rows, cols);
     Hessian_.setZero();
     Jres_.setZero();
     double res = 0;
@@ -132,7 +130,7 @@ double AlignSE3::computeResidual(int level, int N)
 
 //        LOG(INFO) << cur_xyz.transpose() << " " << cur_px.transpose();
         Matrix<double, PatchArea, 1> residual;
-        utils::interpolateMat<uchar, double, PatchSize>(eigen_img, residual, cur_px[0], cur_px[1]);
+        utils::interpolateMat<uchar, double, PatchSize>(cur_eigen_img, residual, cur_px[0], cur_px[1]);
         residual.noalias() -= ref_patch_cache_.row(n);//.transpose();
         Matrix<double, PatchArea, 6, RowMajor> J = jacbian_cache_.block(n*PatchArea, 0, PatchArea, 6);
         //Matrix<double, PatchArea, 6, RowMajor> J1 = Eigen::Map<Matrix<double, PatchArea, 6, RowMajor> >(jacbian_cache_.data()+n*PatchArea*6);
