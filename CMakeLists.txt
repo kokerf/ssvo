@@ -131,6 +131,9 @@ target_link_libraries(test_utils  ${LINK_LIBS})
 add_executable(test_alignment test/test_alignment.cpp ${SOURCEFILES})
 target_link_libraries(test_alignment  ${LINK_LIBS})
 
+add_executable(test_alignment_2d test/test_alignment_2d.cpp ${SOURCEFILES})
+target_link_libraries(test_alignment_2d  ${LINK_LIBS})
+
 ## -----------------------
 ## Build VO
 ## -----------------------

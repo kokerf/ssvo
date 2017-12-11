@@ -5,6 +5,10 @@
 
 namespace ssvo{
 
+//
+// Align SE3
+//
+
 AlignSE3::AlignSE3(const int max_iterations, const double epslion):
     top_level_(Config::alignTopLevel()), //patch_area_(patch_size_*patch_size_),half_patch_size_(patch_size_/2),
     max_iterations_(max_iterations),
@@ -22,7 +26,7 @@ bool AlignSE3::run(Frame::Ptr reference_frame, Frame::Ptr current_frame)
     LOG_ASSERT(N != 0) << " AlignSE3: Frame(" << reference_frame->id_ << ") "<< " no features to track!" ;
 
     ref_feature_cache_.resize(NoChange, N);
-    ref_patch_cache_.resize(N, PatchArea);
+    ref_patch_cache_.resize(N, NoChange);
     jacbian_cache_.resize(N*PatchArea, NoChange);
 
     T_cur_from_ref_ = current_frame->pose() * reference_frame->pose_inverse();
@@ -50,15 +54,18 @@ bool AlignSE3::run(Frame::Ptr reference_frame, Frame::Ptr current_frame)
             Sophus::SE3d::Tangent se3 = Hessian_.ldlt().solve(Jres_);
             T_cur_from_ref_ = T_cur_from_ref_ * Sophus::SE3d::exp(-se3);
 
-            LOG(INFO) << "Level:" << l << "Residual: " << res << " update: " << se3.transpose();
+            LOG(INFO) << "Level: " << l << " Residual: [" << res << "] update: [" << T_cur_from_ref_.log().transpose() << "]";
 
             //! termination
             if(se3.dot(se3) < epslion_squared_)
-                break;
+                 break;
         }
     }
 
     current_frame->setPose(T_cur_from_ref_ * reference_frame->pose());
+    LOG(INFO) << "pose:\n " << T_cur_from_ref_.matrix3x4();
+
+    return true;
 }
 
 int AlignSE3::computeReferencePatches(int level)
@@ -158,5 +165,81 @@ double AlignSE3::computeResidual(int level, int N)
 
     return res/count;
 }
+
+//
+// Align Patch
+//
+bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
+                   const Matrix<double, PatchArea, 1> &patch,
+                   const Matrix<double, PatchArea, 1> &patch_gx,
+                   const Matrix<double, PatchArea, 1> &patch_gy,
+                   Eigen::Vector3d &estimate,
+                   const int MAX_ITER,
+                   const double EPS)
+{
+    const double min_update_squared = EPS*EPS;
+    bool converged = false;
+    estimate_ = estimate;
+
+    //! Per-compute
+    jacbian_cache_.resize(PatchArea, 3);
+    Jres_.resize(3);
+
+    //! get jacobian
+    jacbian_cache_.col(0) = patch_gx;
+    jacbian_cache_.col(1) = patch_gy;
+    jacbian_cache_.col(2).setConstant(1);
+
+    Hessian_ = jacbian_cache_.transpose() * jacbian_cache_;
+    invHessian_ = Hessian_.inverse();
+
+    Eigen::Vector3d update;
+    double res_old = std::numeric_limits<double>::max();
+    for(int iter = 0; iter < MAX_ITER; iter++)
+    {
+        const double u = estimate_[0];
+        const double v = estimate_[1];
+        const double idiff = estimate_[2];
+
+        if(u < border_ || v < border_ || u + border_ >= image.cols() - 1 || v + border_ >= image.rows() - 1)
+        {
+            std::cerr << "Error! The estimate pixel location is out of the scope!" << std::endl;
+            return false;
+        }
+
+        // compute interpolation weights
+        Matrix<double, PatchArea, 1> residual;
+        utils::interpolateMat<uchar, double, PatchSize>(image, residual, u, v);
+        residual.noalias() -= patch;
+        residual.array() += idiff;
+
+//        double res = residual.norm();
+//        if(res > res_old)
+//        {
+//            estimate_.noalias() += update;
+//            break;
+//        }
+//        res_old = res;
+
+        Jres_ = jacbian_cache_.transpose() * residual;
+
+        //! update
+        update = invHessian_ * Jres_;
+        estimate_.noalias() -= update;
+
+//        LOG(INFO) << "iter:" << iter << " estimate: [" << estimate_[0] << ", " << estimate_[1] << ", " << estimate_[2]
+//                  << "] update: [" << std::setw(12) << update.transpose() << "] res: " << residual.norm()/PatchArea;
+
+        if(update.dot(update) < min_update_squared)
+        {
+            converged = true;
+            break;
+        }
+    }
+
+    estimate = estimate_;
+    return converged;
+}
+
 
 }

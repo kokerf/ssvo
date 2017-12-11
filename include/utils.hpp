@@ -55,8 +55,8 @@ inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src,
     Matrix<Td, expand_size1, expand_size1, RowMajor>
         patch = src.block(start_v, start_u, expand_size1, expand_size1).template cast<Td>();
     Matrix<Td, expand_size, expand_size, RowMajor> mat_tl = w_tl * patch.block(0, 0, expand_size, expand_size);
-    Matrix<Td, expand_size, expand_size, RowMajor> mat_tr = w_tr * patch.block(0, 1, expand_size, expand_size);
-    Matrix<Td, expand_size, expand_size, RowMajor> mat_bl = w_bl * patch.block(1, 0, expand_size, expand_size);
+    Matrix<Td, expand_size, expand_size, RowMajor> mat_tr = w_tr * patch.block(1, 0, expand_size, expand_size);
+    Matrix<Td, expand_size, expand_size, RowMajor> mat_bl = w_bl * patch.block(0, 1, expand_size, expand_size);
     Matrix<Td, expand_size, expand_size, RowMajor> mat_br = w_br * patch.block(1, 1, expand_size, expand_size);
 
     Matrix<Td, expand_size, expand_size, RowMajor> mat_interpolate = mat_tl + mat_tr + mat_bl + mat_br;
@@ -86,8 +86,8 @@ inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src,
     const int start_u = iu - half_size;
     Matrix<Td, expand_size, expand_size, RowMajor> patch = src.block(start_v, start_u, expand_size, expand_size).template cast<Td>();
     Matrix<Td, size, size, RowMajor> mat_tl = w_tl * patch.block(0, 0, size, size);
-    Matrix<Td, size, size, RowMajor> mat_tr = w_tr * patch.block(0, 1, size, size);
-    Matrix<Td, size, size, RowMajor> mat_bl = w_bl * patch.block(1, 0, size, size);
+    Matrix<Td, size, size, RowMajor> mat_tr = w_tr * patch.block(1, 0, size, size);
+    Matrix<Td, size, size, RowMajor> mat_bl = w_bl * patch.block(0, 1, size, size);
     Matrix<Td, size, size, RowMajor> mat_br = w_br * patch.block(1, 1, size, size);
 
     img = mat_tl + mat_tr + mat_bl + mat_br;

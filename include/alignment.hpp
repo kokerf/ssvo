@@ -8,17 +8,26 @@
 
 namespace ssvo {
 
-template <int T>
-struct Align{
+template <int Size, int Num>
+class Align{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     enum {
-        PatchSize = T,
+        PatchSize = Size,
         PatchArea = PatchSize*PatchSize,
-        HalfPatchSize = T/2,
+        HalfPatchSize = Size/2,
+        Parameters = Num,
     };
+
+protected:
+    Matrix<double, Dynamic, PatchArea, RowMajor> ref_patch_cache_;
+    Matrix<double, Dynamic, Num, RowMajor> jacbian_cache_;
+    Matrix<double, Num, Num, RowMajor> Hessian_;
+    Matrix<double, Num, 1> Jres_;
 };
 
 
-class AlignSE3: public Align<4>
+class AlignSE3: public Align<4, 6>
 {
 public:
 
@@ -34,8 +43,6 @@ private:
 
 public:
 
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
     const int top_level_;
 
     const int max_iterations_;
@@ -49,12 +56,28 @@ private:
 
     std::vector<bool> visiable_fts_;
     Matrix<double, 3, Dynamic, RowMajor> ref_feature_cache_;
-    Matrix<double, Dynamic, Dynamic, RowMajor> ref_patch_cache_;
-    Matrix<double, Dynamic, 6, RowMajor> jacbian_cache_;
-    Matrix<double, 6, 6, RowMajor> Hessian_;
-    Matrix<double, 6, 1> Jres_;
 
     Sophus::SE3d T_cur_from_ref_;
+};
+
+
+class Align2DI : public Align<4, 3>
+{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+    bool run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
+             const Matrix<double, PatchArea, 1> &patch,
+             const Matrix<double, PatchArea, 1> &patch_gx,
+             const Matrix<double, PatchArea, 1> &patch_gy,
+             Eigen::Vector3d &estimate, const int MAX_ITER = 30, const double EPS = 1E-2f);
+
+private:
+
+    const int border_ = HalfPatchSize+1;
+
+    Matrix<double, Parameters, Parameters, RowMajor> invHessian_;
+    Eigen::Vector3d estimate_;
 };
 
 }
