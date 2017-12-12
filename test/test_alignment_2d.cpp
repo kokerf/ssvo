@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
     LOG_ASSERT(!gray.empty()) << "No corners detected!";
 
     cv::Mat show = rgb.clone();
-    for(int i = 0; i < corners.size(); i++)
+    for(size_t i = 0; i < corners.size(); i++)
     {
         cv::RNG rng(i);
         cv::Scalar color = cv::Scalar(rng.uniform(0,255), rng.uniform(0, 255), rng.uniform(0, 255));
@@ -52,7 +52,7 @@ int main(int argc, char *argv[])
     cv::waitKey(0);
 
     cv::Point2f p = corners[0];
-    Align2DI aligner;
+    Align2DI aligner(false);
 
     Matrix<uchar , Dynamic, Dynamic, RowMajor> eigen_gray = Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> >((uchar*)gray.data, gray.rows, gray.cols);
     Matrix<double , Dynamic, Dynamic, RowMajor> eigen_gray_gx = Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> >((double*)gray_gx.data, gray_gx.rows, gray_gx.cols);
@@ -81,8 +81,11 @@ int main(int argc, char *argv[])
         converged = aligner.run(eigen_noise, img, dx, dy, estimate);
     }
 
-    std::cout << "Truth: [" << p.x << ", " << p.y << "] Estiamte: [" << estimate.transpose() << "] converged: " << converged
-              << " Time(ms): " << (cv::getTickCount()-t0)/cv::getTickFrequency() << std::endl;
+    std::cout << "================\n"
+              << "TruePose: [" << p.x << ", " << p.y << "]\n"
+              << "Estiamte: [" << estimate.transpose() << "]\n"
+              << "Converged: " << converged << " "
+              << "Time(ms): " << (cv::getTickCount()-t0)/cv::getTickFrequency() << std::endl;
 
     return 0;
 }

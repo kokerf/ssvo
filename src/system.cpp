@@ -118,8 +118,14 @@ System::Stage System::processSecondFrame()
 System::Stage System::tracking()
 {
     current_frame_->setPose(last_frame_->pose());
-    AlignSE3 align(30, 1e-8);
-    align.run(last_frame_, current_frame_);
+    //! alignment by SE3
+    AlignSE3 align;
+    align.run(last_frame_, current_frame_, Config::alignTopLevel(), 30, 1e-8);
+
+    Sophus::SE3d T_ref_from_cur = last_frame_->pose()*current_frame_->pose_inverse();
+    AngleAxisd aa; aa = T_ref_from_cur.rotationMatrix();
+    LOG(INFO) << "trans: [" << T_ref_from_cur.translation().transpose()
+              << "] angle: [" << aa.axis().transpose() << "] * " << aa.angle();
 }
 
 }

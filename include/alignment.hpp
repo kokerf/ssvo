@@ -31,9 +31,10 @@ class AlignSE3: public Align<4, 6>
 {
 public:
 
-    AlignSE3(const int max_iterations, const double epslion);
+    AlignSE3(bool verbose=false, bool visible=false);
 
-    bool run(Frame::Ptr reference_frame, Frame::Ptr current_frame);
+    bool run(Frame::Ptr reference_frame, Frame::Ptr current_frame,
+             int top_level, int max_iterations = 30, double epslion = 1E-5f);
 
 private:
 
@@ -41,15 +42,10 @@ private:
 
     double computeResidual(int level, int N);
 
-public:
-
-    const int top_level_;
-
-    const int max_iterations_;
-
-    const double epslion_squared_;
-
 private:
+
+    const bool verbose_;
+    const bool visible_;
 
     Frame::Ptr ref_frame_;
     Frame::Ptr cur_frame_;
@@ -66,13 +62,17 @@ class Align2DI : public Align<4, 3>
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
+    Align2DI(bool verbose=false):verbose_(verbose){}
+
     bool run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
              const Matrix<double, PatchArea, 1> &patch,
              const Matrix<double, PatchArea, 1> &patch_gx,
              const Matrix<double, PatchArea, 1> &patch_gy,
-             Eigen::Vector3d &estimate, const int MAX_ITER = 30, const double EPS = 1E-2f);
+             Eigen::Vector3d &estimate, const int max_iterations = 30, const double epslion = 1E-2f);
 
 private:
+
+    const bool verbose_;
 
     const int border_ = HalfPatchSize+1;
 

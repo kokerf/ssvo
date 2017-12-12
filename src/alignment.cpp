@@ -9,61 +9,63 @@ namespace ssvo{
 // Align SE3
 //
 
-AlignSE3::AlignSE3(const int max_iterations, const double epslion):
-    top_level_(Config::alignTopLevel()), //patch_area_(patch_size_*patch_size_),half_patch_size_(patch_size_/2),
-    max_iterations_(max_iterations),
-    epslion_squared_(epslion*epslion)
-{
+AlignSE3::AlignSE3(bool verbose, bool visible):
+    verbose_(verbose), visible_(visible)
+{}
 
-}
-
-bool AlignSE3::run(Frame::Ptr reference_frame, Frame::Ptr current_frame)
+bool AlignSE3::run(Frame::Ptr reference_frame,
+                   Frame::Ptr current_frame,
+                   int top_level,
+                   int max_iterations,
+                   double epslion)
 {
+    double epslion_squared = epslion*epslion;
     ref_frame_ = reference_frame;
     cur_frame_ = current_frame;
-    std::vector<Feature::Ptr> fts = ref_frame_->getFeatures();
-    const size_t N = fts.size();
+
+    const size_t N = ref_frame_->features().size();
     LOG_ASSERT(N != 0) << " AlignSE3: Frame(" << reference_frame->id_ << ") "<< " no features to track!" ;
 
     ref_feature_cache_.resize(NoChange, N);
     ref_patch_cache_.resize(N, NoChange);
     jacbian_cache_.resize(N*PatchArea, NoChange);
 
-    T_cur_from_ref_ = current_frame->pose() * reference_frame->pose_inverse();
-    LOG(INFO) << "T_cur_from_ref_ " << T_cur_from_ref_.log().transpose();
+    T_cur_from_ref_ = cur_frame_->pose() * ref_frame_->pose_inverse();
+    LOG_IF(INFO, verbose_) << "T_cur_from_ref_ " << T_cur_from_ref_.log().transpose();
 
-    for(int l = top_level_; l >= 0; l--)
+    for(int l = top_level; l >= 0; l--)
     {
         const int n = computeReferencePatches(l);
 
         double res_old = std::numeric_limits<double>::max();
-        Sophus::SE3d T_old = T_cur_from_ref_;
-        for(int i = 0; i < max_iterations_; ++i)
+        Sophus::SE3d T_cur_from_ref_old = T_cur_from_ref_;
+        for(int i = 0; i < max_iterations; ++i)
         {
             //! compute residual
             double res = computeResidual(l, n);
 
             if(res > res_old)
             {
-                T_cur_from_ref_ = T_old;
+                T_cur_from_ref_ = T_cur_from_ref_old;
                 break;
             }
             //! update
             res_old = res;
-            T_old = T_cur_from_ref_;
+            T_cur_from_ref_old = T_cur_from_ref_;
             Sophus::SE3d::Tangent se3 = Hessian_.ldlt().solve(Jres_);
             T_cur_from_ref_ = T_cur_from_ref_ * Sophus::SE3d::exp(-se3);
 
-            LOG(INFO) << "Level: " << l << " Residual: [" << res << "] update: [" << T_cur_from_ref_.log().transpose() << "]";
+            LOG_IF(INFO, verbose_) << "Level: " << l << " Residual: " << res << " step: " << se3.dot(se3)
+                                   << " SE3: [" << T_cur_from_ref_.log().transpose() << "]";
 
             //! termination
-            if(se3.dot(se3) < epslion_squared_)
+            if(se3.dot(se3) < epslion_squared)
                  break;
         }
     }
 
-    current_frame->setPose(T_cur_from_ref_ * reference_frame->pose());
-    LOG(INFO) << "pose:\n " << T_cur_from_ref_.matrix3x4();
+    cur_frame_->setPose(T_cur_from_ref_ * reference_frame->pose());
+    LOG_IF(INFO, verbose_) << "T_cur_from_ref:\n " << T_cur_from_ref_.matrix3x4();
 
     return true;
 }
@@ -126,7 +128,6 @@ double AlignSE3::computeResidual(int level, int N)
     double res = 0;
     int count = 0;
 
-//    cv::Mat res_img = cv::Mat::zeros(rows, cols, CV_64FC1);
     cv::Mat showimg = cv::Mat::zeros(rows, cols, CV_8UC1);
     for(int n = 0; n < N; ++n)
     {
@@ -135,12 +136,10 @@ double AlignSE3::computeResidual(int level, int N)
         if(cur_px[0] < border || cur_px[1] < border || cur_px[0] + border > cols - 1 || cur_px[1] + border > rows - 1)
             continue;
 
-//        LOG(INFO) << cur_xyz.transpose() << " " << cur_px.transpose();
         Matrix<double, PatchArea, 1> residual;
         utils::interpolateMat<uchar, double, PatchSize>(cur_eigen_img, residual, cur_px[0], cur_px[1]);
-        residual.noalias() -= ref_patch_cache_.row(n);//.transpose();
+        residual.noalias() -= ref_patch_cache_.row(n);
         Matrix<double, PatchArea, 6, RowMajor> J = jacbian_cache_.block(n*PatchArea, 0, PatchArea, 6);
-        //Matrix<double, PatchArea, 6, RowMajor> J1 = Eigen::Map<Matrix<double, PatchArea, 6, RowMajor> >(jacbian_cache_.data()+n*PatchArea*6);
 
         Jres_.noalias() -= J.transpose() * residual;
         Hessian_.noalias() += J.transpose() * J;
@@ -148,20 +147,24 @@ double AlignSE3::computeResidual(int level, int N)
         res += residual.dot(residual)/PatchArea;
         count++;
 
-        cv::Mat mat(PatchSize, PatchSize, CV_64FC1, residual.data());
-        cv::Mat mat_temp;
-        Vector2i start = cur_px.cast<int>() - Vector2i(HalfPatchSize,HalfPatchSize);
-        Vector2i end = start + Vector2i(PatchSize,PatchSize);
-
-        mat.copyTo(mat_temp);
-        mat_temp = cv::abs(mat_temp);
-        mat_temp.convertTo(mat_temp, CV_8UC1);
-        mat_temp.copyTo(showimg.rowRange(start[1], end[1]).colRange(start[0], end[0]));
+        if(visible_)
+        {
+            cv::Mat mat_double(PatchSize, PatchSize, CV_64FC1, residual.data());
+            mat_double = cv::abs(mat_double);
+            Vector2i start = cur_px.cast<int>() - Vector2i(HalfPatchSize,HalfPatchSize);
+            Vector2i end = start + Vector2i(PatchSize,PatchSize);
+            cv::Mat mat_uchar;
+            mat_double.convertTo(mat_uchar, CV_8UC1);
+            mat_uchar.copyTo(showimg.rowRange(start[1], end[1]).colRange(start[0], end[0]));
+        }
 
     }
 
-    cv::imshow("res", showimg);
-    cv::waitKey(0);
+    if(visible_)
+    {
+        cv::imshow("res", showimg);
+        cv::waitKey(0);
+    }
 
     return res/count;
 }
@@ -174,10 +177,10 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
                    const Matrix<double, PatchArea, 1> &patch_gx,
                    const Matrix<double, PatchArea, 1> &patch_gy,
                    Eigen::Vector3d &estimate,
-                   const int MAX_ITER,
-                   const double EPS)
+                   const int max_iterations,
+                   const double epslion)
 {
-    const double min_update_squared = EPS*EPS;
+    const double min_update_squared = epslion*epslion;
     bool converged = false;
     estimate_ = estimate;
 
@@ -194,8 +197,8 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
     invHessian_ = Hessian_.inverse();
 
     Eigen::Vector3d update;
-    double res_old = std::numeric_limits<double>::max();
-    for(int iter = 0; iter < MAX_ITER; iter++)
+
+    for(int iter = 0; iter < max_iterations; iter++)
     {
         const double u = estimate_[0];
         const double v = estimate_[1];
@@ -203,7 +206,7 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
 
         if(u < border_ || v < border_ || u + border_ >= image.cols() - 1 || v + border_ >= image.rows() - 1)
         {
-            std::cerr << "Error! The estimate pixel location is out of the scope!" << std::endl;
+            LOG(ERROR) << "Error! The estimate pixel location is out of the scope!";
             return false;
         }
 
@@ -213,22 +216,15 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
         residual.noalias() -= patch;
         residual.array() += idiff;
 
-//        double res = residual.norm();
-//        if(res > res_old)
-//        {
-//            estimate_.noalias() += update;
-//            break;
-//        }
-//        res_old = res;
-
         Jres_ = jacbian_cache_.transpose() * residual;
 
         //! update
         update = invHessian_ * Jres_;
         estimate_.noalias() -= update;
 
-//        LOG(INFO) << "iter:" << iter << " estimate: [" << estimate_[0] << ", " << estimate_[1] << ", " << estimate_[2]
-//                  << "] update: [" << std::setw(12) << update.transpose() << "] res: " << residual.norm()/PatchArea;
+        LOG_IF(INFO, verbose_) << "iter:" << iter
+                               << " estimate: [" << estimate_[0] << ", " << estimate_[1] << ", " << estimate_[2]
+                               << "] res: " << residual.norm()/PatchArea;
 
         if(update.dot(update) < min_update_squared)
         {

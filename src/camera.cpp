@@ -59,7 +59,7 @@ Vector3d Camera::lift(const Vector2d &px) const
     else
     {
         xyz[0] = (px[0] - cx_) / fx_;
-        xyz[1] = (px[0] - cy_) / fy_;
+        xyz[1] = (px[1] - cy_) / fy_;
     }
 
     return xyz.normalized();
