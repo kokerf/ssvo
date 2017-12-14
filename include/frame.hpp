@@ -23,18 +23,6 @@ public:
 
     const ImgPyr image() const {return img_pyr_;}
 
-    //! Transform (c)amera from (w)orld
-    inline Sophus::SE3d Tcw() const { return Tcw_; }
-
-    //! Transform (w)orld from (c)amera
-    inline Sophus::SE3d pose() const { return Twc_; }
-
-    //! Set pose in world frame
-    inline void setPose(const Sophus::SE3d& pose) { Twc_ = pose; Tcw_ = Twc_.inverse();}
-
-    //! Set pose in world frame
-    inline void setPose(const Matrix3d& R, const Vector3d& t) { Twc_ = Sophus::SE3d(R, t); Tcw_ = Twc_.inverse();}
-
     inline Features features() const {return fts_; }
 
     inline std::vector<Feature::Ptr> getFeatures() const {return std::vector<Feature::Ptr>(fts_.begin(), fts_.end()); }
@@ -44,6 +32,29 @@ public:
     inline void setRefKeyFrame(const std::shared_ptr<KeyFrame> &kf) {ref_keyframe_ = kf;}
 
     inline std::shared_ptr<KeyFrame> getRefKeyFrame() const {return ref_keyframe_;}
+
+    //! Transform (c)amera from (w)orld
+    inline Sophus::SE3d Tcw() const { return Tcw_; }
+
+    //! Transform (w)orld from (c)amera
+    inline Sophus::SE3d pose() const { return Twc_; }
+
+    //! Principal ray in world frame
+    inline Vector3d ray() const { return Dw_; }
+
+    //! Set pose in world frame
+    inline void setPose(const Sophus::SE3d& pose) {
+        Twc_ = pose;
+        Tcw_ = Twc_.inverse();
+        Dw_ = Tcw_.rotationMatrix().determinant() * Tcw_.rotationMatrix().col(2);
+    }
+
+    //! Set pose in world frame
+    inline void setPose(const Matrix3d& R, const Vector3d& t) {
+        Twc_ = Sophus::SE3d(R, t);
+        Tcw_ = Twc_.inverse();
+        Dw_ = Tcw_.rotationMatrix().determinant() * Tcw_.rotationMatrix().col(2);
+    }
 
     inline static Ptr create(const cv::Mat& img, const double timestamp, Camera::Ptr cam)
     { return std::make_shared<Frame>(Frame(img, timestamp, cam)); }
@@ -93,6 +104,10 @@ public:
 
     Camera::Ptr cam_;
 
+    const int nlevels_;
+
+    const double log_level_factor_ = log(2.0f);
+
     Sophus::SE3d optimal_Tcw_;//! for optimization
 
 protected:
@@ -103,6 +118,7 @@ protected:
 
     Sophus::SE3d Tcw_;
     Sophus::SE3d Twc_;
+    Vector3d Dw_;
 
     std::shared_ptr<KeyFrame> ref_keyframe_;
 };

@@ -22,6 +22,22 @@ public:
 
     Feature::Ptr findObservation(const KeyFramePtr kf);
 
+    void updateViewAndDepth();
+
+    int predictScale(const double dist, const Frame::Ptr &frame);
+
+//    double getMinDistanceInvariance();
+//
+//    double getMaxDistanceInvariance();
+
+    bool getCloseViewObs(const Frame::Ptr &frame, KeyFramePtr &keyframe, int &level);
+
+    void increaseFound(int n=1);
+
+    void increaseVisible(int n=1);
+
+    double getFoundRatio();
+
     inline void setPose(const double x, const double y, const double z)
     {
         pose_[0] = x;
@@ -29,20 +45,15 @@ public:
         pose_[2] = z;
     }
 
-    inline void setPose(const Vector3d pose) {pose_ = pose;}
+    inline void setPose(const Vector3d pose) { pose_ = pose; }
 
-    inline Vector3d pose() {return pose_;}
+    inline Vector3d pose() { return pose_; }
 
-    inline static MapPoint::Ptr create(const Vector3d p)
-    {return std::make_shared<MapPoint>(MapPoint(p));}
-
-    inline static MapPoint::Ptr create(const Vector3d p, const KeyFramePtr kf, const Feature::Ptr ft)
-    {return std::make_shared<MapPoint>(MapPoint(p, kf, ft));}
+    inline static MapPoint::Ptr create(const Vector3d &p, const KeyFramePtr &kf)
+    { return std::make_shared<MapPoint>(MapPoint(p, kf)); }
 
 private:
-    MapPoint(const Vector3d p);
-
-    MapPoint(const Vector3d p, const KeyFramePtr kf, const Feature::Ptr ft);
+    MapPoint(const Vector3d &p, const KeyFramePtr &kf);
 
 public:
 
@@ -55,8 +66,19 @@ public:
 
 private:
     Vector3d pose_;
+
     std::unordered_map<KeyFramePtr, Feature::Ptr> obs_;
+
     int n_obs_;
+
+    Vector3d obs_dir_; //!< mean viewing direction, from map point to keyframe
+    double min_distance_;
+    double max_distance_;
+
+    int found_cunter_;
+    int visiable_cunter_;
+
+    KeyFramePtr refKF_;
 
 };
 

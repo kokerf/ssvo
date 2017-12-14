@@ -302,7 +302,7 @@ int main(int argc, char *argv[])
         Vector3d pt = frame1->cam_->lift(px_ref);
         pt *= depth/5000.0/pt[2];
 
-        ssvo::MapPoint::Ptr mpt = ssvo::MapPoint::create(pt);
+        ssvo::MapPoint::Ptr mpt = ssvo::MapPoint::create(pt, nullptr);
         Feature::Ptr feature_ref = Feature::create(px_ref, pt.normalized(), 0, mpt);
 
         frame0->addFeature(feature_ref);
