@@ -25,7 +25,7 @@ public:
 
     void liftPoints(std::vector<Vector2f>& pxs, std::vector<Vector3f>& fts) const;
 
-    Vector2d project(const Vector3d& P) const;
+    Vector2d project(const Vector3d& xyz) const;
 
     inline const int width() const { return width_; }
 
@@ -55,10 +55,10 @@ public:
 
     inline const Matrix3d Kinv() const { return K_inv_; }
 
-    inline bool observable(const Vector2i & obs, int boundary=0) const
+    inline bool isInFrame(const Vector2i & obs, int boundary=0) const
     {
-        if(obs[0]>=boundary && obs[0]<width()-boundary
-            && obs[1]>=boundary && obs[1]<height()-boundary)
+        if(obs[0] >= boundary && obs[0] < width()-boundary
+            && obs[1] >= boundary && obs[1] < height()-boundary)
             return true;
         return false;
     }

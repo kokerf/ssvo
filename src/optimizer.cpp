@@ -31,12 +31,12 @@ void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Ma
 {
     ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
 
-    kf1->optimal_Tw_ = kf1->pose();
-    kf2->optimal_Tw_ = kf2->pose();
+    kf1->optimal_Tcw_ = kf1->Tcw();
+    kf2->optimal_Tcw_ = kf2->Tcw();
 
-    problem_.AddParameterBlock(kf1->optimal_Tw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
-    problem_.AddParameterBlock(kf2->optimal_Tw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
-    problem_.SetParameterBlockConstant(kf1->optimal_Tw_.data());
+    problem_.AddParameterBlock(kf1->optimal_Tcw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
+    problem_.AddParameterBlock(kf2->optimal_Tcw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
+    problem_.SetParameterBlockConstant(kf1->optimal_Tcw_.data());
 
     const std::vector<Feature::Ptr> fts1 = kf1->getFeatures();
     MapPoints mpts;
@@ -57,16 +57,16 @@ void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Ma
         mpts.push_back(mpt);
 
         ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft1->ft[0]/ft1->ft[2], ft1->ft[1]/ft1->ft[2]);
-        problem_.AddResidualBlock(cost_function1, NULL, kf1->optimal_Tw_.data(), mpt->optimal_pose_.data());
+        problem_.AddResidualBlock(cost_function1, NULL, kf1->optimal_Tcw_.data(), mpt->optimal_pose_.data());
 
         ceres::CostFunction* cost_function2 = ceres_slover::ReprojectionErrorSE3::Create(ft2->ft[0]/ft2->ft[2], ft2->ft[1]/ft2->ft[2]);
-        problem_.AddResidualBlock(cost_function2, NULL, kf2->optimal_Tw_.data(), mpt->optimal_pose_.data());
+        problem_.AddResidualBlock(cost_function2, NULL, kf2->optimal_Tcw_.data(), mpt->optimal_pose_.data());
     }
 
     ceres::Solve(options_, &problem_, &summary_);
 
     //! update pose
-    kf2->setPose(kf2->optimal_Tw_);
+    kf2->setPose(kf2->optimal_Tcw_.inverse());
     std::for_each(mpts.begin(), mpts.end(), [](MapPoint::Ptr mpt){mpt->setPose(mpt->optimal_pose_);});
 }
 

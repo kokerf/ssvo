@@ -171,12 +171,12 @@ void align_by_ceres(Frame::Ptr reference_frame, Frame::Ptr current_frame, int le
 
     ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
 
-    reference_frame->optimal_Tw_ = reference_frame->pose();
-    current_frame->optimal_Tw_ = current_frame->pose();
+    reference_frame->optimal_Tcw_ = reference_frame->Tcw();
+    current_frame->optimal_Tcw_ = current_frame->Tcw();
 
-    problem.AddParameterBlock(reference_frame->optimal_Tw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
-    problem.AddParameterBlock(current_frame->optimal_Tw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
-    problem.SetParameterBlockConstant(reference_frame->optimal_Tw_.data());
+    problem.AddParameterBlock(reference_frame->optimal_Tcw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
+    problem.AddParameterBlock(current_frame->optimal_Tcw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
+    problem.SetParameterBlockConstant(reference_frame->optimal_Tcw_.data());
 
     const cv::Mat ref_img = reference_frame->getImage(level);
     const int cols = ref_img.cols;
@@ -203,7 +203,7 @@ void align_by_ceres(Frame::Ptr reference_frame, Frame::Ptr current_frame, int le
         utils::interpolateMat<uchar, double, 4>(ref_eigen_img, patch, ref_px[0], ref_px[1]);
 
         ceres::CostFunction* cost_function = ResidualErrorSE3::Create(current_frame->getImage(level), patch, mpt->pose(), current_frame->cam_);
-        problem.AddResidualBlock(cost_function, NULL, current_frame->optimal_Tw_.data());
+        problem.AddResidualBlock(cost_function, NULL, current_frame->optimal_Tcw_.data());
     }
 
     options.linear_solver_type = ceres::DENSE_SCHUR;
@@ -211,7 +211,7 @@ void align_by_ceres(Frame::Ptr reference_frame, Frame::Ptr current_frame, int le
     ceres::Solve(options, &problem, &summary);
 
     //! update pose
-    current_frame->setPose(current_frame->optimal_Tw_);
+    current_frame->setPose(current_frame->optimal_Tcw_.inverse());
 
     LOG(INFO) << summary.FullReport();
 
@@ -249,7 +249,7 @@ int main(int argc, char *argv[])
     qwc1.normalize();
     Sophus::SE3d Twc1(qwc1.toRotationMatrix(), Vector3d(ground_truth1[0], ground_truth1[1], ground_truth1[2]));
 
-    Sophus::SE3d T_1_from_0 = Twc1.inverse() * Twc0;
+    Sophus::SE3d T_0_from_1 = Twc0.inverse() * Twc1;
 
     std::cout << "Timestamp: " << std::setprecision(16) << timestamp0 << " " << timestamp1 << std::endl;
 
@@ -323,19 +323,19 @@ int main(int argc, char *argv[])
     }
     std::cout << "Time(ms): " << (cv::getTickCount()-t0)/cv::getTickFrequency() << std::endl;
 
-//    align_by_ceres(frame0, frame1, 1);
+//    align_by_ceres(frame0, frame1, 0);
 
-    Sophus::SE3d T_c_from_w = frame1->pose();
-    AngleAxisd aa0; aa0 = T_c_from_w.rotationMatrix();
-    AngleAxisd aa1; aa1 = T_1_from_0.rotationMatrix();
-    LOG(INFO) << "Aligen se3: " << T_c_from_w.translation().transpose() << " "
+    Sophus::SE3d T_w_from_c = frame1->pose();
+    AngleAxisd aa0; aa0 = T_w_from_c.rotationMatrix();
+    AngleAxisd aa1; aa1 = T_0_from_1.rotationMatrix();
+    LOG(INFO) << "Aligen se3: " << T_w_from_c.translation().transpose() << " "
               << aa0.axis().transpose() <<  " " << aa0.angle();
-    LOG(INFO) << "Ground se3: " << T_1_from_0.translation().transpose() << " "
+    LOG(INFO) << "Ground se3: " << T_0_from_1.translation().transpose() << " "
               << aa1.axis().transpose() <<  " " << aa1.angle();
-    LOG(INFO) << "\n"  << T_c_from_w.matrix();
-    LOG(INFO) << "\n"  << T_1_from_0.matrix();
-    double dist = T_1_from_0.translation().norm() - T_c_from_w.translation().norm();
-    LOG(INFO) << "\n"  << dist << " " << dist/T_1_from_0.translation().norm();
+    LOG(INFO) << "\n"  << T_w_from_c.matrix();
+    LOG(INFO) << "\n"  << T_0_from_1.matrix();
+    double dist = T_0_from_1.translation().norm() - T_w_from_c.translation().norm();
+    LOG(INFO) << "\n"  << dist << " " << dist/T_0_from_1.translation().norm();
 
     return 0;
 }

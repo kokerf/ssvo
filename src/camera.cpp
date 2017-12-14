@@ -65,9 +65,9 @@ Vector3d Camera::lift(const Vector2d &px) const
     return xyz.normalized();
 }
 
-Vector2d Camera::project(const Vector3d &P) const
+Vector2d Camera::project(const Vector3d &xyz) const
 {
-    Vector2d px = P.head<2>() / P[2];
+    Vector2d px = xyz.head<2>() / xyz[2];
     if(distortion_)
     {
         const double x = px[0];

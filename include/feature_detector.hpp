@@ -94,7 +94,7 @@ private:
     const int min_threshold_;
 
     std::vector<std::vector<Corner> > corners_in_levels_;
-    Grid grid_fliter;
+    Grid grid_fliter_;
 };
 
 }//! end of ssvo

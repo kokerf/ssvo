@@ -30,7 +30,7 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
     ref_patch_cache_.resize(N, NoChange);
     jacbian_cache_.resize(N*PatchArea, NoChange);
 
-    T_cur_from_ref_ = cur_frame_->pose() * ref_frame_->pose_inverse();
+    T_cur_from_ref_ = cur_frame_->Tcw() * ref_frame_->pose();
     LOG_IF(INFO, verbose_) << "T_cur_from_ref_ " << T_cur_from_ref_.log().transpose();
 
     for(int l = top_level; l >= 0; l--)
@@ -64,7 +64,7 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
         }
     }
 
-    cur_frame_->setPose(T_cur_from_ref_ * reference_frame->pose());
+    cur_frame_->setPose(ref_frame_->pose() * T_cur_from_ref_.inverse());
     LOG_IF(INFO, verbose_) << "T_cur_from_ref:\n " << T_cur_from_ref_.matrix3x4();
 
     return true;

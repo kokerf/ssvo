@@ -46,7 +46,7 @@ void System::process(const cv::Mat &image, const double timestamp)
         image_ = image.clone();
 
     current_frame_ = Frame::create(image_, timestamp, camera_);
-
+    current_frame_->setRefKeyFrame(reference_keyframe_);
 
     if(STAGE_TRACKING == stage_)
     {
@@ -111,6 +111,7 @@ System::Stage System::processSecondFrame()
 
     reference_keyframe_ = kfs[1];
     current_frame_->setPose(reference_keyframe_->pose());
+    current_frame_->setRefKeyFrame(reference_keyframe_);
 
     return STAGE_TRACKING;
 }
@@ -122,8 +123,10 @@ System::Stage System::tracking()
     AlignSE3 align;
     align.run(last_frame_, current_frame_, Config::alignTopLevel(), 30, 1e-8);
 
-    Sophus::SE3d T_ref_from_cur = last_frame_->pose()*current_frame_->pose_inverse();
+    Sophus::SE3d T_ref_from_cur = last_frame_->Tcw() * current_frame_->pose();
     AngleAxisd aa; aa = T_ref_from_cur.rotationMatrix();
+    LOG(INFO) << "pose_ref: [" << last_frame_->pose().log().transpose();
+    LOG(INFO) << "pose_cur: [" << current_frame_->pose().log().transpose();
     LOG(INFO) << "trans: [" << T_ref_from_cur.translation().transpose()
               << "] angle: [" << aa.axis().transpose() << "] * " << aa.angle();
 }

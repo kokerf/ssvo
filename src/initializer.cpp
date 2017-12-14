@@ -172,8 +172,12 @@ void Initializer::createInitalMap(Map::Ptr map, double map_scale)
     double scale = map_scale*count/mean_depth;
 
     //! rescale frame pose
+    std::cout << "T:\n" << T_ << std::endl;
+    Sophus::SE3d T_cur_from_ref(T_.topLeftCorner(3,3), T_.rightCols(1));
+    Sophus::SE3d T_ref_from_cur = T_cur_from_ref.inverse();
+    T_ref_from_cur.translation() = T_ref_from_cur.translation() * scale;
     frame_ref_->setPose(Matrix3d::Identity(), Vector3d::Zero());
-    frame_cur_->setPose(T_.topLeftCorner(3,3), T_.rightCols(1)*scale);
+    frame_cur_->setPose(T_ref_from_cur);
 
     //! create Key Frame
     KeyFrame::Ptr keyframe_ref = ssvo::KeyFrame::create(frame_ref_);
@@ -240,7 +244,7 @@ void Initializer::drowOpticalFlow(const cv::Mat &src, cv::Mat &dst) const
     dst = src.clone();
     for(size_t i=0; i<pts_ref.size();i++)
     {
-        cv::line(dst, pts_ref[i], pts_cur[i],cv::Scalar(0,0,70));
+        cv::line(dst, pts_ref[i], pts_cur[i], cv::Scalar(0,0,70));
     }
 }
 
@@ -285,7 +289,7 @@ void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur,
     std::vector<uchar> status;
 
     cv::TermCriteria termcrit(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, klt_max_iter, klt_eps);
-
+    // TODO 是不是需要考虑在不同level提取的交点，在其他level的得分会比较低，使得跟踪效果不好？
     cv::calcOpticalFlowPyrLK(
         img_ref, img_cur,
         pts_ref_temp, pts_cur_temp,

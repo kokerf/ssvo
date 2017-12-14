@@ -57,10 +57,9 @@ private:
 };
 
 
-class Align2DI : public Align<4, 3>
+class Align2DI : public Align<8, 3>
 {
 public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
     Align2DI(bool verbose=false):verbose_(verbose){}
 

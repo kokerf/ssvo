@@ -57,8 +57,8 @@ void evalueErrors(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, double& error)
 {
     std::vector<Feature::Ptr> fts1 = kf1->getFeatures();
     double residuals[2] = {0,0};
-    Matrix3d R = kf2->pose().rotationMatrix();
-    Vector3d t = kf2->pose().translation();
+    Matrix3d R = kf2->Tcw().rotationMatrix();
+    Vector3d t = kf2->Tcw().translation();
     for(Feature::Ptr ft1:fts1)
     {
         MapPoint::Ptr mpt = ft1->mpt;
@@ -128,6 +128,7 @@ int main(int argc, char const *argv[])
         cv::Mat img = cv::imread(*i, CV_LOAD_IMAGE_UNCHANGED);
         if(img.empty()) throw std::runtime_error("Could not open image: " + *i);
 
+        std::cout << "Load Image: " << *i << std::endl;
         cv::Mat cur_img;
         cv::cvtColor(img, cur_img, cv::COLOR_RGB2GRAY);
 

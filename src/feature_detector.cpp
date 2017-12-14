@@ -118,7 +118,7 @@ FastDetector::FastDetector(int width, int height, int border, int nlevels,
                            int grid_size, int grid_min_size, int max_threshold, int min_threshold):
     width_(width), height_(height), border_(border), nlevels_(nlevels), grid_min_size_(grid_min_size),
     size_adjust_(grid_size!=grid_min_size), max_threshold_(max_threshold), min_threshold_(min_threshold),
-    grid_fliter(width, height, grid_size, grid_min_size)
+    grid_fliter_(width, height, grid_size, grid_min_size)
 {
     corners_in_levels_.resize(nlevels_);
 }
@@ -129,26 +129,26 @@ int FastDetector::detect(const ImgPyr& img_pyr, std::vector<Corner>& corners, co
     LOG_ASSERT(img_pyr.size() == nlevels_) << "Unmatch size of ImgPyr(" << img_pyr.size() << ") with nlevel(" << nlevels_ << ")";
     LOG_ASSERT(img_pyr[0].size() == cv::Size(width_, height_)) << "Error cv::Mat size: " << img_pyr[0].size();
 
-    grid_fliter.resetOccupancy();
-    grid_fliter.setOccupancy(exist_corners);
+    grid_fliter_.resetOccupancy();
+    grid_fliter_.setOccupancy(exist_corners);
 
-    Grid new_grid_fliter(width_, height_, grid_fliter.getSize(), grid_min_size_);
+    Grid new_grid_fliter_(width_, height_, grid_fliter_.getSize(), grid_min_size_);
 
     int new_coners_ = 0;
     for(int level = 0; level < nlevels_; level++)
     {
         detectInLevel(img_pyr[level], level, eigen_threshold);
 
-        new_coners_ += new_grid_fliter.setOccupancy(corners_in_levels_[level]);
+        new_coners_ += new_grid_fliter_.setOccupancy(corners_in_levels_[level]);
     }
 
-    new_grid_fliter.getCorners(corners);
+    new_grid_fliter_.getCorners(corners);
 
     //! if adjust the grid size
     if(size_adjust_)
     {
-        grid_fliter.setOccupancyAdaptive(corners, N);
-        grid_fliter.getCorners(corners);
+        grid_fliter_.setOccupancyAdaptive(corners, N);
+        grid_fliter_.getCorners(corners);
     }
     else
     {
@@ -218,7 +218,7 @@ int FastDetector::detectInLevel(const cv::Mat& img, int level, const double eige
             continue;
 
         //! if the pixel is occupied, ignore this corner
-        if(grid_fliter.getOccupancy(u, v))
+        if(grid_fliter_.getOccupancy(u, v))
             continue;
 
         const float score = shiTomasiScore(img, u, v);
@@ -243,7 +243,7 @@ void FastDetector::drawGrid(const cv::Mat& img, cv::Mat& img_grid)
 {
     img_grid = img.clone();
 
-    int grid_size = grid_fliter.getSize();
+    int grid_size = grid_fliter_.getSize();
     int grid_n_cols = (ceil(static_cast<double>(width_)/grid_size));
     int grid_n_rows = (ceil(static_cast<double>(height_)/grid_size));
 

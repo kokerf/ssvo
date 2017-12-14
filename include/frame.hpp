@@ -9,6 +9,8 @@
 
 namespace ssvo{
 
+class KeyFrame;
+
 class Frame//: private noncopyable
 {
 public:
@@ -17,21 +19,31 @@ public:
 
     const cv::Mat getImage(int level) const;
 
+    bool isVisiable(const Vector3d &xyz_w) const;
+
     const ImgPyr image() const {return img_pyr_;}
 
-    inline Sophus::SE3d pose() const { return Tcw_; }
+    //! Transform (c)amera from (w)orld
+    inline Sophus::SE3d Tcw() const { return Tcw_; }
 
-    inline Sophus::SE3d pose_inverse() const { return Twc_; }
+    //! Transform (w)orld from (c)amera
+    inline Sophus::SE3d pose() const { return Twc_; }
 
-    inline void setPose(const Sophus::SE3d& T) { Tcw_ = T; Twc_ = Tcw_.inverse();}
+    //! Set pose in world frame
+    inline void setPose(const Sophus::SE3d& pose) { Twc_ = pose; Tcw_ = Twc_.inverse();}
 
-    inline void setPose(const Matrix3d& R, const Vector3d& t) { Tcw_ = Sophus::SE3d(R, t); Twc_ = Tcw_.inverse();}
+    //! Set pose in world frame
+    inline void setPose(const Matrix3d& R, const Vector3d& t) { Twc_ = Sophus::SE3d(R, t); Tcw_ = Twc_.inverse();}
 
     inline Features features() const {return fts_; }
 
     inline std::vector<Feature::Ptr> getFeatures() const {return std::vector<Feature::Ptr>(fts_.begin(), fts_.end()); }
 
     inline void addFeature(const Feature::Ptr ft) { fts_.push_back(ft); };
+
+    inline void setRefKeyFrame(const std::shared_ptr<KeyFrame> &kf) {ref_keyframe_ = kf;}
+
+    inline std::shared_ptr<KeyFrame> getRefKeyFrame() const {return ref_keyframe_;}
 
     inline static Ptr create(const cv::Mat& img, const double timestamp, Camera::Ptr cam)
     { return std::make_shared<Frame>(Frame(img, timestamp, cam)); }
@@ -81,7 +93,7 @@ public:
 
     Camera::Ptr cam_;
 
-    Sophus::SE3d optimal_Tw_;//! for optimization
+    Sophus::SE3d optimal_Tcw_;//! for optimization
 
 protected:
 
@@ -91,6 +103,8 @@ protected:
 
     Sophus::SE3d Tcw_;
     Sophus::SE3d Twc_;
+
+    std::shared_ptr<KeyFrame> ref_keyframe_;
 };
 
 }

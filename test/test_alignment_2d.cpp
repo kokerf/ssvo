@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
     Matrix<double , Dynamic, Dynamic, RowMajor> eigen_gray_gx = Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> >((double*)gray_gx.data, gray_gx.rows, gray_gx.cols);
     Matrix<double , Dynamic, Dynamic, RowMajor> eigen_gray_gy = Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> >((double*)gray_gy.data, gray_gy.rows, gray_gy.cols);
     Matrix<uchar , Dynamic, Dynamic, RowMajor> eigen_noise = Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> >((uchar*)noise.data, noise.rows, noise.cols);
-    const int patch_size = 4;
+    const int patch_size = Align2DI::PatchSize;
     Matrix<double, patch_size*patch_size, 1> img, dx, dy;
     utils::interpolateMat<uchar, double, patch_size>(eigen_gray, img, dx, dy, p.x, p.y);
     std::cout << "block: \n" << eigen_gray.block<patch_size, patch_size>((int)p.y-2, (int)p.x-2).cast<int>() << std::endl;
@@ -77,7 +77,7 @@ int main(int argc, char *argv[])
     bool converged = false;
     for(int i = 0; i < 1000; i++)
     {
-        estimate = Eigen::Vector3d(p.x-2, p.y+1.5,0);
+        estimate = Eigen::Vector3d(p.x-2.4, p.y+2.1,0);
         converged = aligner.run(eigen_noise, img, dx, dy, estimate);
     }
 
