@@ -206,7 +206,7 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
 
         if(u < border_ || v < border_ || u + border_ >= image.cols() - 1 || v + border_ >= image.rows() - 1)
         {
-            LOG(ERROR) << "Error! The estimate pixel location is out of the scope!";
+            LOG_IF(WARNING, verbose_) << "WARNING! The estimate pixel location is out of the scope!";
             return false;
         }
 

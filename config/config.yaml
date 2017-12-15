@@ -44,6 +44,10 @@ Mapping.min_connection_observations: 15
 Align.top_level: 3   # not big then Image.pyramid_levels
 Align.patch_size: 4
 
+# Tracking
+Tracking.min_quality_fts: 50
+Tracking.max_quality_drop_fts: 40
+
 # glog
 Glog.alsologtostderr: 1
 Glog.colorlogtostderr: 1

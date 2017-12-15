@@ -16,10 +16,19 @@ class System: public noncopyable
 {
 public:
     enum Stage{
-        STAGE_INITAL_RESET,
-        STAGE_INITAL_PROCESS,
-        STAGE_TRACKING,
+        STAGE_FIRST_FRAME,
+        STAGE_SECOND_FRAME,
+        STAGE_NORMAL_FRAME,
         STAGE_RELOCALIZING
+    };
+
+    enum Status {
+        STATUS_INITAL_RESET,
+        STATUS_INITAL_FALIURE,
+        STATUS_INITAL_SUCCEED,
+        STATUS_TRACKING_BAD,
+        STATUS_TRACKING_GOOD,
+        STATUS_TRACKING_INSUFFICIENT,
     };
 
     System(std::string config_file);
@@ -29,13 +38,21 @@ public:
 private:
 
     void processFrame();
-    Stage tracking();
-    Stage processFirstFrame();
-    Stage processSecondFrame();
+
+    Status tracking();
+
+    Status processFirstFrame();
+
+    Status processSecondFrame();
+
+    void finishFrame();
+
+    void showImage(Stage stage);
 
 private:
 
     Stage stage_;
+    Status status_;
 
     Camera::Ptr camera_;
     Map::Ptr map_;
@@ -47,7 +64,7 @@ private:
 
     std::thread viewer_thread_;
 
-    cv::Mat image_;
+    cv::Mat rgb_;
     Frame::Ptr current_frame_;
     Frame::Ptr last_frame_;
     KeyFrame::Ptr reference_keyframe_;

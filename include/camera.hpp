@@ -55,10 +55,18 @@ public:
 
     inline const Matrix3d Kinv() const { return K_inv_; }
 
-    inline bool isInFrame(const Vector2i & obs, int boundary=0) const
+    inline bool isInFrame(const Vector2i &obs, int boundary=0) const
     {
-        if(obs[0] >= boundary && obs[0] < width()-boundary
-            && obs[1] >= boundary && obs[1] < height()-boundary)
+        if(obs[0] >= boundary && obs[0] < width() - boundary
+            && obs[1] >= boundary && obs[1] < height() - boundary)
+            return true;
+        return false;
+    }
+
+    inline bool isInFrame(const Vector2i &obs, int boundary, int level) const
+    {
+        if(obs[0] >= boundary && obs[0] < (width() >> level) - boundary
+            && obs[1] >= boundary && obs[1] < (height() >> level) - boundary)
             return true;
         return false;
     }

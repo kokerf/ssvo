@@ -88,7 +88,7 @@ FeatureTracker::~FeatureTracker()
     for(Grid::Cell*& c : grid_.cells) { delete c; }
 }
 
-void FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame, const Map::Ptr &map)
+int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame, const Map::Ptr &map)
 {
     resetGrid();
 
@@ -121,6 +121,8 @@ void FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame, const Map::Ptr &
         if(matches > 120)
             break;
     }
+
+    return matches;
 }
 
 void FeatureTracker::resetGrid()
@@ -181,7 +183,7 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
         Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > dx_eigen(dx.data(), patch_size*patch_size, 1);
         Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > dy_eigen(dy.data(), patch_size*patch_size, 1);
 
-        Align2DI matcher(true);
+        Align2DI matcher;
         const double factor = static_cast<double>(1 << track_level);
         Vector3d estimate(0,0,0); estimate.head<2>() = candidate.px / factor;
 
@@ -194,13 +196,14 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
 //        cv::imshow("cur track", show_cur);
 //        cv::waitKey(0);
 
-        mpt->increaseVisible();
         if(matcher.run(cur_eigen_image, patch_eigen, dx_eigen, dy_eigen, estimate))
         {
             Vector2d new_px = estimate.head<2>() * factor;
             Vector3d new_ft = frame->cam_->lift(new_px);
             Feature::Ptr new_feature = Feature::create(new_px, new_ft.normalized(), track_level, mpt);
             frame->addFeature(new_feature);
+            mpt->increaseVisible();
+            mpt->increaseFound();
 
 //            LOG(INFO) << "Creat new feature in level: " << track_level;
 //
@@ -209,8 +212,13 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
 //            cv::imshow("cur track", show_cur);
 //            cv::waitKey(0);
 
-            mpt->increaseFound();
             return true;
+        }
+        else
+        {
+            //! if this point is not near the border, increase visiable
+            if(frame->cam_->isInFrame(candidate.px.cast<int>()/factor, (patch_size >> 1) + 2, track_level))
+                mpt->increaseVisible();
         }
     }
 

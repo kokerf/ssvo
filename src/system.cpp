@@ -7,7 +7,8 @@ namespace ssvo{
 
 std::string Config::FileName;
 
-System::System(std::string config_file)
+System::System(std::string config_file) :
+    stage_(STAGE_FIRST_FRAME), status_(STATUS_INITAL_RESET)
 {
     LOG_ASSERT(!config_file.empty()) << "Empty Config file input!!!";
     Config::FileName = config_file;
@@ -32,68 +33,58 @@ System::System(std::string config_file)
     fast_detector_ = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
     feature_tracker_ = FeatureTracker::create(width, height, grid_size);
     initializer_ = Initializer::create(fast_detector_);
-    viewer_ = Viewer::create(map_);
-
-    stage_ = STAGE_INITAL_RESET;
+    viewer_ = Viewer::create(map_, cv::Size(width, height));
 
 }
 
 void System::process(const cv::Mat &image, const double timestamp)
 {
     //! get gray image
-    if(image.channels() == 3)
-        cv::cvtColor(image, image_, cv::COLOR_RGB2GRAY);
-    else
-        image_ = image.clone();
+    rgb_ = image;
+    cv::Mat gray = image.clone();
+    if(gray.channels() == 3)
+        cv::cvtColor(gray, gray, cv::COLOR_RGB2GRAY);
 
-    current_frame_ = Frame::create(image_, timestamp, camera_);
+    current_frame_ = Frame::create(gray, timestamp, camera_);
     current_frame_->setRefKeyFrame(reference_keyframe_);
 
-    if(STAGE_TRACKING == stage_)
+    if(STAGE_NORMAL_FRAME == stage_)
     {
-        tracking();
-        cv::waitKey(0);
+        status_ = tracking();
     }
-    else if(STAGE_INITAL_PROCESS== stage_)
+    else if(STAGE_SECOND_FRAME== stage_)
     {
-        stage_ = processSecondFrame();
+        status_ = processSecondFrame();
     }
-    else if(STAGE_INITAL_RESET == stage_)
+    else if(STAGE_FIRST_FRAME == stage_)
     {
-        stage_ = processFirstFrame();
+        status_ = processFirstFrame();
     }
     else if(STAGE_RELOCALIZING == stage_)
     {
 
     }
 
-    viewer_->showImage(image);
-    viewer_->setCurrentCameraPose(current_frame_->pose().matrix());
-    last_frame_ = current_frame_;
-
-    LOG(WARNING) << "System Stage: " << stage_;
+    finishFrame();
 }
 
-System::Stage System::processFirstFrame()
+System::Status System::processFirstFrame()
 {
     InitResult result = initializer_->addFirstImage(current_frame_);
     if(result == RESET)
-        return STAGE_INITAL_RESET;
+        return STATUS_INITAL_RESET;
 
-    return STAGE_INITAL_PROCESS;
+    return STATUS_INITAL_SUCCEED;
 }
 
-System::Stage System::processSecondFrame()
+System::Status System::processSecondFrame()
 {
     InitResult result = initializer_->addSecondImage(current_frame_);
-    cv::Mat klt_img;
-    initializer_->drowOpticalFlow(image_, klt_img);
-    cv::imshow("KLTracking", klt_img);
 
     if(result == RESET)
-        return STAGE_INITAL_RESET;
+        return STATUS_INITAL_RESET;
     else if(result == FAILURE)
-        return STAGE_INITAL_PROCESS;
+        return STATUS_INITAL_FALIURE;
 
     map_->clear();
     initializer_->createInitalMap(map_, Config::mapScale());
@@ -114,10 +105,10 @@ System::Stage System::processSecondFrame()
     current_frame_->setPose(reference_keyframe_->pose());
     current_frame_->setRefKeyFrame(reference_keyframe_);
 
-    return STAGE_TRACKING;
+    return STATUS_INITAL_SUCCEED;
 }
 
-System::Stage System::tracking()
+System::Status System::tracking()
 {
     // TODO 先验信息怎么设置？
     current_frame_->setPose(last_frame_->pose());
@@ -125,14 +116,84 @@ System::Stage System::tracking()
     AlignSE3 align;
     align.run(last_frame_, current_frame_, Config::alignTopLevel(), 30, 1e-8);
 
-    Sophus::SE3d T_ref_from_cur = last_frame_->Tcw() * current_frame_->pose();
-    AngleAxisd aa; aa = T_ref_from_cur.rotationMatrix();
-    LOG(INFO) << "pose_ref: [" << last_frame_->pose().log().transpose();
-    LOG(INFO) << "pose_cur: [" << current_frame_->pose().log().transpose();
-    LOG(INFO) << "trans: [" << T_ref_from_cur.translation().transpose()
-              << "] angle: [" << aa.axis().transpose() << "] * " << aa.angle();
+    //! track local map
+    LOG(INFO) << "Tracking local map";
+    int matches = feature_tracker_->reprojectLoaclMap(current_frame_, map_);
+    LOG(INFO) << "Track " << matches << "points";
 
-    feature_tracker_->reprojectLoaclMap(current_frame_, map_);
+    // TODO tracking status
+    if(matches < Config::minQualityFts())
+        return STATUS_TRACKING_BAD;
+
+    return STATUS_TRACKING_GOOD;
+}
+
+void System::finishFrame()
+{
+    Stage last_stage = stage_;
+    if(STAGE_NORMAL_FRAME == stage_)
+    {
+        if(STATUS_TRACKING_BAD)
+        {
+
+        }
+        else if(STATUS_TRACKING_INSUFFICIENT)
+        {
+
+        }
+    }
+    else if(STAGE_SECOND_FRAME == stage_)
+    {
+        switch(status_)
+        {
+            case STATUS_INITAL_FALIURE : stage_ = STAGE_SECOND_FRAME; break;
+            case STATUS_INITAL_RESET   : stage_ = STAGE_FIRST_FRAME; break;
+            case STATUS_INITAL_SUCCEED : stage_ = STAGE_NORMAL_FRAME; break;
+            default: break;
+        }
+    }
+    else if(STAGE_FIRST_FRAME == stage_)
+    {
+        if(STATUS_INITAL_SUCCEED == status_)
+            stage_ = STAGE_SECOND_FRAME;
+    }
+
+
+    // TODO keyframe selection
+
+    //! update
+    last_frame_ = current_frame_;
+
+    LOG(WARNING) << "System Stage: " << stage_;
+
+    //! display
+    viewer_->showImage(rgb_);
+    viewer_->setCurrentCameraPose(current_frame_->pose().matrix());
+    showImage(last_stage);
+}
+
+void System::showImage(Stage stage)
+{
+    cv::Mat image = rgb_;
+    if(image.channels() < 3)
+        cv::cvtColor(image, image, CV_GRAY2RGB);
+
+    if(STAGE_NORMAL_FRAME == stage)
+    {
+        std::vector<Feature::Ptr> fts = current_frame_->getFeatures();
+        for (Feature::Ptr ft : fts)
+        {
+            Vector2d px = ft->px;
+            cv::circle(image, cv::Point2d(px[0], px[1]), 2, cv::Scalar(0, 255, 0), -1);
+        }
+    }
+    else if(STAGE_SECOND_FRAME == stage)
+    {
+        initializer_->drowOpticalFlow(image, image);
+    }
+
+    cv::imshow("SSVO Current Image", image);
+    cv::waitKey(1);
 }
 
 }

@@ -79,10 +79,10 @@ private:
     double min_distance_;
     double max_distance_;
 
+    KeyFramePtr refKF_;
+
     int found_cunter_;
     int visiable_cunter_;
-
-    KeyFramePtr refKF_;
 
 };
 

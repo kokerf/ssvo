@@ -11,56 +11,48 @@ namespace ssvo{
 
 class KeyFrame;
 
-class Frame//: private noncopyable
+class Frame : public noncopyable
 {
 public:
 
     typedef std::shared_ptr<Frame> Ptr;
 
+    const ImgPyr image() const;
+
     const cv::Mat getImage(int level) const;
 
-    bool isVisiable(const Vector3d &xyz_w) const;
+    //! Transform (c)amera from (w)orld
+    Sophus::SE3d Tcw();
 
-    const ImgPyr image() const {return img_pyr_;}
+    //! Transform (w)orld from (c)amera
+    Sophus::SE3d pose();
 
-    inline Features features() const {return fts_; }
+    //! Principal ray in world frame
+    Vector3d ray();
 
-    inline std::vector<Feature::Ptr> getFeatures() const {return std::vector<Feature::Ptr>(fts_.begin(), fts_.end()); }
+    //! Set pose in world frame
+    void setPose(const Sophus::SE3d& pose);
 
-    inline void addFeature(const Feature::Ptr ft) { fts_.push_back(ft); };
+    //! Set pose in world frame
+    void setPose(const Matrix3d& R, const Vector3d& t);
+
+    bool isVisiable(const Vector3d &xyz_w);
+
+    Features features();
+
+    std::vector<Feature::Ptr> getFeatures();
+
+    void addFeature(const Feature::Ptr ft);
 
     inline void setRefKeyFrame(const std::shared_ptr<KeyFrame> &kf) {ref_keyframe_ = kf;}
 
     inline std::shared_ptr<KeyFrame> getRefKeyFrame() const {return ref_keyframe_;}
 
-    //! Transform (c)amera from (w)orld
-    inline Sophus::SE3d Tcw() const { return Tcw_; }
-
-    //! Transform (w)orld from (c)amera
-    inline Sophus::SE3d pose() const { return Twc_; }
-
-    //! Principal ray in world frame
-    inline Vector3d ray() const { return Dw_; }
-
-    //! Set pose in world frame
-    inline void setPose(const Sophus::SE3d& pose) {
-        Twc_ = pose;
-        Tcw_ = Twc_.inverse();
-        Dw_ = Tcw_.rotationMatrix().determinant() * Tcw_.rotationMatrix().col(2);
-    }
-
-    //! Set pose in world frame
-    inline void setPose(const Matrix3d& R, const Vector3d& t) {
-        Twc_ = Sophus::SE3d(R, t);
-        Tcw_ = Twc_.inverse();
-        Dw_ = Tcw_.rotationMatrix().determinant() * Tcw_.rotationMatrix().col(2);
-    }
-
     inline static Ptr create(const cv::Mat& img, const double timestamp, Camera::Ptr cam)
-    { return std::make_shared<Frame>(Frame(img, timestamp, cam)); }
+    { return Ptr(new Frame(img, timestamp, cam)); }
 
     inline static Ptr create(const ImgPyr& img_pyr, const double timestamp, Camera::Ptr cam)
-    { return std::make_shared<Frame>(Frame(img_pyr, timestamp, cam)); }
+    { return Ptr(new Frame(img_pyr, timestamp, cam)); }
 
     inline static void jacobian_xyz2uv(
         const Vector3d& xyz_in_f,
@@ -121,6 +113,9 @@ protected:
     Vector3d Dw_;
 
     std::shared_ptr<KeyFrame> ref_keyframe_;
+
+    std::mutex mutex_pose_;
+    std::mutex mutex_feature_;
 };
 
 }

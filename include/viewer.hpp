@@ -18,21 +18,23 @@ public:
 
     void showImage(const cv::Mat &image);
 
-    static Viewer::Ptr create(Map::Ptr map){ return Viewer::Ptr(new Viewer(map));}
+    static Viewer::Ptr create(Map::Ptr map, cv::Size image_size){ return Viewer::Ptr(new Viewer(map, image_size));}
 
 private:
 
-    Viewer(Map::Ptr map);
+    Viewer(Map::Ptr map, cv::Size image_size);
 
     void drawMapPoints();
 
-    void drawCamera(const Matrix4d &pose);
+    void drawCamera(const Matrix4d &pose, cv::Scalar color);
 
     void drawKeyFrames();
 
+    void drawCurFrame();
+
 private:
 
-    std::shared_ptr<std::thread> thread_;
+    std::shared_ptr<std::thread> pongolin_thread_;
 
     Map::Ptr map_;
 
@@ -40,8 +42,8 @@ private:
     cv::Size image_size_;
     Matrix4d camera_pose_;
 
+    std::mutex mutex_pose_;
     std::mutex mutex_image_;
-    std::mutex mutex_camera_;
 
     float map_point_size;
     float key_frame_size;

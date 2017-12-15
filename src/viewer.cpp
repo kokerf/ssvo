@@ -3,18 +3,15 @@
 
 namespace ssvo{
 
-Viewer::Viewer(Map::Ptr map) : map_(map)
+Viewer::Viewer(Map::Ptr map, cv::Size image_size) : map_(map), image_size_(image_size)
 {
     camera_pose_.setIdentity();
-
-    image_size_.width = Config::imageWidth();;
-    image_size_.height = Config::imageHeight();;
 
     map_point_size = 3;
     key_frame_size = 0.05;
     key_frame_line_size = 2;
 
-    thread_ = std::make_shared<std::thread>(std::bind(&Viewer::run, this));
+    pongolin_thread_ = std::make_shared<std::thread>(std::bind(&Viewer::run, this));
 }
 
 void Viewer::run()
@@ -26,7 +23,8 @@ void Viewer::run()
     const int IMAGE_WIDTH = UI_HEIGHT *image_size_.width/image_size_.height;
     const int IMAGE_HEIGHT = UI_HEIGHT;
 
-    pangolin::CreateWindowAndBind("SSVO Viewer", WIN_WIDTH, WIN_HEIGHT);
+    const string win_name = "SSVO Viewer";
+    pangolin::CreateWindowAndBind(win_name, WIN_WIDTH, WIN_HEIGHT);
     glEnable(GL_DEPTH_TEST);
 
 
@@ -87,6 +85,9 @@ void Viewer::run()
 
         drawKeyFrames();
 
+        drawCurFrame();
+
+        cv::Mat im;
         {
             std::lock_guard<std::mutex> lock(mutex_image_);
             if(!image_.empty())
@@ -94,6 +95,7 @@ void Viewer::run()
 //            cv::imshow("image_",image_);
 //            cv::waitKey(1);
         }
+
         image_viewer.Activate();
         glColor3f(1.0,1.0,1.0);
         imageTexture.RenderToViewportFlipY();
@@ -102,7 +104,7 @@ void Viewer::run()
         pangolin::FinishFrame();
     }
 
-    pangolin::DestroyWindow("SSVO Viewer");
+    pangolin::DestroyWindow(win_name);
 }
 
 void Viewer::showImage(const cv::Mat &image)
@@ -117,7 +119,7 @@ void Viewer::showImage(const cv::Mat &image)
 
 void Viewer::setCurrentCameraPose(const Matrix4d &pose)
 {
-    std::lock_guard<std::mutex> lock(mutex_camera_);
+    std::lock_guard<std::mutex> lock(mutex_pose_);
     camera_pose_ = pose;
 }
 
@@ -128,8 +130,14 @@ void Viewer::drawKeyFrames()
     for(KeyFrame::Ptr kf : kfs)
     {
         Sophus::SE3d pose = kf->pose();
-        drawCamera(pose.matrix());
+        drawCamera(pose.matrix(), cv::Scalar(0.0, 1.0, 0.2));
     }
+}
+
+void Viewer::drawCurFrame()
+{
+    std::lock_guard<std::mutex> lock(mutex_pose_);
+    drawCamera(camera_pose_.matrix(), cv::Scalar(0.0, 0.0, 1.0));
 }
 
 void Viewer::drawMapPoints()
@@ -147,7 +155,7 @@ void Viewer::drawMapPoints()
     glEnd();
 }
 
-void Viewer::drawCamera(const Matrix4d &pose)
+void Viewer::drawCamera(const Matrix4d &pose, cv::Scalar color)
 {
     const float w = key_frame_size ;
     const float h = key_frame_size * 0.57;
@@ -159,7 +167,7 @@ void Viewer::drawCamera(const Matrix4d &pose)
     glMultMatrixd(pose.data());
 
     glLineWidth(key_frame_line_size);
-    glColor3f(0.0f, 1.0f, 0.2f);
+    glColor3f((GLfloat)color[0], (GLfloat)color[1], (GLfloat)color[2]);
     glBegin(GL_LINES);
     glVertex3f(0,0,0);
     glVertex3f(w,h,z);

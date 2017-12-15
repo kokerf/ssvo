@@ -22,7 +22,7 @@ public:
     std::vector<KeyFrame::Ptr> getConnectedKeyFrames();
 
     inline static KeyFrame::Ptr create(const Frame::Ptr frame)
-    { return std::make_shared<KeyFrame>(KeyFrame(frame)); }
+    { return Ptr(new KeyFrame(frame)); }
 
 private:
     KeyFrame(const Frame::Ptr frame);

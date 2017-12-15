@@ -35,7 +35,7 @@ public:
 
     ~FeatureTracker();
 
-    void reprojectLoaclMap(const Frame::Ptr &frame, const Map::Ptr &map);
+    int reprojectLoaclMap(const Frame::Ptr &frame, const Map::Ptr &map);
 
     inline static FeatureTracker::Ptr create(int width, int height, int grid_size)
     {return FeatureTracker::Ptr(new FeatureTracker(width, height, grid_size));}

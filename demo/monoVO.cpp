@@ -27,7 +27,7 @@ int main(int argc, char *argv[])
         vo.process(image, timestamp);
 
         //cv::imshow("Image Show", image);
-        cv::waitKey(40);
+//        cv::waitKey(40);
     }
 
     return 0;

@@ -67,6 +67,10 @@ public:
 
     static int alignPatchSize(){return getInstance().align_patch_size;}
 
+    static int minQualityFts(){return getInstance().min_quality_fts;}
+
+    static int maxQualityDropFts(){return getInstance().max_quality_drop_fts;}
+
 private:
     static Config& getInstance()
     {
@@ -136,6 +140,10 @@ private:
         align_top_level = MIN(align_top_level, top_level);
         align_patch_size = (int)fs["Align.patch_size"];
 
+        //! Tracking
+        min_quality_fts = (int)fs["Tracking.min_quality_fts"];
+        max_quality_drop_fts = (int)fs["Tracking.max_quality_drop_fts"];
+
         //! glog
         if(!fs["Glog.alsologtostderr"].empty())
             fs["Glog.alsologtostderr"] >> FLAGS_alsologtostderr;
@@ -200,6 +208,10 @@ private:
     //! Align
     int align_top_level;
     int align_patch_size;
+
+    //! Tracking
+    int min_quality_fts;
+    int max_quality_drop_fts;
 
 };
 

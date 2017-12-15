@@ -244,7 +244,7 @@ void Initializer::drowOpticalFlow(const cv::Mat &src, cv::Mat &dst) const
     dst = src.clone();
     for(size_t i=0; i<pts_ref.size();i++)
     {
-        cv::line(dst, pts_ref[i], pts_cur[i], cv::Scalar(0,0,70));
+        cv::line(dst, pts_ref[i], pts_cur[i], cv::Scalar(0, 255, 0));
     }
 }
 
