@@ -22,7 +22,7 @@ int main(int argc, char *argv[])
     for(size_t i = 0; i < dataset.N; i++)
     {
         dataset.readItemByIndex(i, image_name, timestamp);
-        LOG(INFO) << "Image: " << image_name << ", time: " << std::fixed <<std::setprecision(7)<< timestamp << std::endl;
+        LOG(INFO) << "=== Load Image: " << image_name << ", time: " << std::fixed <<std::setprecision(7)<< timestamp << std::endl;
         cv::Mat image = cv::imread(image_name, CV_LOAD_IMAGE_UNCHANGED);
         vo.process(image, timestamp);
 

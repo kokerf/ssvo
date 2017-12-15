@@ -170,9 +170,7 @@ int main(int argc, char const *argv[])
     LOG(INFO) <<"Pose:\n" << kfs[1]->pose().matrix();
     LOG(INFO) << "Error before BA: " << error;
 
-    Optimizer optimizer;
-    optimizer.twoViewBundleAdjustment(kfs[0], kfs[1], nullptr);
-    optimizer.report(true);
+    Optimizer::twoViewBundleAdjustment(kfs[0], kfs[1], true, true);
 
     LOG(INFO) <<"Pose:\n" << kfs[1]->pose().matrix();
     evalueErrors(kfs[0], kfs[1], error);

@@ -91,13 +91,11 @@ System::Status System::processSecondFrame()
 
     LOG(WARNING) << "Start two-view BA";
 
-    ssvo::Optimizer optimizer;
     std::vector<KeyFrame::Ptr> kfs = map_->getAllKeyFramesOrderedByID();
     LOG_ASSERT(kfs.size() == 2) << "Error number of keyframes in map after initailizer: " << kfs.size();
     LOG_ASSERT(kfs[0]->id_ == 0 && kfs[1]->id_ == 1) << "Error id of keyframe: " << kfs[0]->id_ << ", " << kfs[0]->id_;
 
-    optimizer.twoViewBundleAdjustment(kfs[0], kfs[1], nullptr);
-    optimizer.report(true);
+    Optimizer::twoViewBundleAdjustment(kfs[0], kfs[1], true);
 
     LOG(WARNING) << "End of two-view BA";
 
@@ -119,11 +117,16 @@ System::Status System::tracking()
     //! track local map
     LOG(INFO) << "Tracking local map";
     int matches = feature_tracker_->reprojectLoaclMap(current_frame_, map_);
-    LOG(INFO) << "Track " << matches << "points";
+    LOG(INFO) << "Track with " << matches << " points";
 
     // TODO tracking status
     if(matches < Config::minQualityFts())
         return STATUS_TRACKING_BAD;
+
+    //! motion-only BA
+    LOG(INFO) << "Motion-Only BA";
+    Optimizer::motionOnlyBundleAdjustment(current_frame_, true);
+    LOG(INFO) << "Finish Motion-Only BA";
 
     return STATUS_TRACKING_GOOD;
 }

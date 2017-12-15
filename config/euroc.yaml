@@ -1,29 +1,29 @@
 %YAML:1.0
 
-# Camera calibration and distortion parameters (OpenCV)
-Camera.fx: 517.306408
-Camera.fy: 516.469215
-Camera.cx: 318.643040
-Camera.cy: 255.313989
+# for EuRoc cam0
 
-Camera.k1: 0.262383
-Camera.k2: -0.953104
-Camera.p1: -0.005358
-Camera.p2: 0.002628
-#Camera.k3: 1.163314
+# Camera calibration and distortion parameters (OpenCV)
+Camera.fx: 458.654
+Camera.fy: 457.296
+Camera.cx: 367.215
+Camera.cy: 248.375
+
+Camera.k1: -0.28340811
+Camera.k2: 0.07395907
+Camera.p1: 0.00019359
+Camera.p2: 1.76187114e-05
 
 # Camera frames per second
-Camera.fps: 30.0
+Camera.fps: 20.0
 
 # Image
-Image.width: 640
+Image.width: 752
 Image.height: 480
 Image.pyramid_levels: 3  # 0-based
 
 # Fast detector
 FastDetector.grid_size: 20
 FastDetector.grid_min_size: 8
-#FastDetector.grid_max_fts: 3
 FastDetector.fast_max_threshold: 20
 FastDetector.fast_min_threshold: 7
 FastDetector.fast_min_eigen: 30.0

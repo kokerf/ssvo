@@ -14,18 +14,14 @@ namespace ssvo {
 class Optimizer: public noncopyable
 {
 public:
-    Optimizer();
 
-    void twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Map::Ptr map);
+    static void twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, bool report=false, bool verbose=false);
 
-    void report(bool with_residual = false);
+    static void motionOnlyBundleAdjustment(Frame::Ptr frame, bool report=false, bool verbose=false);
 
     static Vector2d reprojectionError(const ceres::Problem &problem, ceres::ResidualBlockId id);
 
-private:
-    ceres::Problem problem_;
-    ceres::Solver::Options options_;
-    ceres::Solver::Summary summary_;
+    static void reportInfo(const ceres::Problem &problem, const ceres::Solver::Summary summary, bool report=false, bool verbose=false);
 };
 
 namespace ceres_slover {

@@ -35,13 +35,13 @@ public:
 
     static int initMinInliers(){return getInstance().init_min_inliers;}
 
-    static double initSigma(){return getInstance().init_sigma;}
+    static double pixelSigma(){return getInstance().init_sigma;}
 
-    static double initSigma2(){return getInstance().init_sigma2;}
+    static double pixelSigma2(){return getInstance().init_sigma2;}
 
-    static double initUnSigma(){return getInstance().init_unsigma;}
+    static double pixelUnSigma(){return getInstance().init_unsigma;}
 
-    static double initUnSigma2(){return getInstance().init_unsigma2;}
+    static double pixelUnSigma2(){return getInstance().init_unsigma2;}
 
     static int initMaxRansacIters(){return getInstance().init_max_iters;}
 

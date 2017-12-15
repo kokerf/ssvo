@@ -116,7 +116,7 @@ InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
 
     //! [3] geometry check by F matrix
     Matrix3d E;
-    int inliers_count = Fundamental::findFundamentalMat(fts_ref_, fts_cur_, E, inliers_, Config::initUnSigma2(), Config::initMaxRansacIters(), true);
+    int inliers_count = Fundamental::findFundamentalMat(fts_ref_, fts_cur_, E, inliers_, Config::pixelUnSigma2(), Config::initMaxRansacIters(), true);
 
     LOG(INFO)<< "[INIT][3] Inliers after epipolar geometry check: " << inliers_count;
     if(inliers_count < Config::initMinInliers()) return FAILURE;
@@ -136,7 +136,7 @@ InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
     double t5 = (double)cv::getTickCount();
 
     //! [5] reprojective check
-    inliers_count = checkReprejectErr(pts_ref_, pts_cur_, fts_ref_, fts_cur_, T_, inliers_, p3ds_, Config::initUnSigma2()*4);
+    inliers_count = checkReprejectErr(pts_ref_, pts_cur_, fts_ref_, fts_cur_, T_, inliers_, p3ds_, Config::pixelUnSigma2()*4);
     LOG(INFO) << "[INIT][5] Inliers after reprojective check: " << inliers_count;
     if(inliers_count < Config::initMinInliers()) return FAILURE;
 

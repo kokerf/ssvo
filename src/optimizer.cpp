@@ -1,42 +1,20 @@
 #include <iomanip>
 #include "optimizer.hpp"
+#include "config.hpp"
 
 namespace ssvo{
 
-Optimizer::Optimizer()
+
+void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, bool report, bool verbose)
 {
-    options_.linear_solver_type = ceres::DENSE_SCHUR;
-    options_.minimizer_progress_to_stdout = true;
-//    options_.gradient_tolerance = 1e-4;
-//    options_.function_tolerance = 1e-4;
-    //options_.max_solver_time_in_seconds = 0.2;
-}
-
-void Optimizer::report(bool with_residual)
-{
-    LOG(INFO) << summary_.FullReport();
-
-    if(!with_residual)
-        return;
-
-    std::vector<ceres::ResidualBlockId> ids;
-    problem_.GetResidualBlocks(&ids);
-    for (size_t i = 0; i < ids.size(); ++i)
-    {
-        LOG(INFO) << "BlockId: " << std::setw(5) << i <<" residual(RMSE): " << reprojectionError(problem_, ids[i]).norm();
-    }
-}
-
-void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Map::Ptr map)
-{
-    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
-
     kf1->optimal_Tcw_ = kf1->Tcw();
     kf2->optimal_Tcw_ = kf2->Tcw();
 
-    problem_.AddParameterBlock(kf1->optimal_Tcw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
-    problem_.AddParameterBlock(kf2->optimal_Tcw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
-    problem_.SetParameterBlockConstant(kf1->optimal_Tcw_.data());
+    ceres::Problem problem;
+    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
+    problem.AddParameterBlock(kf1->optimal_Tcw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
+    problem.AddParameterBlock(kf2->optimal_Tcw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
+    problem.SetParameterBlockConstant(kf1->optimal_Tcw_.data());
 
     const std::vector<Feature::Ptr> fts1 = kf1->getFeatures();
     MapPoints mpts;
@@ -57,17 +35,68 @@ void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, Ma
         mpts.push_back(mpt);
 
         ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft1->ft[0]/ft1->ft[2], ft1->ft[1]/ft1->ft[2]);
-        problem_.AddResidualBlock(cost_function1, NULL, kf1->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+        problem.AddResidualBlock(cost_function1, NULL, kf1->optimal_Tcw_.data(), mpt->optimal_pose_.data());
 
         ceres::CostFunction* cost_function2 = ceres_slover::ReprojectionErrorSE3::Create(ft2->ft[0]/ft2->ft[2], ft2->ft[1]/ft2->ft[2]);
-        problem_.AddResidualBlock(cost_function2, NULL, kf2->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+        problem.AddResidualBlock(cost_function2, NULL, kf2->optimal_Tcw_.data(), mpt->optimal_pose_.data());
     }
 
-    ceres::Solve(options_, &problem_, &summary_);
+
+    ceres::Solver::Options options;
+    ceres::Solver::Summary summary;
+    options.linear_solver_type = ceres::DENSE_SCHUR;
+    options.minimizer_progress_to_stdout = report & verbose;
+//    options_.gradient_tolerance = 1e-4;
+//    options_.function_tolerance = 1e-4;
+    //options_.max_solver_time_in_seconds = 0.2;
+
+    ceres::Solve(options, &problem, &summary);
 
     //! update pose
     kf2->setPose(kf2->optimal_Tcw_.inverse());
     std::for_each(mpts.begin(), mpts.end(), [](MapPoint::Ptr mpt){mpt->setPose(mpt->optimal_pose_);});
+
+    //! Report
+    reportInfo(problem, summary, report, verbose);
+}
+
+void Optimizer::motionOnlyBundleAdjustment(Frame::Ptr frame, bool report, bool verbose)
+{
+    frame->optimal_Tcw_ = frame->Tcw();
+
+    ceres::Problem problem;
+    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
+    problem.AddParameterBlock(frame->optimal_Tcw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
+
+    double scale = Config::pixelUnSigma2() * 4;
+    ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
+
+    std::vector<Feature::Ptr> fts = frame->getFeatures();
+    for(Feature::Ptr ft : fts)
+    {
+        MapPoint::Ptr mpt = ft->mpt;
+        if(mpt == nullptr)
+            continue;
+
+        mpt->optimal_pose_ = mpt->pose();
+        ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->ft[0]/ft->ft[2], ft->ft[1]/ft->ft[2]);
+        problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+        problem.SetParameterBlockConstant(mpt->optimal_pose_.data());
+    }
+
+    ceres::Solver::Options options;
+    ceres::Solver::Summary summary;
+    options.linear_solver_type = ceres::DENSE_SCHUR;
+    options.minimizer_progress_to_stdout = report & verbose;
+    options.max_linear_solver_iterations = 20;
+
+    ceres::Solve(options, &problem, &summary);
+
+    //! update pose
+    frame->setPose(frame->optimal_Tcw_.inverse());
+
+    //! Report
+    reportInfo(problem, summary, report, verbose);
 }
 
 Vector2d Optimizer::reprojectionError(const ceres::Problem& problem, ceres::ResidualBlockId id)
@@ -78,6 +107,26 @@ Vector2d Optimizer::reprojectionError(const ceres::Problem& problem, ceres::Resi
     Vector2d residual;
     cost->Evaluate(parameterBlocks.data(), residual.data(), nullptr);
     return residual;
+}
+
+void Optimizer::reportInfo(const ceres::Problem &problem, const ceres::Solver::Summary summary, bool report, bool verbose)
+{
+    if(!report) return;
+
+    if(!verbose)
+    {
+        LOG(INFO) << summary.BriefReport();
+    }
+    else
+    {
+        LOG(INFO) << summary.FullReport();
+        std::vector<ceres::ResidualBlockId> ids;
+        problem.GetResidualBlocks(&ids);
+        for (size_t i = 0; i < ids.size(); ++i)
+        {
+            LOG(INFO) << "BlockId: " << std::setw(5) << i <<" residual(RMSE): " << reprojectionError(problem, ids[i]).norm();
+        }
+    }
 }
 
 
