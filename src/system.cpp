@@ -17,7 +17,7 @@ System::System(std::string config_file)
     const int width = Config::imageWidth();
     const int height = Config::imageHeight();
     const int level = Config::imageTopLevel();
-    const int image_border = Config::imageBorder();
+    const int image_border = Align2DI::PatchSize;
     //! camera
     const cv::Mat K = Config::cameraIntrinsic();
     const cv::Mat DistCoef = Config::cameraDistCoef();
@@ -30,6 +30,7 @@ System::System(std::string config_file)
     map_ = Map::create();
     camera_ = Camera::create(width, height, K, DistCoef);
     fast_detector_ = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
+    feature_tracker_ = FeatureTracker::create(width, height, grid_size);
     initializer_ = Initializer::create(fast_detector_);
     viewer_ = Viewer::create(map_);
 
@@ -118,6 +119,7 @@ System::Stage System::processSecondFrame()
 
 System::Stage System::tracking()
 {
+    // TODO 先验信息怎么设置？
     current_frame_->setPose(last_frame_->pose());
     //! alignment by SE3
     AlignSE3 align;
@@ -129,6 +131,8 @@ System::Stage System::tracking()
     LOG(INFO) << "pose_cur: [" << current_frame_->pose().log().transpose();
     LOG(INFO) << "trans: [" << T_ref_from_cur.translation().transpose()
               << "] angle: [" << aa.axis().transpose() << "] * " << aa.angle();
+
+    feature_tracker_->reprojectLoaclMap(current_frame_, map_);
 }
 
 }

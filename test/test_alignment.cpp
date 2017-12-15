@@ -257,7 +257,6 @@ int main(int argc, char *argv[])
     int width = Config::imageWidth();
     int height = Config::imageHeight();
     int level = Config::imageTopLevel();
-    int image_border = Config::imageBorder();
     int grid_size = Config::gridSize();
     int grid_min_size = Config::gridMinSize();
     int fast_max_threshold = Config::fastMaxThreshold();
@@ -275,7 +274,7 @@ int main(int argc, char *argv[])
     frame1->setPose(Matrix3d::Identity(), Vector3d::Zero());
 
     std::vector<Corner> corners, old_corners;
-    FastDetector::Ptr fast_detector = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
+    FastDetector::Ptr fast_detector = FastDetector::create(width, height, 8, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
     fast_detector->detect(frame0->image(), corners, old_corners, 200, fast_min_eigen);
 
     cv::Mat kps_img;

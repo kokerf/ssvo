@@ -26,7 +26,7 @@ int main(int argc, char const *argv[])
     int width = Config::imageWidth();
     int height = Config::imageHeight();
     int level = Config::imageTopLevel();
-    int image_border = Config::imageBorder();
+    int image_border = 8;
     int grid_size = Config::gridSize();
     int grid_min_size = Config::gridMinSize();
     int fast_max_threshold = Config::fastMaxThreshold();

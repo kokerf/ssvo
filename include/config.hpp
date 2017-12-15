@@ -45,7 +45,7 @@ public:
 
     static int initMaxRansacIters(){return getInstance().init_max_iters;}
 
-    static int imageBorder(){return getInstance().image_border;}
+//    static int imageBorder(){return getInstance().image_border;}
 
     static int gridSize(){return getInstance().grid_size;}
 
@@ -108,7 +108,7 @@ private:
         fps = (double)fs["Camera.fps"];
 
         //! FAST detector parameters
-        image_border = (int)fs["FastDetector.image_border"];
+//        image_border = (int)fs["FastDetector.image_border"];
         grid_size = (int)fs["FastDetector.grid_size"];
         grid_min_size = (int)fs["FastDetector.grid_min_size"];
         //grid_max_fts = (int)fs["FastDetector.grid_max_fts"];
@@ -174,7 +174,7 @@ private:
     double fps;
 
     //! FAST detector parameters
-    int image_border;
+//    int image_border;
     int grid_size;
     int grid_min_size;
     //int grid_max_fts;

@@ -7,6 +7,7 @@
 #include "map.hpp"
 #include "initializer.hpp"
 #include "feature_detector.hpp"
+#include "feature_tracker.hpp"
 #include "viewer.hpp"
 
 namespace ssvo {
@@ -39,7 +40,9 @@ private:
     Camera::Ptr camera_;
     Map::Ptr map_;
     FastDetector::Ptr fast_detector_;
+    FeatureTracker::Ptr feature_tracker_;
     Initializer::Ptr initializer_;
+
     Viewer::Ptr viewer_;
 
     std::thread viewer_thread_;
