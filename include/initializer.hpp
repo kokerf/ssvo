@@ -72,6 +72,7 @@ private:
     Frame::Ptr frame_ref_;
     Frame::Ptr frame_cur_;
 
+    Corners corners_;
     std::vector<cv::Point2f> pts_ref_;
     std::vector<cv::Point2f> pts_cur_;
     std::vector<cv::Point2d> fts_ref_;

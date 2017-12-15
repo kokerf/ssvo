@@ -29,16 +29,23 @@ class FeatureTracker : public noncopyable
     };
 
 public:
-    FeatureTracker(int width, int height, int border, int grid_size);
+    typedef std::shared_ptr<FeatureTracker> Ptr;
+
+    FeatureTracker(int width, int height, int grid_size);
+
+    ~FeatureTracker();
 
     void reprojectLoaclMap(const Frame::Ptr &frame, const Map::Ptr &map);
 
-    void resetGrid();
+    inline static FeatureTracker::Ptr create(int width, int height, int grid_size)
+    {return FeatureTracker::Ptr(new FeatureTracker(width, height, grid_size));}
 
 private:
+    void resetGrid();
+
     bool reprojectMapPoint(const Frame::Ptr &frame, const MapPoint::Ptr &point);
 
-    bool trackMapPoints(const Frame::Ptr &frame, const Grid::Cell &cell);
+    bool trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell);
 
 private:
 
@@ -66,7 +73,7 @@ void getWarpMatrixAffine(
 template<typename Td, int size>
 void warpAffine(
     const cv::Mat &img_ref,
-    const Matrix<Td, size, size, RowMajor> &patch,
+    Matrix<Td, size, size, RowMajor> &patch,
     const Matrix2d &A_cur_from_ref,
     const Vector2d &px_ref,
     const int level_ref,

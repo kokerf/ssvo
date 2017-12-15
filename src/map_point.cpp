@@ -7,8 +7,8 @@ namespace ssvo
 unsigned long int MapPoint::next_id_ = 0;
 
 MapPoint::MapPoint(const Vector3d &p, const KeyFrame::Ptr &kf) :
-        id_(next_id_++), pose_(p), n_obs_(0),
-        min_distance_(0.0), max_distance_(0.0), refKF_(kf)
+        id_(next_id_++), pose_(p), n_obs_(0), min_distance_(0.0), max_distance_(0.0), refKF_(kf),
+        found_cunter_(1), visiable_cunter_(1)
 {
 }
 
@@ -42,8 +42,7 @@ void MapPoint::updateViewAndDepth()
     for(std::pair<KeyFrame::Ptr, Feature::Ptr> obs : obs_)
     {
         Vector3d Ow = obs.first->pose().translation();
-        Vector3d obs_dir = Ow - pose_;
-        obs_dir.normalize();
+        Vector3d obs_dir((Ow - pose_).normalized());
         normal = normal + obs_dir;
         n++;
     }
@@ -75,7 +74,7 @@ int MapPoint::predictScale(const double dist, const Frame::Ptr &frame)
 {
     double ratio = max_distance_ / dist;
 
-    int scale = ceil(log(ratio) / frame->log_level_factor_);
+    int scale = roundf(log(ratio) / frame->log_level_factor_);
     if(scale < 0)
         scale = 0;
     else if(scale >= frame->nlevels_)
@@ -115,15 +114,12 @@ bool MapPoint::getCloseViewObs(const Frame::Ptr &frame, KeyFrame::Ptr &keyframe,
         return false;
 
     //! 3. find close view keyframe
-    Vector3d frame_dir = frame->ray();
-    frame_obs_dir.normalize();
-    frame_dir.normalize();
+    Vector3d frame_dir(frame->ray().normalized());
 
     double max_cos_angle = 0.0;
     for(std::pair<KeyFrame::Ptr, Feature::Ptr> item : obs_)
     {
-        Vector3d kf_dir = item.first->ray();
-        kf_dir.normalize();
+        Vector3d kf_dir(item.first->ray().normalized());
         double view_cos_angle = kf_dir.dot(frame_dir);
 
         //! find min angle

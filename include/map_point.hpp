@@ -6,6 +6,8 @@
 
 namespace ssvo {
 
+class Frame;
+
 class KeyFrame;
 
 class MapPoint
@@ -16,6 +18,8 @@ public:
 
     typedef std::shared_ptr<KeyFrame> KeyFramePtr;
 
+    typedef std::shared_ptr<Frame> FramePtr;
+
     void addObservation(const KeyFramePtr kf, const Feature::Ptr ft);
 
     std::map<KeyFramePtr, Feature::Ptr> getObservations();
@@ -24,13 +28,13 @@ public:
 
     void updateViewAndDepth();
 
-    int predictScale(const double dist, const Frame::Ptr &frame);
+    int predictScale(const double dist, const FramePtr &frame);
 
 //    double getMinDistanceInvariance();
 //
 //    double getMaxDistanceInvariance();
 
-    bool getCloseViewObs(const Frame::Ptr &frame, KeyFramePtr &keyframe, int &level);
+    bool getCloseViewObs(const FramePtr &frame, KeyFramePtr &keyframe, int &level);
 
     void increaseFound(int n=1);
 

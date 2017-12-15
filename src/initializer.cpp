@@ -20,24 +20,23 @@ InitResult Initializer::addFirstImage(Frame::Ptr frame_ref)
     //! get refrence frame
     frame_ref_ = frame_ref;
 
-    Corners corners;
     Corners old_corners;
-    fast_detector_->detect(frame_ref_->image(), corners, old_corners, 1.5*Config::initMinCorners(), Config::fastMinEigen());
+    fast_detector_->detect(frame_ref_->image(), corners_, old_corners, 1.5*Config::initMinCorners(), Config::fastMinEigen());
 
     //! check corner number of first image
-    const int N = corners.size();
+    const int N = corners_.size();
     if(N < Config::initMinCorners())
     {
-        LOG(WARNING) << "[INIT][0] First image has too less corners(" << corners.size() << ") !!!";
+        LOG(WARNING) << "[INIT][0] First image has too less corners(" << corners_.size() << ") !!!";
         return RESET;
     }
-    LOG(INFO) << "[INIT][0] Detect corners: " << corners.size();
+    LOG(INFO) << "[INIT][0] Detect corners: " << corners_.size();
 
     //! create inital optical flow
     pts_ref_.reserve(N);
     pts_cur_.reserve(N);
     fts_ref_.reserve(N);
-    for(const Corner &corner: corners)
+    for(const Corner &corner: corners_)
     {
         pts_ref_.push_back(cv::Point2f(corner.x, corner.y));
         pts_cur_.push_back(cv::Point2f(corner.x, corner.y));
@@ -195,8 +194,8 @@ void Initializer::createInitalMap(Map::Ptr map, double map_scale)
         Vector3d ft_cur(fts_cur_[i].x, fts_cur_[i].y, 1);
 
         ssvo::MapPoint::Ptr mpt = ssvo::MapPoint::create(p3ds_[i]*scale, keyframe_ref);
-        Feature::Ptr feature_ref = Feature::create(px_ref, ft_ref.normalized(), 0, mpt);
-        Feature::Ptr feature_cur = Feature::create(px_cur, ft_cur.normalized(), 0, mpt);
+        Feature::Ptr feature_ref = Feature::create(px_ref, ft_ref.normalized(), corners_[i].level, mpt);
+        Feature::Ptr feature_cur = Feature::create(px_cur, ft_cur.normalized(), corners_[i].level, mpt);
 
         map->insertMapPoint(mpt);
 
