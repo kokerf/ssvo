@@ -64,7 +64,7 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
         }
     }
 
-    cur_frame_->setPose(ref_frame_->pose() * T_cur_from_ref_.inverse());
+    cur_frame_->setTcw(T_cur_from_ref_*ref_frame_->Tcw());
     LOG_IF(INFO, verbose_) << "T_cur_from_ref:\n " << T_cur_from_ref_.matrix3x4();
 
     return true;
@@ -206,7 +206,7 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
 
         if(u < border_ || v < border_ || u + border_ >= image.cols() - 1 || v + border_ >= image.rows() - 1)
         {
-            LOG_IF(WARNING, verbose_) << "WARNING! The estimate pixel location is out of the scope!";
+            LOG_IF(INFO, verbose_) << "WARNING! The estimate pixel location is out of the scope!";
             return false;
         }
 

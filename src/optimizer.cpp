@@ -53,7 +53,7 @@ void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, bo
     ceres::Solve(options, &problem, &summary);
 
     //! update pose
-    kf2->setPose(kf2->optimal_Tcw_.inverse());
+    kf2->setTcw(kf2->optimal_Tcw_);
     std::for_each(mpts.begin(), mpts.end(), [](MapPoint::Ptr mpt){mpt->setPose(mpt->optimal_pose_);});
 
     //! Report
@@ -93,7 +93,7 @@ void Optimizer::motionOnlyBundleAdjustment(Frame::Ptr frame, bool report, bool v
     ceres::Solve(options, &problem, &summary);
 
     //! update pose
-    frame->setPose(frame->optimal_Tcw_.inverse());
+    frame->setTcw(frame->optimal_Tcw_);
 
     //! Report
     reportInfo(problem, summary, report, verbose);

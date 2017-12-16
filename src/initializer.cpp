@@ -8,15 +8,15 @@
 
 namespace ssvo{
 
-Initializer::Initializer(FastDetector::Ptr fast_detector):
-    fast_detector_(fast_detector)
+Initializer::Initializer(FastDetector::Ptr fast_detector, bool verbose):
+    fast_detector_(fast_detector), verbose_(verbose)
 {};
 
 InitResult Initializer::addFirstImage(Frame::Ptr frame_ref)
 {
     reset();
 
-    LOG(WARNING) << "[INIT][*] -- Added first image --";
+    LOG_IF(WARNING, verbose_) << "[INIT][*] -- Added first image --";
     //! get refrence frame
     frame_ref_ = frame_ref;
 
@@ -30,7 +30,7 @@ InitResult Initializer::addFirstImage(Frame::Ptr frame_ref)
         LOG(WARNING) << "[INIT][0] First image has too less corners(" << corners_.size() << ") !!!";
         return RESET;
     }
-    LOG(INFO) << "[INIT][0] Detect corners: " << corners_.size();
+    LOG_IF(INFO, verbose_) << "[INIT][0] Detect corners: " << corners_.size();
 
     //! create inital optical flow
     pts_ref_.reserve(N);
@@ -73,7 +73,7 @@ InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
         return RESET;
     }
 
-    LOG(INFO) << "[INIT][*] -- Processing second image --";
+    LOG_IF(INFO, verbose_) << "[INIT][*] -- Processing second image --";
 
     frame_cur_ = frame_cur;
 
@@ -82,7 +82,7 @@ InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
     //! [1] KLT tracking
     kltTrack(frame_ref_->getImage(0), frame_cur_->getImage(0), pts_ref_, pts_cur_, inliers_);
     calcDisparity(pts_ref_, pts_cur_, inliers_, disparities_);
-    LOG(INFO) << "[INIT][1] KLT tracking points: " << disparities_.size();
+    LOG_IF(INFO, verbose_) << "[INIT][1] KLT tracking points: " << disparities_.size();
     if(disparities_.size() < Config::initMinTracked()) return RESET;
 
     double t2 = (double)cv::getTickCount();
@@ -109,7 +109,7 @@ InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
     int idx = 0;
     std::for_each(temp_udist.begin(), temp_udist.end(), [&](cv::Point2f& pt){fts_cur_[idx].x = pt.x; fts_cur_[idx].y = pt.y; idx++;});
 
-    LOG(INFO) << "[INIT][2] Avage disparity: " << disparity;
+    LOG_IF(INFO, verbose_) << "[INIT][2] Avage disparity: " << disparity;
     if(disparity < Config::initMinDisparity()) return FAILURE;
 
     double t3 = (double)cv::getTickCount();
@@ -118,7 +118,7 @@ InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
     Matrix3d E;
     int inliers_count = Fundamental::findFundamentalMat(fts_ref_, fts_cur_, E, inliers_, Config::pixelUnSigma2(), Config::initMaxRansacIters(), true);
 
-    LOG(INFO)<< "[INIT][3] Inliers after epipolar geometry check: " << inliers_count;
+    LOG_IF(INFO, verbose_) << "[INIT][3] Inliers after epipolar geometry check: " << inliers_count;
     if(inliers_count < Config::initMinInliers()) return FAILURE;
 
     double t4 = (double)cv::getTickCount();
@@ -131,21 +131,21 @@ InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
     Matrix3d K = Matrix3d::Identity(3,3);
     bool succeed = findBestRT(R1, R2, t, K, K, fts_ref_, fts_cur_, inliers_, p3ds_, T_);
     if(!succeed) return FAILURE;
-    LOG(INFO) << "[INIT][4] Inliers after cheirality check: " << cv::countNonZero(inliers_);
+    LOG_IF(INFO, verbose_) << "[INIT][4] Inliers after cheirality check: " << cv::countNonZero(inliers_);
 
     double t5 = (double)cv::getTickCount();
 
     //! [5] reprojective check
     inliers_count = checkReprejectErr(pts_ref_, pts_cur_, fts_ref_, fts_cur_, T_, inliers_, p3ds_, Config::pixelUnSigma2()*4);
-    LOG(INFO) << "[INIT][5] Inliers after reprojective check: " << inliers_count;
+    LOG_IF(INFO, verbose_) << "[INIT][5] Inliers after reprojective check: " << inliers_count;
     if(inliers_count < Config::initMinInliers()) return FAILURE;
 
     double t6 = (double)cv::getTickCount();
-    LOG(INFO) << "[INIT][*] Time: " << (t2-t1)/cv::getTickFrequency() << " "
-              << (t3-t2)/cv::getTickFrequency() << " "
-              << (t4-t3)/cv::getTickFrequency() << " "
-              << (t5-t4)/cv::getTickFrequency() << " "
-              << (t6-t5)/cv::getTickFrequency();
+    LOG_IF(WARNING, verbose_) << "[INIT][*] Time: " << (t2-t1)/cv::getTickFrequency() << " "
+                              << (t3-t2)/cv::getTickFrequency() << " "
+                              << (t4-t3)/cv::getTickFrequency() << " "
+                              << (t5-t4)/cv::getTickFrequency() << " "
+                              << (t6-t5)/cv::getTickFrequency();
 
     finished_ = true;
     return SUCCESS;
@@ -216,7 +216,7 @@ void Initializer::createInitalMap(Map::Ptr map, double map_scale)
 
     size_t n = map->MapPointsInMap();
 
-    LOG(INFO) << "[INIT][6] Initialization succeed, and creating inital map with "  << " map points";
+    LOG_IF(INFO, verbose_) << "[INIT][6] Initialization succeed, and creating inital map with " << n << " map points";
 }
 
 void Initializer::getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur) const

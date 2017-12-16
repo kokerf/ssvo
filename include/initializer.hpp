@@ -60,11 +60,11 @@ public:
 
     static void reduceVecor(std::vector<cv::Point2d>& fts, const cv::Mat& inliers);
 
-    inline static Initializer::Ptr create(FastDetector::Ptr fast_detector)
-    {return Initializer::Ptr(new Initializer(fast_detector));}
+    inline static Initializer::Ptr create(FastDetector::Ptr fast_detector, bool verbose = false)
+    {return Initializer::Ptr(new Initializer(fast_detector, verbose));}
 
 private:
-    Initializer(FastDetector::Ptr fast_detector);
+    Initializer(FastDetector::Ptr fast_detector, bool verbose = false);
 
 private:
 
@@ -83,6 +83,8 @@ private:
     Matrix<double, 3, 4> T_;
 
     bool finished_;
+
+    bool verbose_;
 };
 
 namespace Fundamental

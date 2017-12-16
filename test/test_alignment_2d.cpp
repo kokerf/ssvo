@@ -87,5 +87,18 @@ int main(int argc, char *argv[])
               << "Converged: " << converged << " "
               << "Time(ms): " << (cv::getTickCount()-t0)/cv::getTickFrequency() << std::endl;
 
+    t0 = (double)cv::getTickCount();
+    for(int i = 0; i < 1000; i++)
+    {
+        estimate = Eigen::Vector3d(p.x-6.4, p.y+5.1,0);
+        converged = aligner.run(eigen_noise, img, dx, dy, estimate);
+    }
+
+    std::cout << "================\n"
+              << "TruePose: [" << p.x << ", " << p.y << "]\n"
+              << "Estiamte: [" << estimate.transpose() << "]\n"
+              << "Converged: " << converged << " "
+              << "Time(ms): " << (cv::getTickCount()-t0)/cv::getTickFrequency() << std::endl;
+
     return 0;
 }

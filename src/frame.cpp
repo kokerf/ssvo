@@ -73,6 +73,15 @@ void Frame::setPose(const Matrix3d& R, const Vector3d& t)
     Dw_ = Tcw_.rotationMatrix().determinant() * Tcw_.rotationMatrix().col(2);
 }
 
+void Frame::setTcw(const Sophus::SE3d &Tcw)
+{
+    std::lock_guard<std::mutex> lock(mutex_pose_);
+    Tcw_ = Tcw;
+    Twc_ = Tcw_.inverse();
+    Dw_ = Tcw_.rotationMatrix().determinant() * Tcw_.rotationMatrix().col(2);
+
+}
+
 bool Frame::isVisiable(const Vector3d &xyz_w)
 {
     Sophus::SE3d Tcw;

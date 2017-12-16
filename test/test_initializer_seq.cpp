@@ -117,7 +117,7 @@ int main(int argc, char const *argv[])
     Camera::Ptr camera = Camera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef);
     FastDetector::Ptr detector = FastDetector::create(width, height, image_border, levels+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
 
-    Initializer::Ptr initializer = Initializer::create(detector);
+    Initializer::Ptr initializer = Initializer::create(detector, true);
 
     int initial = 0;
     std::vector<Corner> corners;

@@ -31,14 +31,14 @@ class FeatureTracker : public noncopyable
 public:
     typedef std::shared_ptr<FeatureTracker> Ptr;
 
-    FeatureTracker(int width, int height, int grid_size);
+    FeatureTracker(int width, int height, int grid_size, bool report = false, bool verbose = false);
 
     ~FeatureTracker();
 
     int reprojectLoaclMap(const Frame::Ptr &frame, const Map::Ptr &map);
 
-    inline static FeatureTracker::Ptr create(int width, int height, int grid_size)
-    {return FeatureTracker::Ptr(new FeatureTracker(width, height, grid_size));}
+    inline static FeatureTracker::Ptr create(int width, int height, int grid_size, bool report = false, bool verbose = false)
+    {return FeatureTracker::Ptr(new FeatureTracker(width, height, grid_size, report, verbose));}
 
 private:
     void resetGrid();
@@ -55,6 +55,9 @@ private:
     } options_;
 
     Grid grid_;
+
+    bool report_;
+    bool verbose_;
 };
 
 namespace utils{

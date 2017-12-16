@@ -31,8 +31,8 @@ System::System(std::string config_file) :
     map_ = Map::create();
     camera_ = Camera::create(width, height, K, DistCoef);
     fast_detector_ = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
-    feature_tracker_ = FeatureTracker::create(width, height, grid_size);
-    initializer_ = Initializer::create(fast_detector_);
+    feature_tracker_ = FeatureTracker::create(width, height, grid_size, true);
+    initializer_ = Initializer::create(fast_detector_, true);
     viewer_ = Viewer::create(map_, cv::Size(width, height));
 
 }
@@ -89,7 +89,7 @@ System::Status System::processSecondFrame()
     map_->clear();
     initializer_->createInitalMap(map_, Config::mapScale());
 
-    LOG(WARNING) << "Start two-view BA";
+    LOG(WARNING) << "[System] Start two-view BA";
 
     std::vector<KeyFrame::Ptr> kfs = map_->getAllKeyFramesOrderedByID();
     LOG_ASSERT(kfs.size() == 2) << "Error number of keyframes in map after initailizer: " << kfs.size();
@@ -97,7 +97,7 @@ System::Status System::processSecondFrame()
 
     Optimizer::twoViewBundleAdjustment(kfs[0], kfs[1], true);
 
-    LOG(WARNING) << "End of two-view BA";
+    LOG(WARNING) << "[System] End of two-view BA";
 
     reference_keyframe_ = kfs[1];
     current_frame_->setPose(reference_keyframe_->pose());
@@ -115,18 +115,18 @@ System::Status System::tracking()
     align.run(last_frame_, current_frame_, Config::alignTopLevel(), 30, 1e-8);
 
     //! track local map
-    LOG(INFO) << "Tracking local map";
+    LOG(WARNING) << "[System] Tracking local map";
     int matches = feature_tracker_->reprojectLoaclMap(current_frame_, map_);
-    LOG(INFO) << "Track with " << matches << " points";
+    LOG(WARNING) << "[System] Track with " << matches << " points";
 
     // TODO tracking status
     if(matches < Config::minQualityFts())
         return STATUS_TRACKING_BAD;
 
     //! motion-only BA
-    LOG(INFO) << "Motion-Only BA";
+    LOG(WARNING) << "[System] Motion-Only BA";
     Optimizer::motionOnlyBundleAdjustment(current_frame_, true);
-    LOG(INFO) << "Finish Motion-Only BA";
+    LOG(WARNING) << "[System] Finish Motion-Only BA";
 
     return STATUS_TRACKING_GOOD;
 }
@@ -167,7 +167,7 @@ void System::finishFrame()
     //! update
     last_frame_ = current_frame_;
 
-    LOG(WARNING) << "System Stage: " << stage_;
+    LOG(WARNING) << "[System] Finsh Current Frame with Stage: " << stage_;
 
     //! display
     viewer_->showImage(rgb_);

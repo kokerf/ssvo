@@ -36,6 +36,9 @@ public:
     //! Set pose in world frame
     void setPose(const Matrix3d& R, const Vector3d& t);
 
+    //! Set Extrinsic Matrix
+    void setTcw(const Sophus::SE3d& Tcw);
+
     bool isVisiable(const Vector3d &xyz_w);
 
     Features features();
