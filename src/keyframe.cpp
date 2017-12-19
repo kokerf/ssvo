@@ -17,7 +17,7 @@ void KeyFrame::updateConnections()
 {
     std::map<KeyFrame::Ptr, int> connection_counter;
 
-    for(const Feature::Ptr ft : fts_)
+    for(const Feature::Ptr &ft : fts_)
     {
         if(ft->mpt == nullptr)
             continue;
@@ -39,7 +39,7 @@ void KeyFrame::updateConnections()
     KeyFrame::Ptr best_unfit_keyframe;
     int best_unfit_connections = 0;
     std::vector<std::pair<int, KeyFrame::Ptr> > weight_connections;
-    for(const auto obs : connection_counter)
+    for(const auto &obs : connection_counter)
     {
         if(obs.second < connection_threshold)
         {
@@ -49,14 +49,14 @@ void KeyFrame::updateConnections()
         else
         {
             obs.first->addConnection(shared_from_this(), obs.second);
-            weight_connections.push_back(std::make_pair(obs.second, obs.first));
+            weight_connections.emplace_back(std::make_pair(obs.second, obs.first));
         }
     }
 
     if(weight_connections.empty())
     {
         best_unfit_keyframe->addConnection(shared_from_this(), best_unfit_connections);
-        weight_connections.push_back(std::make_pair(best_unfit_connections, best_unfit_keyframe));
+        weight_connections.emplace_back(std::make_pair(best_unfit_connections, best_unfit_keyframe));
     }
 
     //! sort by weight
@@ -65,9 +65,9 @@ void KeyFrame::updateConnections()
 
     //! update
     connectedKeyFrames_.clear();
-    for(const auto it: weight_connections)
+    for(const auto &item : weight_connections)
     {
-        connectedKeyFrames_.insert(std::make_pair(it.second, it.first));
+        connectedKeyFrames_.insert(std::make_pair(item.second, item.first));
     }
 
     orderedConnectedKeyFrames_ = std::multimap<int, KeyFrame::Ptr>(weight_connections.begin(), weight_connections.end());
@@ -108,7 +108,7 @@ MapPoints KeyFrame::getMapPoints()
 {
     MapPoints mpts;
     mpts.reserve(fts_.size());
-    for(const Feature::Ptr ft : fts_)
+    for(const Feature::Ptr &ft : fts_)
     {
         if(ft->mpt != nullptr)
             mpts.push_back(ft->mpt);

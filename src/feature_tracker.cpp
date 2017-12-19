@@ -142,6 +142,8 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame, const Map::Ptr &m
                            << (t3-t2)/cv::getTickFrequency() << " "
                            << ", match points " << matches;
 
+    // TODO 最后可以做一个对极线外点检测？
+
     return matches;
 }
 
@@ -236,7 +238,7 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
 //            cv::imshow("cur track", show_cur);
 //            cv::waitKey(0);
             double t3 = (double)cv::getTickCount();
-            LOG_IF(INFO, report_) << "-level:" << track_level
+            LOG_IF(INFO, verbose_) << "-level:" << track_level
                                   << " Time(ms),find obs: " << (t1-t0)/cv::getTickFrequency() * 1000
                                   << " perwarp: " << (t2-t1)/cv::getTickFrequency() * 1000
                                   << " align: " << (t3-t2)/cv::getTickFrequency() * 1000;

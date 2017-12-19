@@ -12,7 +12,7 @@ public:
     TUMDataReader(const string &dataset_path, const string &association_file, const bool with_ground_truth = false):
         dataset_path_(dataset_path), association_file_(association_file)
     {
-        long found = dataset_path.find_last_of("/\\");
+        size_t found = dataset_path.find_last_of("/\\");
         if(found + 1 != dataset_path.size())
             dataset_path_ += dataset_path.substr(found, 1);
 
@@ -53,7 +53,7 @@ public:
 
     }
 
-    bool readItemByIndex(long index, std::string &rgb_image, std::string &depth_image, double &timestamp) const
+    bool readItemByIndex(size_t index, std::string &rgb_image, std::string &depth_image, double &timestamp) const
     {
         if(index >= N)
         {
@@ -66,7 +66,7 @@ public:
         return true;
     }
 
-    bool readItemWithGroundTruth(long index, std::string &rgb_image, std::string &depth_image, double &timestamp, std::vector<double> &ground_truth) const
+    bool readItemWithGroundTruth(size_t index, std::string &rgb_image, std::string &depth_image, double &timestamp, std::vector<double> &ground_truth) const
     {
         if(!readItemByIndex(index, rgb_image, depth_image, timestamp))
             return false;
@@ -75,7 +75,7 @@ public:
     }
 
 public:
-    long N;
+    size_t N;
     std::string dataset_path_;
     std::string association_file_;
     std::vector<double> timestamps_;
@@ -89,7 +89,7 @@ public:
     EuRocDataReader(const std::string image_path, const std::string csv_file)
     {
         std::string path = image_path;
-        long found = path.find_last_of("/\\");
+        size_t found = path.find_last_of("/\\");
         if(found+1 != path.size())
             path += path.substr(found,1);
 
@@ -100,7 +100,7 @@ public:
         getline(file_stream, buffer);
         while(getline(file_stream, buffer))
         {
-            long found = buffer.find_last_not_of(" \t\n\r");
+            size_t found = buffer.find_last_not_of(" \t\n\r");
             if(found!=std::string::npos)
                 buffer.erase(found+1);
             else
@@ -128,7 +128,7 @@ public:
             std::cerr << "Avaiable image items in dataset: " << N << std::endl;
     }
 
-    bool readItemByIndex(long index, std::string &rgb_image, double &timestamp) const
+    bool readItemByIndex(size_t index, std::string &rgb_image, double &timestamp) const
     {
         if(index >= N)
         {
@@ -141,7 +141,7 @@ public:
     }
 
 public:
-    long N;
+    size_t N;
     std::vector<double> timestamps_;
     std::vector<std::string> images_;
 };

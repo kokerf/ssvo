@@ -156,6 +156,14 @@ inline float interpolateMat_8u(const cv::Mat& mat, const float u, const float v)
     return w00*ptr[0] + w01*ptr[stride] + w10*ptr[1] + w11*ptr[stride + 1];
 }
 
+template<class T>
+T getMedian(std::vector<T> &data_vec)
+{
+    assert(!data_vec.empty());
+    typename std::vector<T>::iterator it = data_vec.begin()+floor(data_vec.size()/2);
+    std::nth_element(data_vec.begin(), it, data_vec.end());
+    return *it;
+}
 
 }
 

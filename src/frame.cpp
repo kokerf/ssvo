@@ -3,13 +3,14 @@
 #include <include/config.hpp>
 
 #include "frame.hpp"
+#include "keyframe.hpp"
 #include "utils.hpp"
 
 namespace ssvo {
 
 uint64_t Frame::next_id_ = 0;
 
-Frame::Frame(const cv::Mat &img, const double timestamp, Camera::Ptr cam) :
+Frame::Frame(const cv::Mat &img, const double timestamp, const Camera::Ptr &cam) :
     id_(next_id_++), timestamp_(timestamp), cam_(cam), nlevels_(Config::imageTopLevel() + 1)
 {
     Tcw_ = Sophus::SE3d(Matrix3d::Identity(), Vector3d::Zero());
@@ -18,12 +19,12 @@ Frame::Frame(const cv::Mat &img, const double timestamp, Camera::Ptr cam) :
     utils::createPyramid(img, img_pyr_, nlevels_);
 }
 
-Frame::Frame(const ImgPyr &img_pyr, const double timestamp, Camera::Ptr cam) :
+Frame::Frame(const ImgPyr &img_pyr, const double timestamp, const Camera::Ptr &cam) :
     id_(next_id_++), timestamp_(timestamp), cam_(cam), nlevels_(img_pyr.size()), img_pyr_(img_pyr),
     Tcw_(Sophus::SE3d(Matrix3d::Identity(), Vector3d::Zero())), Twc_(Tcw_.inverse())
 {}
 
-Frame::Frame(const ImgPyr &img_pyr, const uint64_t id, const double timestamp, Camera::Ptr cam) :
+Frame::Frame(const ImgPyr &img_pyr, const uint64_t id, const double timestamp, const Camera::Ptr &cam) :
     id_(id), timestamp_(timestamp), cam_(cam), nlevels_(img_pyr.size()), img_pyr_(img_pyr),
     Tcw_(Sophus::SE3d(Matrix3d::Identity(), Vector3d::Zero())), Twc_(Tcw_.inverse())
 {}
@@ -113,6 +114,56 @@ void Frame::addFeature(const Feature::Ptr ft)
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
     fts_.push_back(ft);
+}
+
+bool Frame::getSceneDepth(double &depth_mean)
+{
+    Sophus::SE3d Tcw;
+    {
+        std::lock_guard<std::mutex> lock(mutex_pose_);
+        Tcw = Tcw_;
+    }
+
+    std::vector<double> depth_vec;
+    depth_vec.reserve(fts_.size());
+
+    for(const Feature::Ptr &ft : fts_)
+    {
+        if(ft->mpt == nullptr)
+            continue;
+
+        const Vector3d p =  Tcw * ft->mpt->pose();
+        depth_vec.push_back(p[2]);
+    }
+
+    if(depth_vec.empty())
+        return false;
+
+    depth_mean = utils::getMedian(depth_vec);
+    return true;
+}
+
+std::map<KeyFrame::Ptr, int> Frame::getOverLapKeyFrames()
+{
+    std::map<KeyFrame::Ptr, int> overlap_kfs;
+
+    for(const Feature::Ptr &ft : fts_)
+    {
+        if(ft->mpt == nullptr)
+            continue;
+
+        std::map<KeyFrame::Ptr, Feature::Ptr> obs = ft->mpt->getObservations();
+        for(const auto &item : obs)
+        {
+            auto it = overlap_kfs.find(item.first);
+            if(it != overlap_kfs.end())
+                it->second++;
+            else
+                overlap_kfs.insert(std::make_pair(item.first, 1));
+        }
+    }
+
+    return overlap_kfs;
 }
 
 }

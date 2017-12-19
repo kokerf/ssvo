@@ -107,8 +107,9 @@ LIST(APPEND SOURCEFILES
     src/feature_tracker.cpp
     src/initializer.cpp
     src/optimizer.cpp
-    src/system.cpp
     src/alignment.cpp
+    src/local_mapping.cpp
+    src/system.cpp
     src/viewer.cpp)
 
 #add_library(${PROJECT_NAME} SHARED ${SOURCEFILES})

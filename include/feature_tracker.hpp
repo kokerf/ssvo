@@ -31,8 +31,6 @@ class FeatureTracker : public noncopyable
 public:
     typedef std::shared_ptr<FeatureTracker> Ptr;
 
-    FeatureTracker(int width, int height, int grid_size, bool report = false, bool verbose = false);
-
     ~FeatureTracker();
 
     int reprojectLoaclMap(const Frame::Ptr &frame, const Map::Ptr &map);
@@ -41,6 +39,9 @@ public:
     {return FeatureTracker::Ptr(new FeatureTracker(width, height, grid_size, report, verbose));}
 
 private:
+
+    FeatureTracker(int width, int height, int grid_size, bool report = false, bool verbose = false);
+
     void resetGrid();
 
     bool reprojectMapPoint(const Frame::Ptr &frame, const MapPoint::Ptr &point);

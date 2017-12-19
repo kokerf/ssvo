@@ -18,11 +18,11 @@ public:
 
     void showImage(const cv::Mat &image);
 
-    static Viewer::Ptr create(Map::Ptr map, cv::Size image_size){ return Viewer::Ptr(new Viewer(map, image_size));}
+    static Viewer::Ptr create(const Map::Ptr &map, cv::Size image_size){ return Viewer::Ptr(new Viewer(map, image_size));}
 
 private:
 
-    Viewer(Map::Ptr map, cv::Size image_size);
+    Viewer(const Map::Ptr &map, cv::Size image_size);
 
     void drawMapPoints();
 

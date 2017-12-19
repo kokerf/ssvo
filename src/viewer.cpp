@@ -3,7 +3,7 @@
 
 namespace ssvo{
 
-Viewer::Viewer(Map::Ptr map, cv::Size image_size) : map_(map), image_size_(image_size)
+Viewer::Viewer(const Map::Ptr &map, cv::Size image_size) : map_(map), image_size_(image_size)
 {
     camera_pose_.setIdentity();
 

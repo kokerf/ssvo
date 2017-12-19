@@ -8,6 +8,7 @@
 #include "initializer.hpp"
 #include "feature_detector.hpp"
 #include "feature_tracker.hpp"
+#include "local_mapping.hpp"
 #include "viewer.hpp"
 
 namespace ssvo {
@@ -28,7 +29,6 @@ public:
         STATUS_INITAL_SUCCEED,
         STATUS_TRACKING_BAD,
         STATUS_TRACKING_GOOD,
-        STATUS_TRACKING_INSUFFICIENT,
     };
 
     System(std::string config_file);
@@ -49,6 +49,12 @@ private:
 
     void showImage(Stage stage);
 
+    bool changeReferenceKeyFrame();
+
+    bool needNewKeyFrame(int overlap);
+
+    void createNewKeyFrame();
+
 private:
 
     Stage stage_;
@@ -59,6 +65,7 @@ private:
     FastDetector::Ptr fast_detector_;
     FeatureTracker::Ptr feature_tracker_;
     Initializer::Ptr initializer_;
+    LocalMapper::Ptr mapper_;
 
     Viewer::Ptr viewer_;
 

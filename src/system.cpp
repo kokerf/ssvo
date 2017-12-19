@@ -13,7 +13,7 @@ System::System(std::string config_file) :
     LOG_ASSERT(!config_file.empty()) << "Empty Config file input!!!";
     Config::FileName = config_file;
 
-    const int fps = Config::cameraFps();
+    const double fps = Config::cameraFps();
     //! image
     const int width = Config::imageWidth();
     const int height = Config::imageHeight();
@@ -33,6 +33,7 @@ System::System(std::string config_file) :
     fast_detector_ = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
     feature_tracker_ = FeatureTracker::create(width, height, grid_size, true);
     initializer_ = Initializer::create(fast_detector_, true);
+    mapper_ = LocalMapper::create(fast_detector_, map_, fps);
     viewer_ = Viewer::create(map_, cv::Size(width, height));
 
 }
@@ -99,6 +100,9 @@ System::Status System::processSecondFrame()
 
     LOG(WARNING) << "[System] End of two-view BA";
 
+    mapper_->insertNewKeyFrame(kfs[0]);
+    mapper_->insertNewKeyFrame(kfs[1]);
+
     reference_keyframe_ = kfs[1];
     current_frame_->setPose(reference_keyframe_->pose());
     current_frame_->setRefKeyFrame(reference_keyframe_);
@@ -136,13 +140,9 @@ void System::finishFrame()
     Stage last_stage = stage_;
     if(STAGE_NORMAL_FRAME == stage_)
     {
-        if(STATUS_TRACKING_BAD)
+        if(STATUS_TRACKING_GOOD)
         {
-
-        }
-        else if(STATUS_TRACKING_INSUFFICIENT)
-        {
-
+            changeReferenceKeyFrame();
         }
     }
     else if(STAGE_SECOND_FRAME == stage_)
@@ -161,9 +161,6 @@ void System::finishFrame()
             stage_ = STAGE_SECOND_FRAME;
     }
 
-
-    // TODO keyframe selection
-
     //! update
     last_frame_ = current_frame_;
 
@@ -175,6 +172,59 @@ void System::finishFrame()
     showImage(last_stage);
 }
 
+bool System::changeReferenceKeyFrame()
+{
+    std::map<KeyFrame::Ptr, int> overlap_kf = current_frame_->getOverLapKeyFrames();
+    const int overlap_refKF = overlap_kf[reference_keyframe_];
+    //! create new keyFrame
+    if(needNewKeyFrame(overlap_refKF))
+    {
+        createNewKeyFrame();
+    }
+    //! change reference keyframe
+    else
+    {
+        int max_overlap = -1;
+        KeyFrame::Ptr best_keyframe;
+        for(const auto &op : overlap_kf)
+        {
+            if(op.second <= max_overlap)
+                continue;
+
+            max_overlap = op.second;
+            best_keyframe = op.first;
+        }
+
+        if(max_overlap < 1.2 * overlap_refKF)
+            return false;
+
+        reference_keyframe_ = best_keyframe;
+    }
+
+    return true;
+}
+
+bool System::needNewKeyFrame(int overlap)
+{
+    double median_depth = std::numeric_limits<double>::max();
+    current_frame_->getSceneDepth(median_depth);
+
+    Sophus::SE3d T_cur_from_ref = current_frame_->Tcw() * reference_keyframe_->pose();
+    Vector3d tran = T_cur_from_ref.translation();
+
+    bool c1 = tran.dot(tran) > 0.12 * median_depth;
+    bool c2 = static_cast<double>(overlap) / reference_keyframe_->N() < 0.9;
+    if(c1 || c2)
+        return true;
+
+    return false;
+}
+
+void System::createNewKeyFrame()
+{
+    KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
+}
+
 void System::showImage(Stage stage)
 {
     cv::Mat image = rgb_;
@@ -184,7 +234,7 @@ void System::showImage(Stage stage)
     if(STAGE_NORMAL_FRAME == stage)
     {
         std::vector<Feature::Ptr> fts = current_frame_->getFeatures();
-        for (Feature::Ptr ft : fts)
+        for(const Feature::Ptr &ft : fts)
         {
             Vector2d px = ft->px;
             cv::circle(image, cv::Point2d(px[0], px[1]), 2, cv::Scalar(0, 255, 0), -1);

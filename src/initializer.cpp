@@ -8,7 +8,7 @@
 
 namespace ssvo{
 
-Initializer::Initializer(FastDetector::Ptr fast_detector, bool verbose):
+Initializer::Initializer(const FastDetector::Ptr &fast_detector, bool verbose):
     fast_detector_(fast_detector), verbose_(verbose)
 {};
 
@@ -171,7 +171,6 @@ void Initializer::createInitalMap(Map::Ptr map, double map_scale)
     double scale = map_scale*count/mean_depth;
 
     //! rescale frame pose
-    std::cout << "T:\n" << T_ << std::endl;
     Sophus::SE3d T_cur_from_ref(T_.topLeftCorner(3,3), T_.rightCols(1));
     Sophus::SE3d T_ref_from_cur = T_cur_from_ref.inverse();
     T_ref_from_cur.translation() = T_ref_from_cur.translation() * scale;
@@ -335,7 +334,7 @@ void Initializer::calcDisparity(const std::vector<cv::Point2f>& pts1, const std:
 
         float dx = pts2[i].x - pts1[i].x;
         float dy = pts2[i].y - pts1[i].y;
-        disparities.push_back(std::make_pair(i,sqrt(dx*dx + dy*dy)));
+        disparities.emplace_back(std::make_pair(i,sqrt(dx*dx + dy*dy)));
     }
 }
 

@@ -47,6 +47,12 @@ public:
 
     void addFeature(const Feature::Ptr ft);
 
+    bool getSceneDepth(double &depth_mean);
+
+    std::map<std::shared_ptr<KeyFrame>, int> getOverLapKeyFrames();
+
+    inline int N() const {return fts_.size();}
+
     inline void setRefKeyFrame(const std::shared_ptr<KeyFrame> &kf) {ref_keyframe_ = kf;}
 
     inline std::shared_ptr<KeyFrame> getRefKeyFrame() const {return ref_keyframe_;}
@@ -83,11 +89,11 @@ public:
 
 protected:
 
-    Frame(const cv::Mat& img, const double timestamp, const Camera::Ptr cam);
+    Frame(const cv::Mat& img, const double timestamp, const Camera::Ptr &cam);
 
-    Frame(const ImgPyr& img_pyr, const double timestamp, const Camera::Ptr cam);
+    Frame(const ImgPyr& img_pyr, const double timestamp, const Camera::Ptr &cam);
 
-    Frame(const ImgPyr& img_pyr, const uint64_t id, const double timestamp, const Camera::Ptr cam);
+    Frame(const ImgPyr& img_pyr, const uint64_t id, const double timestamp, const Camera::Ptr &cam);
 
 public:
 
