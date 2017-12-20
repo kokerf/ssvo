@@ -36,7 +36,7 @@ public:
 
     inline const bool getOccupancy(const int x, const int y) const { return getOccupancy(getGridIndex(x, y)); }
 
-    const int getCorners(std::vector<Corner> &corners) const;
+    const int getCorners(Corners &corners) const;
 
     void resetOccupancy();
 
@@ -44,9 +44,9 @@ public:
 
     bool setOccupancy(const Corner &corner);
 
-    const int setOccupancy(const std::vector<Corner> &corners);
+    const int setOccupancy(const Corners &corners);
 
-    const int setOccupancyAdaptive(const std::vector<Corner> &corners, const int N);
+    const int setOccupancyAdaptive(const Corners &corners, const int N);
 
 
 private:
@@ -66,19 +66,22 @@ public:
 
     typedef std::shared_ptr<FastDetector> Ptr;
 
-    int detect(const ImgPyr& img_pyr, std::vector<Corner>& corners, const std::vector<Corner>& exist_corners, const int N, const double eigen_threshold = 30.0);
+    int detect(const ImgPyr& img_pyr, Corners& corners, const Corners& exist_corners, const int N, const double eigen_threshold = 30.0);
 
     void drawGrid(const cv::Mat& img, cv::Mat& img_grid);
+
+    static float shiTomasiScore(const cv::Mat& img, int u, int v);
+
+    static size_t detectInLevel(const cv::Mat& img, Corners &corners, const int level, const int threshold, const double eigen_threshold=30, const int border=4);
 
     inline static FastDetector::Ptr create(int width, int height, int border, int nlevels, int grid_size, int grid_min_size, int max_threshold = 20, int min_threshold = 7)
     {return FastDetector::Ptr(new FastDetector(width, height, border, nlevels, grid_size, grid_min_size, max_threshold, min_threshold));}
 
 private:
+
     FastDetector(int width, int height, int border, int nlevels, int grid_size, int grid_min_size, int max_threshold, int min_threshold);
 
-    int detectInLevel(const cv::Mat& img, int level, const double eigen_threshold = 30.0);
-
-    float shiTomasiScore(const cv::Mat& img, int u, int v);
+    void detectAdaptive(const cv::Mat &img, Corners &corners, const size_t required, const double eigen_threshold, const int trials = 5);
 
 private:
 
@@ -92,8 +95,9 @@ private:
     bool size_adjust_;
     const int max_threshold_;
     const int min_threshold_;
+    int threshold_;
 
-    std::vector<std::vector<Corner> > corners_in_levels_;
+    std::vector<Corners> corners_in_levels_;
     Grid grid_fliter_;
 };
 

@@ -21,7 +21,7 @@ InitResult Initializer::addFirstImage(Frame::Ptr frame_ref)
     frame_ref_ = frame_ref;
 
     Corners old_corners;
-    fast_detector_->detect(frame_ref_->image(), corners_, old_corners, 1.5*Config::initMinCorners(), Config::fastMinEigen());
+    fast_detector_->detect(frame_ref_->image(), corners_, old_corners, Config::initMinCorners(), Config::fastMinEigen());
 
     //! check corner number of first image
     const int N = corners_.size();

@@ -1,11 +1,55 @@
 #include <iostream>
+#include <string>
 #include <opencv2/opencv.hpp>
 
 #include "config.hpp"
 #include "feature_detector.hpp"
+#ifdef WIN32
+#include <io.h>
+#else
+#include <dirent.h>
+#endif
 
 using namespace cv;
 using namespace ssvo;
+
+#ifdef WIN32
+void loadImages(const string &file_directory, std::vector<string> &image_filenames)
+{
+    _finddata_t file;
+    intptr_t fileHandle;
+    std::string filename = file_directory + "\\*.jpg";
+    fileHandle = _findfirst(filename.c_str(), &file);
+    if (fileHandle  != -1L) {
+        do {
+            std::string image_name = file_directory + "\\" + file.name;
+            image_filenames.push_back(image_name);
+            std::cout << image_name << std::endl;
+        } while (_findnext(fileHandle, &file) == 0);
+    }
+
+    _findclose(fileHandle);
+    std::sort(image_filenames.begin(), image_filenames.end());
+}
+#else
+void loadImages(const std::string &strFileDirectory, std::vector<string> &vstrImageFilenames)
+{
+    DIR* dir = opendir(strFileDirectory.c_str());
+    dirent* p = NULL;
+    while((p = readdir(dir)) != NULL)
+    {
+        if(p->d_name[0] != '.')
+        {
+            std::string imageFilename = strFileDirectory + string(p->d_name);
+            vstrImageFilenames.push_back(imageFilename);
+            //cout << imageFilename << endl;
+        }
+    }
+
+    closedir(dir);
+    std::sort(vstrImageFilenames.begin(),vstrImageFilenames.end());
+}
+#endif
 
 int computePyramid(const cv::Mat& image, std::vector<cv::Mat>& image_pyramid, const float scale_factor, const uint16_t level, const cv::Size min_size);
 
@@ -13,14 +57,15 @@ int main(int argc, char const *argv[])
 {
     if(argc != 3)
     {
-        std::cout << "Usge: ./test_feature_detector image configfile" << std::endl;
+        std::cout << "Usge: ./test_feature_detector path_to_sequence configfile" << std::endl;
     }
 
     google::InitGoogleLogging(argv[0]);
 
-    cv::Mat image = cv::imread(argv[1], CV_LOAD_IMAGE_GRAYSCALE);
-
-    LOG_IF(FATAL, image.empty()) << "Can not open:" << argv[1];
+    std::string dir_name = argv[1];
+    std::vector<string> img_file_names;
+    loadImages(dir_name, img_file_names);
+    LOG_ASSERT(!img_file_names.empty()) << "No images load from " << dir_name;
 
     Config::FileName = std::string(argv[2]);
     int width = Config::imageWidth();
@@ -33,10 +78,13 @@ int main(int argc, char const *argv[])
     int fast_min_threshold = Config::fastMinThreshold();
     double fast_min_eigen = Config::fastMinEigen();
 
-    std::vector<cv::Mat> image_pyramid;
-    int top_level = computePyramid(image, image_pyramid, 2, 4, cv::Size(40, 40));
+    cv::Mat image = cv::imread(img_file_names[0], CV_LOAD_IMAGE_GRAYSCALE);
+    if (image.empty()) throw std::runtime_error("Could not open image: " + img_file_names[0]);
 
-    std::vector<Corner> corners, old_corners;
+    std::vector<cv::Mat> image_pyramid;
+    computePyramid(image, image_pyramid, 2, 4, cv::Size(40, 40));
+
+    Corners corners, old_corners;
     FastDetector::Ptr fast_detector = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
 
     LOG(WARNING) << "=== This is a FAST corner detector demo ===";
@@ -63,6 +111,34 @@ int main(int argc, char const *argv[])
     fast_detector->drawGrid(kps_img, kps_img);
     cv::imshow("KeyPoints detectByImage", kps_img);
     cv::waitKey(0);
+
+    LOG(INFO) << "=== Test Adaptive Feature detector ===";
+    for(std::vector<std::string>::iterator i = img_file_names.begin(); i != img_file_names.end(); ++i) {
+        cv::Mat img = cv::imread(*i, CV_LOAD_IMAGE_UNCHANGED);
+        if (img.empty()) throw std::runtime_error("Could not open image: " + *i);
+
+        LOG(WARNING) << "Load Image: " << *i << std::endl;
+        cv::Mat cur_img;
+        cv::cvtColor(img, cur_img, cv::COLOR_RGB2GRAY);
+        std::vector<cv::Mat> image_pyramid;
+        computePyramid(cur_img, image_pyramid, 2, 4, cv::Size(40, 40));
+
+        double t = (double)cv::getTickCount();
+        fast_detector->detect(image_pyramid, corners, old_corners, 100, fast_min_eigen);
+        LOG(WARNING) << "Time: " << (cv::getTickCount() - t) / cv::getTickFrequency() << ", corners: " << corners.size();
+
+        cv::Mat kps_img;
+        std::vector<cv::KeyPoint> keypoints;
+        std::for_each(corners.begin(), corners.end(), [&](Corner corner){
+          cv::KeyPoint kp(corner.x, corner.y, 0);
+          keypoints.push_back(kp);
+        });
+        cv::drawKeypoints(cur_img, keypoints, kps_img);
+
+        fast_detector->drawGrid(kps_img, kps_img);
+        cv::imshow("KeyPoints detectByImage", kps_img);
+        cv::waitKey(20);
+    }
 
     return 0;
 }
