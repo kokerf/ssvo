@@ -42,12 +42,13 @@ public:
 
     void resetSize(int grid_size);
 
-    bool setOccupancy(const Corner &corner);
+    bool setCorners(const Corner &corner);
 
-    const int setOccupancy(const Corners &corners);
+    const int setCorners(const Corners &corners);
 
-    const int setOccupancyAdaptive(const Corners &corners, const int N);
+    const int setCornersAdaptive(const Corners &corners, const int N);
 
+    void setExistingCorners(const Corners& corners);
 
 private:
     const int cols_;
@@ -57,7 +58,8 @@ private:
     int grid_n_cols_;
     int grid_n_rows_;
     std::vector<bool> occupancy_;
-    std::vector<Corner> corners_;
+    Corners corners_;
+    Corners exit_corners_;
 };
 
 class FastDetector: public noncopyable
@@ -66,13 +68,13 @@ public:
 
     typedef std::shared_ptr<FastDetector> Ptr;
 
-    int detect(const ImgPyr& img_pyr, Corners& corners, const Corners& exist_corners, const int N, const double eigen_threshold = 30.0);
+    int detect(const ImgPyr &img_pyr, Corners &new_corners, const Corners &exist_corners, const int N, const double eigen_threshold = 30.0);
 
-    void drawGrid(const cv::Mat& img, cv::Mat& img_grid);
+    void drawGrid(const cv::Mat &img, cv::Mat &img_grid);
 
-    static float shiTomasiScore(const cv::Mat& img, int u, int v);
+    static float shiTomasiScore(const cv::Mat &img, int u, int v);
 
-    static size_t detectInLevel(const cv::Mat& img, Corners &corners, const int level, const int threshold, const double eigen_threshold=30, const int border=4);
+    static size_t detectInLevel(const cv::Mat &img, Corners &corners, const int level, const int threshold, const double eigen_threshold=30, const int border=4);
 
     inline static FastDetector::Ptr create(int width, int height, int border, int nlevels, int grid_size, int grid_min_size, int max_threshold = 20, int min_threshold = 7)
     {return FastDetector::Ptr(new FastDetector(width, height, border, nlevels, grid_size, grid_min_size, max_threshold, min_threshold));}

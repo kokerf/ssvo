@@ -100,8 +100,11 @@ System::Status System::processSecondFrame()
 
     LOG(WARNING) << "[System] End of two-view BA";
 
-    mapper_->insertNewKeyFrame(kfs[0]);
-    mapper_->insertNewKeyFrame(kfs[1]);
+    Vector2d mean_depth, min_depth;
+    kfs[0]->getSceneDepth(mean_depth[0], min_depth[0]);
+    kfs[1]->getSceneDepth(mean_depth[1], min_depth[1]);
+    mapper_->insertNewKeyFrame(kfs[0], mean_depth[0], min_depth[0]);
+    mapper_->insertNewKeyFrame(kfs[1], mean_depth[1], min_depth[1]);
 
     reference_keyframe_ = kfs[1];
     current_frame_->setPose(reference_keyframe_->pose());
@@ -175,11 +178,23 @@ void System::finishFrame()
 bool System::changeReferenceKeyFrame()
 {
     std::map<KeyFrame::Ptr, int> overlap_kf = current_frame_->getOverLapKeyFrames();
-    const int overlap_refKF = overlap_kf[reference_keyframe_];
+    const int overlap = overlap_kf[reference_keyframe_];
+
+    double median_depth = std::numeric_limits<double>::max();
+    double min_depth = std::numeric_limits<double>::max();
+    current_frame_->getSceneDepth(median_depth, min_depth);
+
+    Sophus::SE3d T_cur_from_ref = current_frame_->Tcw() * reference_keyframe_->pose();
+    Vector3d tran = T_cur_from_ref.translation();
+
+    bool c1 = tran.dot(tran) > 0.12 * median_depth;
+    bool c2 = static_cast<double>(overlap) / reference_keyframe_->N() < 0.9;
+
     //! create new keyFrame
-    if(needNewKeyFrame(overlap_refKF))
+    if(c1 || c2)
     {
-        createNewKeyFrame();
+        KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
+        mapper_->insertNewKeyFrame(new_keyframe, median_depth, min_depth);
     }
     //! change reference keyframe
     else
@@ -195,34 +210,13 @@ bool System::changeReferenceKeyFrame()
             best_keyframe = op.first;
         }
 
-        if(max_overlap < 1.2 * overlap_refKF)
+        if(max_overlap < 1.2 * overlap)
             return false;
 
         reference_keyframe_ = best_keyframe;
     }
 
     return true;
-}
-
-bool System::needNewKeyFrame(int overlap)
-{
-    double median_depth = std::numeric_limits<double>::max();
-    current_frame_->getSceneDepth(median_depth);
-
-    Sophus::SE3d T_cur_from_ref = current_frame_->Tcw() * reference_keyframe_->pose();
-    Vector3d tran = T_cur_from_ref.translation();
-
-    bool c1 = tran.dot(tran) > 0.12 * median_depth;
-    bool c2 = static_cast<double>(overlap) / reference_keyframe_->N() < 0.9;
-    if(c1 || c2)
-        return true;
-
-    return false;
-}
-
-void System::createNewKeyFrame()
-{
-    KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
 }
 
 void System::showImage(Stage stage)

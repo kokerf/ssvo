@@ -15,9 +15,15 @@ KeyFrame::KeyFrame(const Frame::Ptr frame):
 
 void KeyFrame::updateConnections()
 {
+    Features fts;
+    {
+        std::lock_guard<std::mutex> lock(mutex_feature_);
+        fts = fts_;
+    }
+
     std::map<KeyFrame::Ptr, int> connection_counter;
 
-    for(const Feature::Ptr &ft : fts_)
+    for(const Feature::Ptr &ft : fts)
     {
         if(ft->mpt == nullptr)
             continue;
@@ -106,6 +112,8 @@ void KeyFrame::updateOrderedConnections()
 
 MapPoints KeyFrame::getMapPoints()
 {
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+
     MapPoints mpts;
     mpts.reserve(fts_.size());
     for(const Feature::Ptr &ft : fts_)

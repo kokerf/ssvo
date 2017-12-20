@@ -10,12 +10,18 @@ Grid::Grid(int cols, int rows, int grid_size, int grid_min_size) :
     grid_n_cols_(ceil(static_cast<double>(cols)/grid_size_)),
     grid_n_rows_(ceil(static_cast<double>(rows)/grid_size_)),
     occupancy_(grid_n_cols_*grid_n_rows_, false),
-    corners_(grid_n_cols_*grid_n_rows_, Corner(0,0,0,0))
+    corners_(grid_n_cols_*grid_n_rows_, Corner(0,0,-1.0f,0))
 {}
 
 void Grid::resetOccupancy()
 {
     std::fill(occupancy_.begin(), occupancy_.end(), false);
+    std::fill(corners_.begin(), corners_.end(), Corner(0,0,-1.0f,0));
+    for(const Corner &corner : exit_corners_)
+    {
+        const int idx = getGridIndex(corner.x, corner.y);
+        occupancy_[idx] = true;
+    }
 }
 
 inline void Grid::resetSize(int grid_size)
@@ -23,31 +29,30 @@ inline void Grid::resetSize(int grid_size)
     grid_size_ = grid_size;
     grid_n_cols_ = ceil(static_cast<double>(cols_)/grid_size_);
     grid_n_rows_ = ceil(static_cast<double>(rows_)/grid_size_);
-    occupancy_.resize(grid_n_cols_*grid_n_rows_);
-    corners_.resize(grid_n_cols_*grid_n_rows_);
+    occupancy_.resize(grid_n_cols_*grid_n_rows_, false);
+    corners_.resize(grid_n_cols_*grid_n_rows_, Corner(0,0,-1.0f,0));
     resetOccupancy();
 }
 
 //! return true if insert to a new grid
-inline bool Grid::setOccupancy(const Corner &corner)
+inline bool Grid::setCorners(const Corner &corner)
 {
     const int idx = getGridIndex(corner.x, corner.y);
-    const bool occupied = occupancy_.at(idx);
+    const float old_score = corners_[idx].score;
+    if(occupancy_.at(idx) || old_score >= corner.score)
+        return false;
 
-    if(!occupied || (occupied && corners_[idx].score < corner.score))
-        corners_[idx] = corner;
-
-    occupancy_[idx] = true;
-    return !occupied;
+    corners_[idx] = corner;
+    return (old_score < 0.0f);//! true if it is a new grid
 }
 
 //! return the number of grids newly inserted a corner
-inline const int Grid::setOccupancy(const Corners &corners)
+inline const int Grid::setCorners(const Corners &corners)
 {
     int now_corners = 0;
     for(const Corner &corner : corners)
     {
-        if(setOccupancy(corner))
+        if(setCorners(corner))
             now_corners++;
     }
     return now_corners;
@@ -58,20 +63,22 @@ const int Grid::getCorners(Corners &corners) const
     const int grid_size = grid_n_cols_*grid_n_rows_;
     corners.clear();
     corners.reserve(grid_size);
-    for(int i = 0; i < grid_size; ++i)
+    for(const Corner &corner : corners_)
     {
-        if(occupancy_[i])
-            corners.push_back(corners_[i]);
+        if(corner.score > 0.0f)
+            corners.push_back(corner);
     }
 
     return corners.size();
 }
 
-const int Grid::setOccupancyAdaptive(const Corners &corners, const int N)
+void Grid::setExistingCorners(const Corners& corners)
 {
-    Corners old_corners;
-    getCorners(old_corners);
+    exit_corners_ = corners;
+}
 
+const int Grid::setCornersAdaptive(const Corners &corners, const int N)
+{
     int new_size = grid_size_;//floorf(std::sqrt(cols_ * rows_ / N));
     new_size = MAX(new_size, grid_min_size_);
 
@@ -81,25 +88,11 @@ const int Grid::setOccupancyAdaptive(const Corners &corners, const int N)
     const int min_corners = 0.9*N;
     while(n++ < 5)
     {
-        now_corners = 0;
+        now_corners = exit_corners_.size();
 
         resetSize(new_size);
 
-        //! insert old corners first
-        now_corners += setOccupancy(old_corners);
-        //! then insert new corners
-        std::vector<bool> old_corner_occupancy = occupancy_;
-
-        for(const Corner &corner : corners)
-        {
-            const int idx = getGridIndex(corner.x, corner.y);
-            //! if occupied by old corners, ignore the new corner
-            if(old_corner_occupancy.at(idx))
-                continue;
-
-            if(setOccupancy(corner))
-              now_corners++;
-        }
+        now_corners += setCorners(corners);
 
         if(now_corners <= max_corners && now_corners >= min_corners)
             break;
@@ -132,7 +125,7 @@ FastDetector::FastDetector(int width, int height, int border, int nlevels,
     corners_in_levels_.resize(nlevels_);
 }
 
-int FastDetector::detect(const ImgPyr& img_pyr, Corners& corners, const Corners& exist_corners,
+int FastDetector::detect(const ImgPyr &img_pyr, Corners &new_corners, const Corners &exist_corners,
                          const int N, const double eigen_threshold)
 {
     LOG_ASSERT(img_pyr.size() == nlevels_) << "Unmatch size of ImgPyr(" << img_pyr.size() << ") with nlevel(" << nlevels_ << ")";
@@ -150,29 +143,29 @@ int FastDetector::detect(const ImgPyr& img_pyr, Corners& corners, const Corners&
     }
 
     //! 2. Get corners from grid
+    grid_fliter_.setExistingCorners(exist_corners);
     grid_fliter_.resetOccupancy();
-    grid_fliter_.setOccupancy(exist_corners);
     //! if adjust the grid size
     if(size_adjust_)
     {
-        corners.clear();
-        corners.reserve(new_coners);
+        new_corners.clear();
+        new_corners.reserve(new_coners);
         for(const Corners& cs : corners_in_levels_)
             for(const Corner &c : cs)
-                corners.push_back(c);
+                new_corners.push_back(c);
 
-        grid_fliter_.setOccupancyAdaptive(corners, N);
-        grid_fliter_.getCorners(corners);
+        grid_fliter_.setCornersAdaptive(new_corners, N);
+        grid_fliter_.getCorners(new_corners);
     }
     else
     {
         for(const Corners &cs : corners_in_levels_)
-            grid_fliter_.setOccupancy(cs);
+            grid_fliter_.setCorners(cs);
 
-        grid_fliter_.getCorners(corners);
+        grid_fliter_.getCorners(new_corners);
     }
 
-    return corners.size();
+    return new_corners.size();
 }
 
 //! detect in level 0 to find a good threshold

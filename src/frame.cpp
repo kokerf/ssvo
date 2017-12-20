@@ -116,24 +116,31 @@ void Frame::addFeature(const Feature::Ptr ft)
     fts_.push_back(ft);
 }
 
-bool Frame::getSceneDepth(double &depth_mean)
+bool Frame::getSceneDepth(double &depth_mean, double &depth_min)
 {
     Sophus::SE3d Tcw;
     {
         std::lock_guard<std::mutex> lock(mutex_pose_);
         Tcw = Tcw_;
     }
+    Features fts;
+    {
+        std::lock_guard<std::mutex> lock(mutex_feature_);
+        fts = fts_;
+    }
 
     std::vector<double> depth_vec;
-    depth_vec.reserve(fts_.size());
+    depth_vec.reserve(fts.size());
 
-    for(const Feature::Ptr &ft : fts_)
+    depth_min = std::numeric_limits<double>::max();
+    for(const Feature::Ptr &ft : fts)
     {
         if(ft->mpt == nullptr)
             continue;
 
         const Vector3d p =  Tcw * ft->mpt->pose();
         depth_vec.push_back(p[2]);
+        depth_min = fmin(depth_min, p[2]);
     }
 
     if(depth_vec.empty())
@@ -145,9 +152,15 @@ bool Frame::getSceneDepth(double &depth_mean)
 
 std::map<KeyFrame::Ptr, int> Frame::getOverLapKeyFrames()
 {
+    Features fts;
+    {
+        std::lock_guard<std::mutex> lock(mutex_feature_);
+        fts = fts_;
+    }
+
     std::map<KeyFrame::Ptr, int> overlap_kfs;
 
-    for(const Feature::Ptr &ft : fts_)
+    for(const Feature::Ptr &ft : fts)
     {
         if(ft->mpt == nullptr)
             continue;

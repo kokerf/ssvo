@@ -47,7 +47,7 @@ public:
 
     void addFeature(const Feature::Ptr ft);
 
-    bool getSceneDepth(double &depth_mean);
+    bool getSceneDepth(double &depth_mean, double &depth_min);
 
     std::map<std::shared_ptr<KeyFrame>, int> getOverLapKeyFrames();
 

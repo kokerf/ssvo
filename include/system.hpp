@@ -51,10 +51,6 @@ private:
 
     bool changeReferenceKeyFrame();
 
-    bool needNewKeyFrame(int overlap);
-
-    void createNewKeyFrame();
-
 private:
 
     Stage stage_;
