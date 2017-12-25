@@ -26,6 +26,10 @@
 #include <sophus/se3.hpp>
 #include <glog/logging.h>
 
+#include<Eigen/StdVector>
+EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION(Eigen::Matrix2d)
+EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION(Eigen::Matrix3d)
+
 using namespace Eigen;
 
 #ifndef MIN

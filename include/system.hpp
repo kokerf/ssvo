@@ -57,7 +57,6 @@ private:
     Status status_;
 
     Camera::Ptr camera_;
-    Map::Ptr map_;
     FastDetector::Ptr fast_detector_;
     FeatureTracker::Ptr feature_tracker_;
     Initializer::Ptr initializer_;

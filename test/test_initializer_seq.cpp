@@ -4,6 +4,7 @@
 
 #include "feature_detector.hpp"
 #include "initializer.hpp"
+#include "local_mapping.hpp"
 #include "config.hpp"
 #include "optimizer.hpp"
 #ifdef WIN32
@@ -129,18 +130,19 @@ int main(int argc, char const *argv[])
         if(img.empty()) throw std::runtime_error("Could not open image: " + *i);
 
         std::cout << "Load Image: " << *i << std::endl;
-        cv::Mat cur_img;
-        cv::cvtColor(img, cur_img, cv::COLOR_RGB2GRAY);
+        cv::Mat gray = img.clone();
+        if(gray.channels() != 1)
+            cv::cvtColor(gray, gray, cv::COLOR_RGB2GRAY);
 
         if(initial == 0)
         {
-            frame_ref = Frame::create(cur_img, 0, camera);
+            frame_ref = Frame::create(gray, 0, camera);
             if(initializer->addFirstImage(frame_ref) == SUCCESS)
                 initial = 1;
         }
         else if(initial == 1)
         {
-            frame_cur = Frame::create(cur_img, 1, camera);
+            frame_cur = Frame::create(gray, 1, camera);
             InitResult result = initializer->addSecondImage(frame_cur);
             if(result == RESET) {
                 initial = 0;
@@ -157,23 +159,24 @@ int main(int argc, char const *argv[])
         cv::waitKey(fps);
     }
 
+    ssvo::LocalMapper::Ptr mapper = ssvo::LocalMapper::create(detector, fps);
+    std::vector<Vector3d> points;
+    initializer->createInitalMap(points, 1.0);
+    mapper->createInitalMap(frame_ref, frame_cur, points);
 
-    ssvo::Map::Ptr map = ssvo::Map::create();
-    initializer->createInitalMap(map, 1.0);
-
-    std::vector<KeyFrame::Ptr> kfs = map->getAllKeyFramesOrderedByID();
-    LOG_ASSERT(kfs.size() == 2) << "Error number of keyframes in map after initailizer: " << kfs.size();
-    LOG_ASSERT(kfs[0]->id_ == 0 && kfs[1]->id_ == 1) << "Error id of keyframe: " << kfs[0]->id_ << ", " << kfs[0]->id_;
+    KeyFrame::Ptr kf0 = mapper->map_->getKeyFrame(0);
+    KeyFrame::Ptr kf1 = mapper->map_->getKeyFrame(1);
+    LOG_ASSERT(kf0 != nullptr && kf1 != nullptr) << "Can not find intial keyframes in map!";
 
     double error = 0;
-    evalueErrors(kfs[0], kfs[1], error);
-    LOG(INFO) <<"Pose:\n" << kfs[1]->pose().matrix();
+    evalueErrors(kf0, kf1, error);
+    LOG(INFO) <<"Pose:\n" << kf0->pose().matrix();
     LOG(INFO) << "Error before BA: " << error;
 
-    Optimizer::twoViewBundleAdjustment(kfs[0], kfs[1], true, true);
+    Optimizer::twoViewBundleAdjustment(kf0, kf1, true, true);
 
-    LOG(INFO) <<"Pose:\n" << kfs[1]->pose().matrix();
-    evalueErrors(kfs[0], kfs[1], error);
+    LOG(INFO) <<"Pose:\n" << kf1->pose().matrix();
+    evalueErrors(kf0, kf1, error);
     LOG(INFO) << "Error after BA: " << error;
 
 

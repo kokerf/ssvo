@@ -1,14 +1,9 @@
 #ifndef _INITIALIZATION_HPP_
 #define _INITIALIZATION_HPP_
 
-#include <vector>
-#include <opencv2/core.hpp>
-
-#include <Eigen/Dense>
-
+#include "global.hpp"
 #include "frame.hpp"
 #include "config.hpp"
-#include "map.hpp"
 
 using namespace Eigen;
 
@@ -29,7 +24,7 @@ public:
 
     void reset();
 
-    void createInitalMap(Map::Ptr map, double map_scale=1.0);
+    void createInitalMap(std::vector<Vector3d> &points, double map_scale=1.0);
 
     Frame::Ptr getReferenceFrame(){return frame_ref_;}
 

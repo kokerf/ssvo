@@ -13,53 +13,53 @@ void Map::clear()
 void Map::insertKeyFrame(const KeyFrame::Ptr kf)
 {
     std::lock_guard<std::mutex> lock(mutex_kf_);
-    kfs_.insert(kf);
+    kfs_.emplace(kf->id_, kf);
 }
 
 void Map::removeKeyFrame(const KeyFrame::Ptr kf)
 {
     std::lock_guard<std::mutex> lock(mutex_kf_);
-    kfs_.erase(kf);
+    kfs_.erase(kf->id_);
 }
 
 void Map::insertMapPoint(const MapPoint::Ptr mpt)
 {
     std::lock_guard<std::mutex> lock(mutex_mpt_);
-    mpts_.insert(mpt);
+    mpts_.emplace(mpt->id_, mpt);
 }
 
 void Map::removeMapPoint(const MapPoint::Ptr mpt)
 {
     std::lock_guard<std::mutex> lock(mutex_mpt_);
-    mpts_.erase(mpt);
+    mpts_.erase(mpt->id_);
 }
 
 std::vector<KeyFrame::Ptr> Map::getAllKeyFrames()
 {
     std::lock_guard<std::mutex> lock(mutex_kf_);
-    return std::vector<KeyFrame::Ptr>(kfs_.begin(), kfs_.end());
+    std::vector<KeyFrame::Ptr> kfs;
+    kfs.reserve(kfs_.size());
+    for(const auto &kf : kfs_)
+        kfs.push_back(kf.second);
+
+    return kfs;
 }
 
-std::vector<KeyFrame::Ptr> Map::getAllKeyFramesOrderedByID()
+KeyFrame::Ptr Map::getKeyFrame(uint64_t id)
 {
-    std::vector<KeyFrame::Ptr> keyframe_order_by_id;
-
-    {
-        std::lock_guard<std::mutex> lock(mutex_kf_);
-        keyframe_order_by_id = std::vector<KeyFrame::Ptr>(kfs_.begin(), kfs_.end());
-    }
-
-    std::sort(keyframe_order_by_id.begin(), keyframe_order_by_id.end(), [](KeyFrame::Ptr kf1, KeyFrame::Ptr kf2){
-        return kf1->id_ < kf2->id_;
-    });
-
-    return keyframe_order_by_id;
+    std::lock_guard<std::mutex> lock(mutex_kf_);
+    return kfs_[id];
 }
 
 std::vector<MapPoint::Ptr> Map::getAllMapPoints()
 {
     std::lock_guard<std::mutex> lock(mutex_mpt_);
-    return std::vector<MapPoint::Ptr>(mpts_.begin(), mpts_.end());
+    std::vector<MapPoint::Ptr> mpts;
+    mpts.reserve(mpts_.size());
+    for(const auto &mpt : mpts_)
+        mpts.push_back(mpt.second);
+
+    return mpts;
 }
 
 uint64_t Map::KeyFramesInMap()

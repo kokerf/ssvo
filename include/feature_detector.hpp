@@ -100,7 +100,7 @@ private:
     int threshold_;
 
     std::vector<Corners> corners_in_levels_;
-    Grid grid_fliter_;
+    Grid grid_filter_;
 };
 
 }//! end of ssvo

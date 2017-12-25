@@ -28,13 +28,12 @@ System::System(std::string config_file) :
     const int fast_max_threshold = Config::fastMaxThreshold();
     const int fast_min_threshold = Config::fastMinThreshold();
 
-    map_ = Map::create();
     camera_ = Camera::create(width, height, K, DistCoef);
     fast_detector_ = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
     feature_tracker_ = FeatureTracker::create(width, height, grid_size, true);
     initializer_ = Initializer::create(fast_detector_, true);
-    mapper_ = LocalMapper::create(fast_detector_, map_, fps);
-    viewer_ = Viewer::create(map_, cv::Size(width, height));
+    mapper_ = LocalMapper::create(fast_detector_, fps);
+    viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));
 
 }
 
@@ -87,26 +86,22 @@ System::Status System::processSecondFrame()
     else if(result == FAILURE)
         return STATUS_INITAL_FALIURE;
 
-    map_->clear();
-    initializer_->createInitalMap(map_, Config::mapScale());
+    std::vector<Vector3d> points;
+    initializer_->createInitalMap(points, Config::mapScale());
+    mapper_->createInitalMap(initializer_->getReferenceFrame(), current_frame_, points);
 
     LOG(WARNING) << "[System] Start two-view BA";
 
-    std::vector<KeyFrame::Ptr> kfs = map_->getAllKeyFramesOrderedByID();
-    LOG_ASSERT(kfs.size() == 2) << "Error number of keyframes in map after initailizer: " << kfs.size();
-    LOG_ASSERT(kfs[0]->id_ == 0 && kfs[1]->id_ == 1) << "Error id of keyframe: " << kfs[0]->id_ << ", " << kfs[0]->id_;
+    KeyFrame::Ptr kf0 = mapper_->map_->getKeyFrame(0);
+    KeyFrame::Ptr kf1 = mapper_->map_->getKeyFrame(1);
 
-    Optimizer::twoViewBundleAdjustment(kfs[0], kfs[1], true);
+    LOG_ASSERT(kf0 != nullptr && kf1 != nullptr) << "Can not find intial keyframes in map!";
+
+    Optimizer::twoViewBundleAdjustment(kf0, kf1, true);
 
     LOG(WARNING) << "[System] End of two-view BA";
 
-    Vector2d mean_depth, min_depth;
-    kfs[0]->getSceneDepth(mean_depth[0], min_depth[0]);
-    kfs[1]->getSceneDepth(mean_depth[1], min_depth[1]);
-    mapper_->insertNewKeyFrame(kfs[0], mean_depth[0], min_depth[0]);
-    mapper_->insertNewKeyFrame(kfs[1], mean_depth[1], min_depth[1]);
-
-    reference_keyframe_ = kfs[1];
+    reference_keyframe_ = kf1;
     current_frame_->setPose(reference_keyframe_->pose());
     current_frame_->setRefKeyFrame(reference_keyframe_);
 
@@ -123,7 +118,7 @@ System::Status System::tracking()
 
     //! track local map
     LOG(WARNING) << "[System] Tracking local map";
-    int matches = feature_tracker_->reprojectLoaclMap(current_frame_, map_);
+    int matches = feature_tracker_->reprojectLoaclMap(current_frame_);
     LOG(WARNING) << "[System] Track with " << matches << " points";
 
     // TODO tracking status
@@ -194,7 +189,7 @@ bool System::changeReferenceKeyFrame()
     if(c1 || c2)
     {
         KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
-        mapper_->insertNewKeyFrame(new_keyframe, median_depth, min_depth);
+        mapper_->insertNewFrame(current_frame_, new_keyframe, median_depth, min_depth);
     }
     //! change reference keyframe
     else

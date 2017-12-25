@@ -151,7 +151,7 @@ InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
     return SUCCESS;
 }
 
-void Initializer::createInitalMap(Map::Ptr map, double map_scale)
+void Initializer::createInitalMap(std::vector<Vector3d> &points, double map_scale)
 {
     //! [6] create inital map
     const size_t N = pts_ref_.size();
@@ -177,11 +177,8 @@ void Initializer::createInitalMap(Map::Ptr map, double map_scale)
     frame_ref_->setPose(Matrix3d::Identity(), Vector3d::Zero());
     frame_cur_->setPose(T_ref_from_cur);
 
-    //! create Key Frame
-    KeyFrame::Ptr keyframe_ref = ssvo::KeyFrame::create(frame_ref_);
-    KeyFrame::Ptr keyframe_cur = ssvo::KeyFrame::create(frame_cur_);
-
     //! create and rescale map points
+    points.reserve(count);
     for(size_t i = 0; i < N; ++i)
     {
         if(!inliers_ptr[i])
@@ -192,30 +189,14 @@ void Initializer::createInitalMap(Map::Ptr map, double map_scale)
         Vector3d ft_ref(fts_ref_[i].x, fts_ref_[i].y, 1);
         Vector3d ft_cur(fts_cur_[i].x, fts_cur_[i].y, 1);
 
-        ssvo::MapPoint::Ptr mpt = ssvo::MapPoint::create(p3ds_[i]*scale, keyframe_ref);
-        Feature::Ptr feature_ref = Feature::create(px_ref, ft_ref.normalized(), corners_[i].level, mpt);
-        Feature::Ptr feature_cur = Feature::create(px_cur, ft_cur.normalized(), corners_[i].level, mpt);
+        points.emplace_back(p3ds_[i]*scale);
 
-        map->insertMapPoint(mpt);
+        Feature::Ptr feature_ref = Feature::create(px_ref, ft_ref.normalized(), corners_[i].level, nullptr);
+        Feature::Ptr feature_cur = Feature::create(px_cur, ft_cur.normalized(), corners_[i].level, nullptr);
 
+        frame_ref_->addFeature(feature_ref);
         frame_cur_->addFeature(feature_cur);
-        keyframe_ref->addFeature(feature_ref);
-        keyframe_cur->addFeature(feature_cur);
-
-        mpt->addObservation(keyframe_ref, feature_ref);
-        mpt->addObservation(keyframe_cur, feature_cur);
-        mpt->updateViewAndDepth();
     }
-
-    map->insertKeyFrame(keyframe_ref);
-    map->insertKeyFrame(keyframe_cur);
-
-    keyframe_ref->updateConnections();
-    keyframe_cur->updateConnections();
-
-    size_t n = map->MapPointsInMap();
-
-    LOG_IF(INFO, verbose_) << "[INIT][6] Initialization succeed, and creating inital map with " << n << " map points";
 }
 
 void Initializer::getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur) const

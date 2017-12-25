@@ -89,7 +89,7 @@ FeatureTracker::~FeatureTracker()
     for(Grid::Cell*& c : grid_.cells) { delete c; }
 }
 
-int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame, const Map::Ptr &map)
+int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
 {
     LOG_IF(INFO, report_) << "[FtTrack][*] -- Reproject Local Map --";
     double t0 = (double)cv::getTickCount();

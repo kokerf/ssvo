@@ -120,7 +120,7 @@ FastDetector::FastDetector(int width, int height, int border, int nlevels,
                            int grid_size, int grid_min_size, int max_threshold, int min_threshold):
     width_(width), height_(height), border_(border), nlevels_(nlevels), grid_min_size_(grid_min_size),
     size_adjust_(grid_size!=grid_min_size), max_threshold_(max_threshold), min_threshold_(min_threshold),
-    threshold_(max_threshold_), grid_fliter_(width, height, grid_size, grid_min_size)
+    threshold_(max_threshold_), grid_filter_(width, height, grid_size, grid_min_size)
 {
     corners_in_levels_.resize(nlevels_);
 }
@@ -143,8 +143,8 @@ int FastDetector::detect(const ImgPyr &img_pyr, Corners &new_corners, const Corn
     }
 
     //! 2. Get corners from grid
-    grid_fliter_.setExistingCorners(exist_corners);
-    grid_fliter_.resetOccupancy();
+    grid_filter_.setExistingCorners(exist_corners);
+    grid_filter_.resetOccupancy();
     //! if adjust the grid size
     if(size_adjust_)
     {
@@ -154,15 +154,15 @@ int FastDetector::detect(const ImgPyr &img_pyr, Corners &new_corners, const Corn
             for(const Corner &c : cs)
                 new_corners.push_back(c);
 
-        grid_fliter_.setCornersAdaptive(new_corners, N);
-        grid_fliter_.getCorners(new_corners);
+        grid_filter_.setCornersAdaptive(new_corners, N);
+        grid_filter_.getCorners(new_corners);
     }
     else
     {
         for(const Corners &cs : corners_in_levels_)
-            grid_fliter_.setCorners(cs);
+            grid_filter_.setCorners(cs);
 
-        grid_fliter_.getCorners(new_corners);
+        grid_filter_.getCorners(new_corners);
     }
 
     return new_corners.size();
@@ -257,7 +257,7 @@ void FastDetector::drawGrid(const cv::Mat& img, cv::Mat& img_grid)
 {
     img_grid = img.clone();
 
-    int grid_size = grid_fliter_.getSize();
+    int grid_size = grid_filter_.getSize();
     int grid_n_cols = (ceil(static_cast<double>(width_)/grid_size));
     int grid_n_rows = (ceil(static_cast<double>(height_)/grid_size));
 
