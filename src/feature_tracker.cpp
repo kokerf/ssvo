@@ -186,7 +186,7 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
         const Sophus::SE3d T_cur_from_ref = frame->Tcw() * kf_ref->pose();
         const int patch_size = Align2DI::PatchSize;
         Matrix2d A_cur_from_ref;
-        utils::getWarpMatrixAffine(kf_ref->cam_, frame->cam_, ft_ref->px, ft_ref->ft, ft_ref->level,
+        utils::getWarpMatrixAffine(kf_ref->cam_, frame->cam_, ft_ref->px, ft_ref->fn, ft_ref->level,
                                    obs_ref_dir.norm(), T_cur_from_ref, patch_size, A_cur_from_ref);
 
         // TODO 如果Affine很小的话，则不用warp

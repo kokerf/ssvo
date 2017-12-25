@@ -94,7 +94,7 @@ int AlignSE3::computeReferencePatches(int level)
             continue;
 
         double depth = (fts[n]->mpt->pose() - ref_pose).norm();
-        Vector3d ref_xyz = fts[n]->ft;
+        Vector3d ref_xyz = fts[n]->fn;
         ref_xyz *= depth;
 
         ref_feature_cache_.col(feature_counter) = ref_xyz;

@@ -73,14 +73,14 @@ void evalueErrors(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, double& error)
 
         double predicted_x1 = p1[0] / p1[2];
         double predicted_y1 = p1[1] / p1[2];
-        double dx1 = predicted_x1 - ft1->ft[0]/ft1->ft[2];
-        double dy1 = predicted_y1 - ft1->ft[1]/ft1->ft[2];
+        double dx1 = predicted_x1 - ft1->fn[0]/ft1->fn[2];
+        double dy1 = predicted_y1 - ft1->fn[1]/ft1->fn[2];
         residuals[0] += dx1*dx1 + dy1*dy1;
 
         double predicted_x2 = p2[0] / p2[2];
         double predicted_y2 = p2[1] / p2[2];
-        double dx2 = predicted_x2 - ft2->ft[0]/ft2->ft[2];
-        double dy2 = predicted_y2 - ft2->ft[1]/ft2->ft[2];
+        double dx2 = predicted_x2 - ft2->fn[0]/ft2->fn[2];
+        double dy2 = predicted_y2 - ft2->fn[1]/ft2->fn[2];
         residuals[1] += dx2*dx2 + dy2*dy2;
     }
 

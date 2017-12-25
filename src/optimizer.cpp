@@ -34,10 +34,10 @@ void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, bo
         mpt->optimal_pose_ = mpt->pose();
         mpts.push_back(mpt);
 
-        ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft1->ft[0]/ft1->ft[2], ft1->ft[1]/ft1->ft[2]);
+        ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft1->fn[0]/ft1->fn[2], ft1->fn[1]/ft1->fn[2]);
         problem.AddResidualBlock(cost_function1, NULL, kf1->optimal_Tcw_.data(), mpt->optimal_pose_.data());
 
-        ceres::CostFunction* cost_function2 = ceres_slover::ReprojectionErrorSE3::Create(ft2->ft[0]/ft2->ft[2], ft2->ft[1]/ft2->ft[2]);
+        ceres::CostFunction* cost_function2 = ceres_slover::ReprojectionErrorSE3::Create(ft2->fn[0]/ft2->fn[2], ft2->fn[1]/ft2->fn[2]);
         problem.AddResidualBlock(cost_function2, NULL, kf2->optimal_Tcw_.data(), mpt->optimal_pose_.data());
     }
 
@@ -79,7 +79,7 @@ void Optimizer::motionOnlyBundleAdjustment(Frame::Ptr frame, bool report, bool v
             continue;
 
         mpt->optimal_pose_ = mpt->pose();
-        ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->ft[0]/ft->ft[2], ft->ft[1]/ft->ft[2]);
+        ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn[0]/ft->fn[2], ft->fn[1]/ft->fn[2]);
         problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), mpt->optimal_pose_.data());
         problem.SetParameterBlockConstant(mpt->optimal_pose_.data());
     }

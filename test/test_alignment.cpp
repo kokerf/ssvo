@@ -196,7 +196,7 @@ void align_by_ceres(Frame::Ptr reference_frame, Frame::Ptr current_frame, int le
             continue;
 
         double depth = (ft->mpt->pose() - ref_pose).norm();
-        Vector3d ref_xyz = ft->ft;
+        Vector3d ref_xyz = ft->fn;
         ref_xyz *= depth;
 
         Matrix<double, 16, 1> patch, dx, dy;
