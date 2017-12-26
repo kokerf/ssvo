@@ -129,7 +129,7 @@ void Viewer::drawKeyFrames()
 
     for(KeyFrame::Ptr kf : kfs)
     {
-        Sophus::SE3d pose = kf->pose();
+        SE3d pose = kf->pose();
         drawCamera(pose.matrix(), cv::Scalar(0.0, 1.0, 0.2));
     }
 }

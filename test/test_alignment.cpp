@@ -174,8 +174,8 @@ void align_by_ceres(Frame::Ptr reference_frame, Frame::Ptr current_frame, int le
     reference_frame->optimal_Tcw_ = reference_frame->Tcw();
     current_frame->optimal_Tcw_ = current_frame->Tcw();
 
-    problem.AddParameterBlock(reference_frame->optimal_Tcw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
-    problem.AddParameterBlock(current_frame->optimal_Tcw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
+    problem.AddParameterBlock(reference_frame->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
+    problem.AddParameterBlock(current_frame->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
     problem.SetParameterBlockConstant(reference_frame->optimal_Tcw_.data());
 
     const cv::Mat ref_img = reference_frame->getImage(level);
@@ -243,13 +243,13 @@ int main(int argc, char *argv[])
 
     Quaterniond qwc0(ground_truth0[6], ground_truth0[3], ground_truth0[4], ground_truth0[5]);
     qwc0.normalize();
-    Sophus::SE3d Twc0(qwc0.toRotationMatrix(), Vector3d(ground_truth0[0], ground_truth0[1], ground_truth0[2]));
+    SE3d Twc0(qwc0.toRotationMatrix(), Vector3d(ground_truth0[0], ground_truth0[1], ground_truth0[2]));
 
     Quaterniond qwc1(ground_truth1[6], ground_truth1[3], ground_truth1[4], ground_truth1[5]);
     qwc1.normalize();
-    Sophus::SE3d Twc1(qwc1.toRotationMatrix(), Vector3d(ground_truth1[0], ground_truth1[1], ground_truth1[2]));
+    SE3d Twc1(qwc1.toRotationMatrix(), Vector3d(ground_truth1[0], ground_truth1[1], ground_truth1[2]));
 
-    Sophus::SE3d T_0_from_1 = Twc0.inverse() * Twc1;
+    SE3d T_0_from_1 = Twc0.inverse() * Twc1;
 
     std::cout << "Timestamp: " << std::setprecision(16) << timestamp0 << " " << timestamp1 << std::endl;
 
@@ -324,7 +324,7 @@ int main(int argc, char *argv[])
 
 //    align_by_ceres(frame0, frame1, 0);
 
-    Sophus::SE3d T_w_from_c = frame1->pose();
+    SE3d T_w_from_c = frame1->pose();
     AngleAxisd aa0; aa0 = T_w_from_c.rotationMatrix();
     AngleAxisd aa1; aa1 = T_0_from_1.rotationMatrix();
     LOG(INFO) << "Aligen se3: " << T_w_from_c.translation().transpose() << " "

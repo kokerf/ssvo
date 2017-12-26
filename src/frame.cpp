@@ -13,7 +13,7 @@ uint64_t Frame::next_id_ = 0;
 Frame::Frame(const cv::Mat &img, const double timestamp, const Camera::Ptr &cam) :
     id_(next_id_++), timestamp_(timestamp), cam_(cam), nlevels_(Config::imageTopLevel() + 1)
 {
-    Tcw_ = Sophus::SE3d(Matrix3d::Identity(), Vector3d::Zero());
+    Tcw_ = SE3d(Matrix3d::Identity(), Vector3d::Zero());
     Twc_ = Tcw_.inverse();
 
     utils::createPyramid(img, img_pyr_, nlevels_);
@@ -21,12 +21,12 @@ Frame::Frame(const cv::Mat &img, const double timestamp, const Camera::Ptr &cam)
 
 Frame::Frame(const ImgPyr &img_pyr, const double timestamp, const Camera::Ptr &cam) :
     id_(next_id_++), timestamp_(timestamp), cam_(cam), nlevels_(img_pyr.size()), img_pyr_(img_pyr),
-    Tcw_(Sophus::SE3d(Matrix3d::Identity(), Vector3d::Zero())), Twc_(Tcw_.inverse())
+    Tcw_(SE3d(Matrix3d::Identity(), Vector3d::Zero())), Twc_(Tcw_.inverse())
 {}
 
 Frame::Frame(const ImgPyr &img_pyr, const uint64_t id, const double timestamp, const Camera::Ptr &cam) :
     id_(id), timestamp_(timestamp), cam_(cam), nlevels_(img_pyr.size()), img_pyr_(img_pyr),
-    Tcw_(Sophus::SE3d(Matrix3d::Identity(), Vector3d::Zero())), Twc_(Tcw_.inverse())
+    Tcw_(SE3d(Matrix3d::Identity(), Vector3d::Zero())), Twc_(Tcw_.inverse())
 {}
 
 const ImgPyr Frame::image() const
@@ -40,13 +40,13 @@ const cv::Mat Frame::getImage(int level) const
     return img_pyr_[level];
 }
 
-Sophus::SE3d Frame::Tcw()
+SE3d Frame::Tcw()
 {
     std::lock_guard<std::mutex> lock(mutex_pose_);
     return Tcw_;
 }
 
-Sophus::SE3d Frame::pose()
+SE3d Frame::pose()
 {
     std::lock_guard<std::mutex> lock(mutex_pose_);
     return Twc_;
@@ -58,7 +58,7 @@ Vector3d Frame::ray()
     return Dw_;
 }
 
-void Frame::setPose(const Sophus::SE3d& pose)
+void Frame::setPose(const SE3d& pose)
 {
     std::lock_guard<std::mutex> lock(mutex_pose_);
     Twc_ = pose;
@@ -69,12 +69,12 @@ void Frame::setPose(const Sophus::SE3d& pose)
 void Frame::setPose(const Matrix3d& R, const Vector3d& t)
 {
     std::lock_guard<std::mutex> lock(mutex_pose_);
-    Twc_ = Sophus::SE3d(R, t);
+    Twc_ = SE3d(R, t);
     Tcw_ = Twc_.inverse();
     Dw_ = Tcw_.rotationMatrix().determinant() * Tcw_.rotationMatrix().col(2);
 }
 
-void Frame::setTcw(const Sophus::SE3d &Tcw)
+void Frame::setTcw(const SE3d &Tcw)
 {
     std::lock_guard<std::mutex> lock(mutex_pose_);
     Tcw_ = Tcw;
@@ -85,7 +85,7 @@ void Frame::setTcw(const Sophus::SE3d &Tcw)
 
 bool Frame::isVisiable(const Vector3d &xyz_w)
 {
-    Sophus::SE3d Tcw;
+    SE3d Tcw;
     {
         std::lock_guard<std::mutex> lock(mutex_pose_);
         Tcw = Tcw_;
@@ -118,7 +118,7 @@ void Frame::addFeature(const Feature::Ptr ft)
 
 bool Frame::getSceneDepth(double &depth_mean, double &depth_min)
 {
-    Sophus::SE3d Tcw;
+    SE3d Tcw;
     {
         std::lock_guard<std::mutex> lock(mutex_pose_);
         Tcw = Tcw_;

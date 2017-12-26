@@ -31,6 +31,7 @@ EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION(Eigen::Matrix2d)
 EIGEN_DEFINE_STL_VECTOR_SPECIALIZATION(Eigen::Matrix3d)
 
 using namespace Eigen;
+using Sophus::SE3d;
 
 #ifndef MIN
     #define MIN(a,b)  ((a) > (b) ? (b) : (a))

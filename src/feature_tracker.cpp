@@ -12,7 +12,7 @@ void getWarpMatrixAffine(const Camera::Ptr &cam_ref,
                                 const Vector3d &f_ref,
                                 const int level_ref,
                                 const double depth_ref,
-                                const Sophus::SE3d &T_cur_ref,
+                                const SE3d &T_cur_ref,
                                 const int patch_size,
                                 Matrix2d &A_cur_ref)
 {
@@ -183,7 +183,7 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
         const MapPoint::Ptr mpt = candidate.pt;
         const Feature::Ptr ft_ref = mpt->findObservation(kf_ref);
         const Vector3d obs_ref_dir(kf_ref->pose().translation() - mpt->pose());
-        const Sophus::SE3d T_cur_from_ref = frame->Tcw() * kf_ref->pose();
+        const SE3d T_cur_from_ref = frame->Tcw() * kf_ref->pose();
         const int patch_size = Align2DI::PatchSize;
         Matrix2d A_cur_from_ref;
         utils::getWarpMatrixAffine(kf_ref->cam_, frame->cam_, ft_ref->px, ft_ref->fn, ft_ref->level,

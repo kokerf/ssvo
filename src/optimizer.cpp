@@ -12,8 +12,8 @@ void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, bo
 
     ceres::Problem problem;
     ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
-    problem.AddParameterBlock(kf1->optimal_Tcw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
-    problem.AddParameterBlock(kf2->optimal_Tcw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
+    problem.AddParameterBlock(kf1->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
+    problem.AddParameterBlock(kf2->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
     problem.SetParameterBlockConstant(kf1->optimal_Tcw_.data());
 
     const std::vector<Feature::Ptr> fts1 = kf1->getFeatures();
@@ -66,7 +66,7 @@ void Optimizer::motionOnlyBundleAdjustment(Frame::Ptr frame, bool report, bool v
 
     ceres::Problem problem;
     ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
-    problem.AddParameterBlock(frame->optimal_Tcw_.data(), Sophus::SE3d::num_parameters, local_parameterization);
+    problem.AddParameterBlock(frame->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
 
     double scale = Config::pixelUnSigma2() * 4;
     ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);

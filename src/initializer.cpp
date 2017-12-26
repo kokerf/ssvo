@@ -21,7 +21,7 @@ InitResult Initializer::addFirstImage(Frame::Ptr frame_ref)
     frame_ref_ = frame_ref;
 
     Corners old_corners;
-    fast_detector_->detect(frame_ref_->image(), corners_, old_corners, Config::initMinCorners(), Config::fastMinEigen());
+    fast_detector_->detect(frame_ref_->image(), corners_, old_corners, Config::initMinCorners()/0.9, Config::fastMinEigen());
 
     //! check corner number of first image
     const int N = corners_.size();
@@ -171,8 +171,8 @@ void Initializer::createInitalMap(std::vector<Vector3d> &points, double map_scal
     double scale = map_scale*count/mean_depth;
 
     //! rescale frame pose
-    Sophus::SE3d T_cur_from_ref(T_.topLeftCorner(3,3), T_.rightCols(1));
-    Sophus::SE3d T_ref_from_cur = T_cur_from_ref.inverse();
+    SE3d T_cur_from_ref(T_.topLeftCorner(3,3), T_.rightCols(1));
+    SE3d T_ref_from_cur = T_cur_from_ref.inverse();
     T_ref_from_cur.translation() = T_ref_from_cur.translation() * scale;
     frame_ref_->setPose(Matrix3d::Identity(), Vector3d::Zero());
     frame_cur_->setPose(T_ref_from_cur);

@@ -179,7 +179,7 @@ bool System::changeReferenceKeyFrame()
     double min_depth = std::numeric_limits<double>::max();
     current_frame_->getSceneDepth(median_depth, min_depth);
 
-    Sophus::SE3d T_cur_from_ref = current_frame_->Tcw() * reference_keyframe_->pose();
+    SE3d T_cur_from_ref = current_frame_->Tcw() * reference_keyframe_->pose();
     Vector3d tran = T_cur_from_ref.translation();
 
     bool c1 = tran.dot(tran) > 0.12 * median_depth;

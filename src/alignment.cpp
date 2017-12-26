@@ -38,7 +38,7 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
         const int n = computeReferencePatches(l);
 
         double res_old = std::numeric_limits<double>::max();
-        Sophus::SE3d T_cur_from_ref_old = T_cur_from_ref_;
+        SE3d T_cur_from_ref_old = T_cur_from_ref_;
         for(int i = 0; i < max_iterations; ++i)
         {
             //! compute residual
@@ -52,8 +52,8 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
             //! update
             res_old = res;
             T_cur_from_ref_old = T_cur_from_ref_;
-            Sophus::SE3d::Tangent se3 = Hessian_.ldlt().solve(Jres_);
-            T_cur_from_ref_ = T_cur_from_ref_ * Sophus::SE3d::exp(-se3);
+            SE3d::Tangent se3 = Hessian_.ldlt().solve(Jres_);
+            T_cur_from_ref_ = T_cur_from_ref_ * SE3d::exp(-se3);
 
             LOG_IF(INFO, verbose_) << "Level: " << l << " Residual: " << res << " step: " << se3.dot(se3)
                                    << " SE3: [" << T_cur_from_ref_.log().transpose() << "]";
@@ -176,7 +176,7 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
                    const Matrix<double, PatchArea, 1> &patch,
                    const Matrix<double, PatchArea, 1> &patch_gx,
                    const Matrix<double, PatchArea, 1> &patch_gy,
-                   Eigen::Vector3d &estimate,
+                   Vector3d &estimate,
                    const int max_iterations,
                    const double epslion)
 {
@@ -196,7 +196,7 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
     Hessian_ = jacbian_cache_.transpose() * jacbian_cache_;
     invHessian_ = Hessian_.inverse();
 
-    Eigen::Vector3d update;
+    Vector3d update;
 
     for(int iter = 0; iter < max_iterations; iter++)
     {

@@ -22,22 +22,22 @@ public:
     const cv::Mat getImage(int level) const;
 
     //! Transform (c)amera from (w)orld
-    Sophus::SE3d Tcw();
+    SE3d Tcw();
 
     //! Transform (w)orld from (c)amera
-    Sophus::SE3d pose();
+    SE3d pose();
 
     //! Principal ray in world frame
     Vector3d ray();
 
     //! Set pose in world frame
-    void setPose(const Sophus::SE3d& pose);
+    void setPose(const SE3d& pose);
 
     //! Set pose in world frame
     void setPose(const Matrix3d& R, const Vector3d& t);
 
     //! Set Extrinsic Matrix
-    void setTcw(const Sophus::SE3d& Tcw);
+    void setTcw(const SE3d& Tcw);
 
     bool isVisiable(const Vector3d &xyz_w);
 
@@ -109,7 +109,7 @@ public:
 
     const double log_level_factor_ = log(2.0f);
 
-    Sophus::SE3d optimal_Tcw_;//! for optimization
+    SE3d optimal_Tcw_;//! for optimization
 
 protected:
 
@@ -117,8 +117,8 @@ protected:
 
     ImgPyr img_pyr_;
 
-    Sophus::SE3d Tcw_;
-    Sophus::SE3d Twc_;
+    SE3d Tcw_;
+    SE3d Twc_;
     Vector3d Dw_;
 
     std::shared_ptr<KeyFrame> ref_keyframe_;

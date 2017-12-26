@@ -53,7 +53,7 @@ private:
     std::vector<bool> visiable_fts_;
     Matrix<double, 3, Dynamic, RowMajor> ref_feature_cache_;
 
-    Sophus::SE3d T_cur_from_ref_;
+    SE3d T_cur_from_ref_;
 };
 
 
@@ -67,7 +67,7 @@ public:
              const Matrix<double, PatchArea, 1> &patch,
              const Matrix<double, PatchArea, 1> &patch_gx,
              const Matrix<double, PatchArea, 1> &patch_gy,
-             Eigen::Vector3d &estimate, const int max_iterations = 30, const double epslion = 1E-2f);
+             Vector3d &estimate, const int max_iterations = 30, const double epslion = 1E-2f);
 
 private:
 
@@ -76,7 +76,7 @@ private:
     const int border_ = HalfPatchSize+1;
 
     Matrix<double, Parameters, Parameters, RowMajor> invHessian_;
-    Eigen::Vector3d estimate_;
+    Vector3d estimate_;
 };
 
 }

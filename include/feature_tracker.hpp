@@ -70,7 +70,7 @@ void getWarpMatrixAffine(
     const Vector3d &f_ref,
     const int level_ref,
     const double depth_ref,
-    const Sophus::SE3d &T_cur_ref,
+    const SE3d &T_cur_ref,
     const int patch_size,
     Matrix2d &A_cur_ref);
 

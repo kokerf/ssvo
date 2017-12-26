@@ -147,8 +147,9 @@ int main(int argc, char const *argv[])
         if (img.empty()) throw std::runtime_error("Could not open image: " + *i);
 
         LOG(WARNING) << "Load Image: " << *i << std::endl;
-        cv::Mat cur_img;
-        cv::cvtColor(img, cur_img, cv::COLOR_RGB2GRAY);
+        cv::Mat cur_img = img.clone();
+        if(img.channels()!=1)
+            cv::cvtColor(cur_img, cur_img, cv::COLOR_RGB2GRAY);
         std::vector<cv::Mat> image_pyramid;
         computePyramid(cur_img, image_pyramid, 2, 4, cv::Size(40, 40));
 
