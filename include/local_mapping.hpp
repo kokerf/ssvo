@@ -7,6 +7,28 @@
 
 namespace ssvo{
 
+//! modified from SVO, https://github.com/uzh-rpg/rpg_svo/blob/master/svo/include/svo/depth_filter.h#L35
+/// A seed is a probabilistic depth estimate for a single pixel.
+struct Seed
+{
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+    static int seed_counter;
+    int id;                      //!< Seed ID, only used for visualization.
+    KeyFrame::Ptr kf;            //!< Batch id is the id of the keyframe for which the seed was created.
+    Feature::Ptr ftr;            //!< Feature in the keyframe for which the depth should be computed.
+    double a;                    //!< a of Beta distribution: When high, probability of inlier is large.
+    double b;                    //!< b of Beta distribution: When high, probability of outlier is large.
+    double mu;                   //!< Mean of normal distribution.
+    double z_range;              //!< Max range of the possible depth.
+    double sigma2;               //!< Variance of normal distribution.
+    Matrix2d patch_cov;          //!< Patch covariance in reference image.
+    Seed(KeyFrame::Ptr kf, Feature::Ptr ftr, double depth_mean, double depth_min);
+    double computeTau(const SE3d& T_ref_cur, const Vector3d& f, const double z, const double px_error_angle);
+    void update(const double x, const double tau2);
+};
+
+
 class LocalMapper : public noncopyable
 {
 public:
@@ -44,9 +66,10 @@ private:
 
     std::deque<std::pair<Frame::Ptr, KeyFrame::Ptr> > frames_buffer_;
     std::deque<std::pair<double, double> > depth_buffer_;
+    std::deque<Seed, aligned_allocator<Seed> > seeds_;
 
-    std::pair<Frame::Ptr, KeyFrame::Ptr> current_frame;
-    std::pair<double, double> current_depth;
+    std::pair<Frame::Ptr, KeyFrame::Ptr> current_frame_;
+    std::pair<double, double> current_depth_;
 
     const int delay_;
     const bool report_;

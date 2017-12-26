@@ -46,6 +46,7 @@ Camera::Camera(int width, int height, const cv::Mat& K, const cv::Mat& D):
     distortion_ = (fabs(k1_) > 0.0000001);
 }
 
+//! return the px lift to normalized plane
 Vector3d Camera::lift(const Vector2d &px) const
 {
     Vector3d xyz(0, 0, 1);
@@ -62,7 +63,7 @@ Vector3d Camera::lift(const Vector2d &px) const
         xyz[1] = (px[1] - cy_) / fy_;
     }
 
-    return xyz.normalized();
+    return xyz;
 }
 
 Vector2d Camera::project(const Vector3d &xyz) const
