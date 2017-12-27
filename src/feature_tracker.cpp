@@ -61,7 +61,7 @@ void warpAffine(const cv::Mat &img_ref,
             if(px[0]<0 || px[1]<0 || px[0]>=img_ref.cols-1 || px[1]>=img_ref.rows-1)
                 patch(y, x) = 0;
             else
-                patch(y, x) = (Td) utils::interpolateMat_8u(img_ref, px[0], px[1]);
+                patch(y, x) = utils::interpolateMat<uchar, Td>(img_ref, px[0], px[1]);
         }
     }
 }
