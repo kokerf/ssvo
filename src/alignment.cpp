@@ -238,4 +238,32 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
 }
 
 
+namespace utils{
+
+void getWarpMatrixAffine(const Camera::Ptr &cam_ref,
+                         const Camera::Ptr &cam_cur,
+                         const Vector2d &px_ref,
+                         const Vector3d &f_ref,
+                         const int level_ref,
+                         const double depth_ref,
+                         const SE3d &T_cur_ref,
+                         const int patch_size,
+                         Matrix2d &A_cur_ref)
+{
+    const double half_patch_size = static_cast<double>(patch_size+2)/2;
+    const Vector3d xyz_ref(depth_ref * f_ref);
+    const double length = half_patch_size * (1 << level_ref);
+    Vector3d xyz_ref_du(cam_ref->lift(px_ref + Vector2d(length, 0)));
+    Vector3d xyz_ref_dv(cam_ref->lift(px_ref + Vector2d(0, length)));
+    xyz_ref_du *= xyz_ref[2]/xyz_ref_du[2];
+    xyz_ref_dv *= xyz_ref[2]/xyz_ref_dv[2];
+    const Vector2d px_cur(cam_cur->project(T_cur_ref * xyz_ref));
+    const Vector2d px_du(cam_cur->project(T_cur_ref * xyz_ref_du));
+    const Vector2d px_dv(cam_cur->project(T_cur_ref * xyz_ref_dv));
+    A_cur_ref.col(0) = (px_du - px_cur)/half_patch_size;
+    A_cur_ref.col(1) = (px_dv - px_cur)/half_patch_size;
+}
+
+}
+
 }

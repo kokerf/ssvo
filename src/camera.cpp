@@ -90,4 +90,28 @@ Vector2d Camera::project(const Vector3d &xyz) const
     return px;
 }
 
+Vector2d Camera::project(const Vector2d &fn) const
+{
+    Vector2d px(fn);
+    if(distortion_)
+    {
+        const double x = px[0];
+        const double y = px[1];
+        const double x2 = x * x;
+        const double y2 = y * y;
+        const double r2 = x2 + y2;
+        const double rdist = 1 + r2 * (k1_ + k2_ * r2);
+        const double a1 = 2 * x * y;
+        const double a2 = r2 + 2 * x * x;
+        const double a3 = r2 + 2 * y * y;
+
+        px[0] = x * rdist + p1_ * a1 + p2_ * a2;
+        px[1] = y * rdist + p1_ * a3 + p2_ * a1;
+    }
+
+    px[0] = fx_ * px[0] + cx_;
+    px[1] = fy_ * px[1] + cy_;
+    return px;
+}
+
 }

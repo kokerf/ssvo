@@ -32,7 +32,7 @@ System::System(std::string config_file) :
     fast_detector_ = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
     feature_tracker_ = FeatureTracker::create(width, height, grid_size, true);
     initializer_ = Initializer::create(fast_detector_, true);
-    mapper_ = LocalMapper::create(fast_detector_, fps);
+    mapper_ = LocalMapper::create(fast_detector_, fps, true, true);
     viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));
 
 }
@@ -183,7 +183,7 @@ bool System::changeReferenceKeyFrame()
     Vector3d tran = T_cur_from_ref.translation();
 
     bool c1 = tran.dot(tran) > 0.12 * median_depth;
-    bool c2 = static_cast<double>(overlap) / reference_keyframe_->N() < 0.9;
+    bool c2 = static_cast<double>(overlap) / reference_keyframe_->N() < 0.8;
 
     //! create new keyFrame
     if(c1 || c2)
@@ -209,6 +209,7 @@ bool System::changeReferenceKeyFrame()
             return false;
 
         reference_keyframe_ = best_keyframe;
+        mapper_->insertNewFrame(current_frame_, nullptr, median_depth, min_depth);
     }
 
     return true;

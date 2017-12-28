@@ -4,6 +4,7 @@
 #include "global.hpp"
 #include "map.hpp"
 #include "feature_detector.hpp"
+#include "alignment.hpp"
 
 namespace ssvo{
 
@@ -15,19 +16,19 @@ struct Seed
 
     static int seed_counter;
     int id;                      //!< Seed ID, only used for visualization.
-    KeyFrame::Ptr kf;            //!< Batch id is the id of the keyframe for which the seed was created.
-    Feature::Ptr ftr;            //!< Feature in the keyframe for which the depth should be computed.
+    Feature::Ptr ft;             //!< Feature in the keyframe for which the depth should be computed.
     double a;                    //!< a of Beta distribution: When high, probability of inlier is large.
     double b;                    //!< b of Beta distribution: When high, probability of outlier is large.
     double mu;                   //!< Mean of normal distribution.
     double z_range;              //!< Max range of the possible depth.
     double sigma2;               //!< Variance of normal distribution.
     Matrix2d patch_cov;          //!< Patch covariance in reference image.
-    Seed(KeyFrame::Ptr kf, Feature::Ptr ftr, double depth_mean, double depth_min);
+    Seed(Feature::Ptr ft, double depth_mean, double depth_min);
     double computeTau(const SE3d& T_ref_cur, const Vector3d& f, const double z, const double px_error_angle);
     void update(const double x, const double tau2);
 };
 
+typedef std::list<Seed, aligned_allocator<Seed> > Seeds;
 
 class LocalMapper : public noncopyable
 {
@@ -35,24 +36,34 @@ public:
 
     typedef std::shared_ptr<LocalMapper> Ptr;
 
-    void run();
+    void startThread();
+
+    void stopThread();
 
     void createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, const std::vector<Vector3d> &points);
 
     void insertNewFrame(Frame::Ptr frame, KeyFrame::Ptr keyframe, double mean_depth, double min_depth);
 
-    static LocalMapper::Ptr create(const FastDetector::Ptr &fast_detector, double fps, bool report = false)
-    { return LocalMapper::Ptr(new LocalMapper(fast_detector, fps, report));}
+    static LocalMapper::Ptr create(const FastDetector::Ptr &fast_detector, double fps, bool report = false, bool verbose = false)
+    { return LocalMapper::Ptr(new LocalMapper(fast_detector, fps, report, verbose));}
 
 private:
 
-    LocalMapper(const FastDetector::Ptr &fast_detector, double fps, bool report = false);
+    LocalMapper(const FastDetector::Ptr &fast_detector, double fps, bool report, bool verbose);
+
+    void run();
+
+    void setStop();
+
+    bool isRequiredStop();
 
     bool checkNewFrame();
 
     bool processNewKeyFrame();
 
     bool processNewFrame();
+
+    bool findEpipolarMatch(const Seed &seed, const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame, const SE3d &T_cur_from_ref, double &depth);
 
 public:
 
@@ -66,15 +77,18 @@ private:
 
     std::deque<std::pair<Frame::Ptr, KeyFrame::Ptr> > frames_buffer_;
     std::deque<std::pair<double, double> > depth_buffer_;
-    std::deque<Seed, aligned_allocator<Seed> > seeds_;
+    std::deque<std::pair<KeyFrame::Ptr, std::shared_ptr<Seeds>> > seeds_buffer_;
 
     std::pair<Frame::Ptr, KeyFrame::Ptr> current_frame_;
     std::pair<double, double> current_depth_;
 
     const int delay_;
     const bool report_;
+    const bool verbose_;
 
+    bool stop_require_;
     std::mutex mutex_kfs_;
+    std::mutex mutex_stop_;
     std::condition_variable cond_process_;
 
 };

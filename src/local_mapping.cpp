@@ -1,27 +1,41 @@
+#include <include/config.hpp>
 #include "local_mapping.hpp"
+#include "config.hpp"
+#include "utils.hpp"
 
 namespace ssvo{
 
-namespace utils {
-
-template<typename T>
-double normal_distribution(T x, T mu, T sigma)
+void showMatch(const cv::Mat &src, const cv::Mat &dst, const Vector2d &epl0, const Vector2d &epl1, const Vector2d &px_src, const Vector2d &px_dst)
 {
-    static const double inv_sqrt_2pi = 0.3989422804014327f;
-    double a = (x - mu) / sigma;
+    cv::Mat src_show = src.clone();
+    cv::Mat dst_show = dst.clone();
+    if(src_show.channels() == 1)
+        cv::cvtColor(src_show, src_show, CV_GRAY2RGB);
+    if(dst_show.channels() == 1)
+        cv::cvtColor(dst_show, dst_show, CV_GRAY2RGB);
 
-    return inv_sqrt_2pi / sigma * std::exp(-0.5 * a * a);
+    cv::Point2d p0(epl0[0], epl0[1]);
+    cv::Point2d p1(epl1[0], epl1[1]);
+    cv::Point2d p_src(px_src[0], px_src[1]);
+    cv::Point2d p_dst(px_dst[0], px_dst[1]);
+
+    cv::line(dst_show, p0, p1, cv::Scalar(0, 255, 0), 1);
+    cv::circle(dst_show, p1, 3, cv::Scalar(0,255,0));
+    cv::circle(src_show, p_src, 5, cv::Scalar(255,0,0));
+    cv::circle(dst_show, p_dst, 5, cv::Scalar(255,0,0));
+
+    cv::imshow("cur", src_show);
+    cv::imshow("dst", dst_show);
+    cv::waitKey(0);
 }
 
-}
 
 //! Seed
 int Seed::seed_counter = 0;
 
-Seed::Seed(KeyFrame::Ptr kf, Feature::Ptr ftr, double depth_mean, double depth_min) :
+Seed::Seed(Feature::Ptr ft, double depth_mean, double depth_min) :
     id(seed_counter++),
-    kf(kf),
-    ftr(ftr),
+    ft(ft),
     a(10),
     b(10),
     mu(1.0/depth_mean),
@@ -73,11 +87,51 @@ void Seed::update(const double x, const double tau2)
 }
 
 //! LocalMapper
-LocalMapper::LocalMapper(const FastDetector::Ptr &fast_detector, double fps, bool report) :
-    fast_detector_(fast_detector), delay_(static_cast<int>(1000.0/fps)), report_(report)
+LocalMapper::LocalMapper(const FastDetector::Ptr &fast_detector, double fps, bool report, bool verbose) :
+    fast_detector_(fast_detector), delay_(static_cast<int>(1000.0/fps)), report_(report), verbose_(report&&verbose)
 {
     map_ = Map::create();
+}
+
+void LocalMapper::startThread()
+{
     mapping_thread_ = std::make_shared<std::thread>(std::bind(&LocalMapper::run, this));
+}
+
+void LocalMapper::stopThread()
+{
+    if(mapping_thread_ != nullptr)
+    {
+        setStop();
+        mapping_thread_->join();
+        mapping_thread_.reset();
+    }
+}
+
+void LocalMapper::setStop()
+{
+    std::unique_lock<std::mutex> lock(mutex_stop_);
+    stop_require_ = true;
+}
+
+bool LocalMapper::isRequiredStop()
+{
+    std::unique_lock<std::mutex> lock(mutex_stop_);
+    return stop_require_;
+
+}
+
+void LocalMapper::run()
+{
+    while(!isRequiredStop())
+    {
+        if(!checkNewFrame())
+            continue;
+
+        processNewFrame();
+
+        processNewKeyFrame();
+    }
 }
 
 void LocalMapper::insertNewFrame(Frame::Ptr frame, KeyFrame::Ptr keyframe, double mean_depth, double min_depth)
@@ -86,12 +140,21 @@ void LocalMapper::insertNewFrame(Frame::Ptr frame, KeyFrame::Ptr keyframe, doubl
     keyframe->updateConnections();
 
     LOG_ASSERT(frame != nullptr) << "Error input! Frame should not be null!";
+    if(mapping_thread_ != nullptr)
     {
         std::unique_lock<std::mutex> lock(mutex_kfs_);
 
         frames_buffer_.emplace_back(frame, keyframe);
         depth_buffer_.emplace_back(mean_depth, min_depth);
         cond_process_.notify_one();
+    }
+    else
+    {
+        current_frame_ = std::make_pair(frame, keyframe);
+        current_depth_ = std::make_pair(mean_depth, min_depth);
+
+        processNewFrame();
+        processNewKeyFrame();
     }
 }
 
@@ -132,19 +195,6 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
     LOG_IF(INFO, report_) << "[Mapping] Creating inital map with " << map_->MapPointsInMap() << " map points";
 }
 
-void LocalMapper::run()
-{
-    while(true)
-    {
-        if(!checkNewFrame())
-            continue;
-
-        processNewFrame();
-
-        processNewKeyFrame();
-    }
-}
-
 bool LocalMapper::checkNewFrame()
 {
     {
@@ -182,15 +232,17 @@ bool LocalMapper::processNewKeyFrame()
     Corners new_corners;
     fast_detector_->detect(kf->image(), new_corners, old_corners, 150);
 
+    Seeds new_seeds;
     for(const Corner &corner : new_corners)
     {
         const Vector2d px(corner.x, corner.y);
         const Vector3d fn(kf->cam_->lift(px));
         Feature::Ptr ft = Feature::create(px, fn, corner.level, nullptr);
-        seeds_.emplace_back(Seed(kf, ft, mean_depth, min_depth));
+        new_seeds.emplace_back(Seed(ft, mean_depth, min_depth*0.5));
     }
+    seeds_buffer_.emplace_back(kf, std::make_shared<Seeds>(new_seeds));
 
-    LOG(INFO) << "[Mapping] Add new keyframe " << kf->id_ << " with " << new_corners.size() << " seeds";
+    LOG_IF(WARNING, report_) << "[Mapping] Add new keyframe " << kf->id_ << " with " << new_seeds.size() << " seeds";
 
     return true;
 }
@@ -199,6 +251,187 @@ bool LocalMapper::processNewFrame()
 {
     if(current_frame_.first == nullptr)
         return false;
+
+    const Frame::Ptr &frame = current_frame_.first;
+    for(auto &seeds_pair : seeds_buffer_)
+    {
+        const KeyFrame::Ptr keyframe = seeds_pair.first;
+        Seeds seeds = *seeds_pair.second;
+
+        // TODO old seeds_pair remove
+
+        SE3d T_cur_from_ref = frame->Tcw() * keyframe->pose();
+        for(auto it = seeds.begin(); it!=seeds.end(); it++)
+        {
+            double depth;
+            findEpipolarMatch(*it, keyframe, frame, T_cur_from_ref, depth);
+
+
+        }
+    }
+
+    return true;
+}
+
+bool LocalMapper::findEpipolarMatch(const Seed &seed,
+                                    const KeyFrame::Ptr &keyframe,
+                                    const Frame::Ptr &frame,
+                                    const SE3d &T_cur_from_ref,
+                                    double &depth)
+{
+    static const int patch_size = Align2DI::PatchSize;
+    static const int patch_area = Align2DI::PatchArea;
+    static const int half_patch_size = Align2DI::HalfPatchSize;
+
+    //! check if in the view of current frame
+    const double z_ref = 1.0/seed.mu;
+    const Vector3d xyz_cur(T_cur_from_ref * (seed.ft->fn * z_ref ));
+    const double z_cur = xyz_cur[2];
+    if(z_cur < 0.00f)
+        return false;
+
+    const Vector2d px_cur(frame->cam_->project(xyz_cur));
+    if(!frame->cam_->isInFrame(px_cur.cast<int>(), half_patch_size))
+        return false;
+
+    //! d - inverse depth, z - depth
+    const double sigma = sqrt(seed.sigma2);
+    const double d_max = seed.mu + sigma;
+    const double d_min = MAX(seed.mu - sigma, 0.00000001f);
+    const double z_min = 1.0/d_max;
+    const double z_max = 1.0/d_min;
+
+    //! on unit plane in cur frame
+    Vector3d xyz_near = T_cur_from_ref * (seed.ft->fn * z_min);
+    Vector3d xyz_far  = T_cur_from_ref * (seed.ft->fn * z_max);
+    xyz_near /= xyz_near[2];
+    xyz_far  /= xyz_far[2];
+    Vector2d epl_dir = (xyz_near - xyz_far).head<2>();
+
+    //! calculate best search level
+    const int level_ref = seed.ft->level;
+    const int level_cur = MapPoint::predictScale(z_ref, z_cur, level_ref, frame->nlevels_-1);
+    const double factor = static_cast<double>(1 << level_cur);
+    //! L * (1 << level_ref) / L' * (1 << level_cur) = z_ref / z_cur
+//    const double scale = z_cur / z_ref * (1 << level_ref) / (1 << level_cur);
+
+    //! px in image plane
+    Vector2d px_near = frame->cam_->project(xyz_near) / factor;
+    Vector2d px_far  = frame->cam_->project(xyz_far) / factor;
+    if(!frame->cam_->isInFrame(px_far.cast<int>(), half_patch_size, level_cur) ||
+       !frame->cam_->isInFrame(px_near.cast<int>(), half_patch_size, level_cur))
+        return false;
+
+    //! get warp patch
+    Matrix2d A_cur_from_ref;
+    utils::getWarpMatrixAffine(keyframe->cam_, frame->cam_, seed.ft->px, seed.ft->fn, level_ref,
+                               z_ref, T_cur_from_ref, patch_size, A_cur_from_ref);
+
+    static const int patch_border_size = patch_size+2;
+    cv::Mat image_ref = keyframe->getImage(level_ref);
+    Matrix<double, patch_border_size, patch_border_size, RowMajor> patch_with_border;
+    utils::warpAffine<double, patch_border_size>(image_ref, patch_with_border, A_cur_from_ref,
+                                                 seed.ft->px, level_ref, level_cur);
+
+    Matrix<double, patch_size, patch_size, RowMajor> patch;
+    patch = patch_with_border.block(1, 1, patch_size, patch_size);
+
+    const cv::Mat image_cur = frame->getImage(level_cur);
+    Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> > image_cur_eigen((uchar*)image_cur.data, image_cur.rows, image_cur.cols);
+    Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > patch_eigen(patch.data(), patch_area, 1);
+
+    Vector2d px_best(-1,-1);
+    double epl_length = (px_near-px_far).norm();
+    if(epl_length > 2.0)
+    {
+        int n_steps = epl_length / 0.707;
+        Vector2d step = epl_dir / n_steps;
+
+        // TODO check epl max length
+
+        // TODO 使用模板来加速！！！
+        //! SSD
+        double t0 = (double)cv::getTickCount();
+        ZSSD<double, patch_area> zssd(patch_eigen);
+        double score_best = std::numeric_limits<double>::max();
+        double score_second = score_best;
+        int index_best = -1;
+        int index_second = -1;
+
+        Vector2d fn_start = xyz_far.head<2>() - step * 2;
+        n_steps += 2;
+        Vector2d fn(fn_start);
+        for(int i = 0; i < n_steps; ++i, fn += step) {
+            Vector2d px(frame->cam_->project(fn) / factor);
+
+            //! always in frame's view
+            if(!frame->cam_->isInFrame(px.cast<int>(), half_patch_size, level_cur))
+                continue;
+
+            Matrix<double, patch_area, 1> patch_cur;
+            utils::interpolateMat<uchar, double, patch_size>(image_cur_eigen, patch_cur, px[0], px[1]);
+
+            double score = zssd.compute_score(patch_cur);
+
+            if(score < score_best) {
+                score_best = score;
+                index_best = i;
+            } else if(score < score_second) {
+                score_second = score;
+                index_second = i;
+            }
+        }
+
+        if(score_best > 0.8 * score_second && std::abs(index_best - index_second) > 2)
+            return false;
+
+        if(score_best > zssd.threshold())
+            return false;
+
+        Vector2d pn_best = fn_start + index_best * step;
+        px_best = frame->cam_->project(pn_best) / factor;
+
+        double t1 = (double)cv::getTickCount();
+        double time = (t1-t0)/cv::getTickFrequency();
+        LOG_IF(INFO, report_) << "Id" << seed.id << " Step: " << n_steps << " T:" << time << "(" << time/n_steps << ")"
+                              << " best: [" << index_best << ", " << score_best<< "]"
+                              << " second: [" << index_second << ", " << score_second<< "]";
+    }
+    else
+    {
+        px_best = (px_near + px_far) * 0.5;
+    }
+
+    Matrix<double, patch_size, patch_size, RowMajor> dx, dy;
+    dx = 0.5*(patch_with_border.block(1, 2, patch_size, patch_size)
+        - patch_with_border.block(1, 0, patch_size, patch_size));
+    dy = 0.5*(patch_with_border.block(2, 1, patch_size, patch_size)
+        - patch_with_border.block(0, 1, patch_size, patch_size));
+
+    Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > dx_eigen(dx.data(), patch_area, 1);
+    Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > dy_eigen(dy.data(), patch_area, 1);
+
+    Align2DI matcher(verbose_);
+    Vector3d estimate(0,0,0); estimate.head<2>() = px_best;
+    if(!matcher.run(image_cur_eigen, patch_eigen, dx_eigen, dy_eigen, estimate))
+        return false;
+
+    // TODO 增加极点距离的检查？
+    //! check distance to epl, incase of the aligen draft
+    Vector2d a = estimate.head<2>() - px_far;
+    Vector2d b = px_near - px_far;
+    double lacos = a.dot(b) / b.norm();
+    double dist2 = a.squaredNorm() - lacos*lacos;
+    if(dist2 > 16) //! 4^2
+        return false;
+
+    Vector2d px_matched = estimate.head<2>() * factor;
+
+    LOG_IF(INFO, verbose_) << "Found! [" << seed.ft->px.transpose() << "] "
+                           << "dst: [" << px_matched.transpose() << "] "
+                           << "epl: [" << px_near.transpose() << "]--[" << px_far.transpose() << "]" << std::endl;
+
+//    showMatch(image_ref, image_cur, px_near, px_far, seed.ft->px/factor, px_matched/factor);
 
     return true;
 }

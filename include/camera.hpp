@@ -27,6 +27,8 @@ public:
 
     Vector2d project(const Vector3d& xyz) const;
 
+    Vector2d project(const Vector2d& fn) const;
+
     inline const int width() const { return width_; }
 
     inline const int height() const { return height_; }

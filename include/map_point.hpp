@@ -28,7 +28,9 @@ public:
 
     void updateViewAndDepth();
 
-    int predictScale(const double dist, const FramePtr &frame);
+    int predictScale(const double dist, const int max_level) const;
+
+    static int predictScale(const double dist_ref, const double dist_cur, const int level_ref, const int max_level);
 
 //    double getMinDistanceInvariance();
 //
@@ -65,6 +67,8 @@ public:
 
     static uint64_t next_id_;
     const uint64_t id_;
+
+    static const double log_level_factor_;
 
     Vector3d optimal_pose_;
 

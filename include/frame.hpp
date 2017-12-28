@@ -107,8 +107,6 @@ public:
 
     const int nlevels_;
 
-    const double log_level_factor_ = log(2.0f);
-
     SE3d optimal_Tcw_;//! for optimization
 
 protected:

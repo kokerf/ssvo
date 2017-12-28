@@ -5,6 +5,7 @@ namespace ssvo
 {
 
 unsigned long int MapPoint::next_id_ = 0;
+const double MapPoint::log_level_factor_ = log(2.0f);
 
 MapPoint::MapPoint(const Vector3d &p, const KeyFrame::Ptr &kf) :
         id_(next_id_++), pose_(p), n_obs_(0), min_distance_(0.0), max_distance_(0.0), refKF_(kf),
@@ -70,15 +71,28 @@ void MapPoint::updateViewAndDepth()
 //    return 1.2f * max_distance_;
 //}
 
-int MapPoint::predictScale(const double dist, const Frame::Ptr &frame)
+int MapPoint::predictScale(const double dist, const int max_level) const
 {
     double ratio = max_distance_ / dist;
 
-    int scale = roundf(log(ratio) / frame->log_level_factor_);
+    int scale = round(log(ratio) / log_level_factor_);
     if(scale < 0)
         scale = 0;
-    else if(scale >= frame->nlevels_)
-        scale = frame->nlevels_ - 1;
+    else if(scale > max_level)
+        scale = max_level;
+
+    return scale;
+}
+
+int MapPoint::predictScale(const double dist_ref, const double dist_cur, const int level_ref, const int max_level)
+{
+    double ratio = dist_ref * (1 << level_ref) / dist_cur;
+
+    int scale = round(log(ratio) / log_level_factor_);
+    if(scale < 0)
+        scale = 0;
+    else if(scale > max_level)
+        scale = max_level;
 
     return scale;
 }
@@ -133,7 +147,7 @@ bool MapPoint::getCloseViewObs(const Frame::Ptr &frame, KeyFrame::Ptr &keyframe,
     if(max_cos_angle < 0.5f)
         return false;
 
-    level = predictScale(dist, frame);
+    level = predictScale(dist, frame->nlevels_-1);
 
     return true;
 }

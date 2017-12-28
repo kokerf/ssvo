@@ -61,28 +61,4 @@ private:
     bool verbose_;
 };
 
-namespace utils{
-
-void getWarpMatrixAffine(
-    const Camera::Ptr &cam_ref,
-    const Camera::Ptr &cam_cur,
-    const Vector2d &px_ref,
-    const Vector3d &f_ref,
-    const int level_ref,
-    const double depth_ref,
-    const SE3d &T_cur_ref,
-    const int patch_size,
-    Matrix2d &A_cur_ref);
-
-template<typename Td, int size>
-void warpAffine(
-    const cv::Mat &img_ref,
-    Matrix<Td, size, size, RowMajor> &patch,
-    const Matrix2d &A_cur_from_ref,
-    const Vector2d &px_ref,
-    const int level_ref,
-    const int level_cur);
-
-}
-
 }//! end of ssvo

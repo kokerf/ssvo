@@ -4,72 +4,8 @@
 
 namespace ssvo{
 
-namespace utils{
-
-void getWarpMatrixAffine(const Camera::Ptr &cam_ref,
-                                const Camera::Ptr &cam_cur,
-                                const Vector2d &px_ref,
-                                const Vector3d &f_ref,
-                                const int level_ref,
-                                const double depth_ref,
-                                const SE3d &T_cur_ref,
-                                const int patch_size,
-                                Matrix2d &A_cur_ref)
-{
-    const double half_patch_size = static_cast<double>(patch_size+2)/2;
-    const Vector3d xyz_ref(depth_ref * f_ref);
-    const double length = half_patch_size * (1 << level_ref);
-    Vector3d xyz_ref_du(cam_ref->lift(px_ref + Vector2d(length, 0)));
-    Vector3d xyz_ref_dv(cam_ref->lift(px_ref + Vector2d(0, length)));
-    xyz_ref_du *= xyz_ref[2]/xyz_ref_du[2];
-    xyz_ref_dv *= xyz_ref[2]/xyz_ref_dv[2];
-    const Vector2d px_cur(cam_cur->project(T_cur_ref * xyz_ref));
-    const Vector2d px_du(cam_cur->project(T_cur_ref * xyz_ref_du));
-    const Vector2d px_dv(cam_cur->project(T_cur_ref * xyz_ref_dv));
-    A_cur_ref.col(0) = (px_du - px_cur)/half_patch_size;
-    A_cur_ref.col(1) = (px_dv - px_cur)/half_patch_size;
-}
-
-template<typename Td, int size>
-void warpAffine(const cv::Mat &img_ref,
-                Matrix<Td, size, size, RowMajor> &patch,
-               const Matrix2d &A_cur_from_ref,
-               const Vector2d &px_ref,
-               const int level_ref,
-               const int level_cur)
-{
-    assert(img_ref.type() == CV_8UC1);
-
-    const Matrix2d A_ref_from_cur = A_cur_from_ref.inverse();
-    if(isnan(A_ref_from_cur(0,0)))
-    {
-        LOG(ERROR) << "Affine warp is Nan";
-        return;
-    }
-
-    const Vector2d px_ref_pyr = px_ref / (1 << level_ref);
-    const double half_patch_size = size * 0.5;
-    const int px_pyr_scale = 1 << level_cur;
-    for(int y = 0; y < size; ++y)
-    {
-        for (int x = 0; x < size; ++x)
-        {
-            Vector2d px_patch(x-half_patch_size, y-half_patch_size);
-            px_patch *= px_pyr_scale;//! A_ref_from_cur is for level-0, so transform to it
-            const Vector2d px(A_ref_from_cur*px_patch + px_ref_pyr);
-
-            if(px[0]<0 || px[1]<0 || px[0]>=img_ref.cols-1 || px[1]>=img_ref.rows-1)
-                patch(y, x) = 0;
-            else
-                patch(y, x) = utils::interpolateMat<uchar, Td>(img_ref, px[0], px[1]);
-        }
-    }
-}
-
-}
-
 FeatureTracker::FeatureTracker(int width, int height, int grid_size, bool report, bool verbose) :
-    report_(report), verbose_(verbose)
+    report_(report), verbose_(report&&verbose)
 {
     options_.border = Align2DI::HalfPatchSize;
     options_.max_kfs = 10;
@@ -203,8 +139,8 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
             - patch_with_border.block(0, 1, patch_size, patch_size));
 
         double t2 = (double)cv::getTickCount();
-        const cv::Mat cur_image = frame->getImage(track_level);
-        Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> > cur_eigen_image((uchar*)cur_image.data, cur_image.rows, cur_image.cols);
+        const cv::Mat image_cur = frame->getImage(track_level);
+        Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> > image_cur_eigen((uchar*)image_cur.data, image_cur.rows, image_cur.cols);
         Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > patch_eigen(patch.data(), patch_size*patch_size, 1);
         Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > dx_eigen(dx.data(), patch_size*patch_size, 1);
         Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > dy_eigen(dy.data(), patch_size*patch_size, 1);
@@ -222,7 +158,7 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
 //        cv::imshow("cur track", show_cur);
 //        cv::waitKey(0);
 
-        if(matcher.run(cur_eigen_image, patch_eigen, dx_eigen, dy_eigen, estimate))
+        if(matcher.run(image_cur_eigen, patch_eigen, dx_eigen, dy_eigen, estimate))
         {
             Vector2d new_px = estimate.head<2>() * factor;
             Vector3d new_ft = frame->cam_->lift(new_px);

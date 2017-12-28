@@ -27,6 +27,8 @@ public:
 
     static double cameraFps(){return getInstance().fps;}
 
+    static double unitPlanePixelLength() { return  getInstance().unit_plane_pixel_length; }
+
     static int initMinCorners(){return getInstance().init_min_corners;}
 
     static int initMinTracked(){return getInstance().init_min_tracked;}
@@ -110,6 +112,7 @@ private:
         height = (int)fs["Image.height"];
         top_level = (int)fs["Image.pyramid_levels"];
         fps = (double)fs["Camera.fps"];
+        unit_plane_pixel_length = 2.0 / (fx*fx+fy*fy);
 
         //! FAST detector parameters
 //        image_border = (int)fs["FastDetector.image_border"];
@@ -127,7 +130,8 @@ private:
         init_min_inliers = (int)fs["Initializer.min_inliers"];
         init_sigma = (double)fs["Initializer.sigma"];
         init_sigma2 = init_sigma*init_sigma;
-        init_unsigma2 = init_sigma2 * 2.0 / (fx*fx+fy*fy);
+        double focal_length2 = fx > fy ? fy*fy : fx*fx;
+        init_unsigma2 = init_sigma2 / focal_length2;
         init_unsigma = sqrt(init_unsigma2);
         init_max_iters = (int)fs["Initializer.ransac_max_iters"];
 
@@ -180,6 +184,7 @@ private:
     int height;
     int top_level;
     double fps;
+    double unit_plane_pixel_length;
 
     //! FAST detector parameters
 //    int image_border;

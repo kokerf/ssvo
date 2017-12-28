@@ -96,7 +96,7 @@ int main(int argc, char const *argv[])
 
     double t0 = (double)cv::getTickCount();
     for(int i = 0; i < 1000; i++) {
-        utils::interpolateMat<float, float, size>(eigen_mat, img, dx, dy, x, y);
+        utils::interpolateMat(eigen_mat, img, dx, dy, x, y);
 //        utils::interpolateMat<float, float, size>(eigen_mat, img, x, y);
     }
 
