@@ -8,28 +8,6 @@
 
 namespace ssvo{
 
-//! modified from SVO, https://github.com/uzh-rpg/rpg_svo/blob/master/svo/include/svo/depth_filter.h#L35
-/// A seed is a probabilistic depth estimate for a single pixel.
-struct Seed
-{
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-
-    static int seed_counter;
-    int id;                      //!< Seed ID, only used for visualization.
-    Feature::Ptr ft;             //!< Feature in the keyframe for which the depth should be computed.
-    double a;                    //!< a of Beta distribution: When high, probability of inlier is large.
-    double b;                    //!< b of Beta distribution: When high, probability of outlier is large.
-    double mu;                   //!< Mean of normal distribution.
-    double z_range;              //!< Max range of the possible depth.
-    double sigma2;               //!< Variance of normal distribution.
-    Matrix2d patch_cov;          //!< Patch covariance in reference image.
-    Seed(Feature::Ptr ft, double depth_mean, double depth_min);
-    double computeTau(const SE3d& T_ref_cur, const Vector3d& f, const double z, const double px_error_angle);
-    void update(const double x, const double tau2);
-};
-
-typedef std::list<Seed, aligned_allocator<Seed> > Seeds;
-
 class LocalMapper : public noncopyable
 {
 public:
@@ -63,7 +41,8 @@ private:
 
     bool processNewFrame();
 
-    bool findEpipolarMatch(const Seed &seed, const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame, const SE3d &T_cur_from_ref, double &depth);
+    bool findEpipolarMatch(const Feature::Ptr &ft, const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame,
+                           const SE3d &T_cur_from_ref, const double sigma, double &depth);
 
     bool triangulate(const Matrix3d& R_cr,  const Vector3d& t_cr, const Vector3d& fn_r, const Vector3d& fn_c, double &d_ref);
 

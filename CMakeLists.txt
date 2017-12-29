@@ -100,6 +100,7 @@ LIST(APPEND LINK_LIBS
 LIST(APPEND SOURCEFILES
     src/camera.cpp
     src/map_point.cpp
+    src/feature.cpp
     src/frame.cpp
     src/keyframe.cpp
     src/map.cpp
@@ -110,7 +111,8 @@ LIST(APPEND SOURCEFILES
     src/alignment.cpp
     src/local_mapping.cpp
     src/system.cpp
-    src/viewer.cpp)
+    src/viewer.cpp
+)
 
 #add_library(${PROJECT_NAME} SHARED ${SOURCEFILES})
 #target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})

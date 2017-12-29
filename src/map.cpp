@@ -10,25 +10,25 @@ void Map::clear()
     mpts_.clear();
 }
 
-void Map::insertKeyFrame(const KeyFrame::Ptr kf)
+void Map::insertKeyFrame(const KeyFrame::Ptr &kf)
 {
     std::lock_guard<std::mutex> lock(mutex_kf_);
     kfs_.emplace(kf->id_, kf);
 }
 
-void Map::removeKeyFrame(const KeyFrame::Ptr kf)
+void Map::removeKeyFrame(const KeyFrame::Ptr &kf)
 {
     std::lock_guard<std::mutex> lock(mutex_kf_);
     kfs_.erase(kf->id_);
 }
 
-void Map::insertMapPoint(const MapPoint::Ptr mpt)
+void Map::insertMapPoint(const MapPoint::Ptr &mpt)
 {
     std::lock_guard<std::mutex> lock(mutex_mpt_);
     mpts_.emplace(mpt->id_, mpt);
 }
 
-void Map::removeMapPoint(const MapPoint::Ptr mpt)
+void Map::removeMapPoint(const MapPoint::Ptr &mpt)
 {
     std::lock_guard<std::mutex> lock(mutex_mpt_);
     mpts_.erase(mpt->id_);

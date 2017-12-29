@@ -30,13 +30,13 @@ private:
 
     void clear();
 
-    void insertKeyFrame(const KeyFrame::Ptr kf);
+    void insertKeyFrame(const KeyFrame::Ptr &kf);
 
-    void removeKeyFrame(const KeyFrame::Ptr kf);
+    void removeKeyFrame(const KeyFrame::Ptr &kf);
 
-    void insertMapPoint(const MapPoint::Ptr mpt);
+    void insertMapPoint(const MapPoint::Ptr &mpt);
 
-    void removeMapPoint(const MapPoint::Ptr mpt);
+    void removeMapPoint(const MapPoint::Ptr &mpt);
 
     inline static Map::Ptr create() {return Map::Ptr(new Map());}
 

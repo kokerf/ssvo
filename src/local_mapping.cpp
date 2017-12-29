@@ -29,65 +29,6 @@ void showMatch(const cv::Mat &src, const cv::Mat &dst, const Vector2d &epl0, con
     cv::waitKey(0);
 }
 
-
-//! Seed
-int Seed::seed_counter = 0;
-
-Seed::Seed(Feature::Ptr ft, double depth_mean, double depth_min) :
-    id(seed_counter++),
-    ft(ft),
-    a(10),
-    b(10),
-    mu(1.0/depth_mean),
-    z_range(1.0/depth_min),
-    sigma2(z_range*z_range/36)
-{}
-
-double Seed::computeTau(
-    const SE3d& T_ref_cur,
-    const Vector3d& f,
-    const double z,
-    const double px_error_angle)
-{
-    Vector3d t(T_ref_cur.translation());
-    Vector3d a = f*z-t;
-    double t_norm = t.norm();
-    double a_norm = a.norm();
-    double alpha = acos(f.dot(t)/t_norm); // dot product
-    double beta = acos(-a.dot(t)/(t_norm*a_norm)); // dot product
-    double beta_plus = beta + px_error_angle;
-    double gamma_plus = M_PI-alpha-beta_plus; // triangle angles sum to PI
-    double z_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
-
-    double tau = z_plus - z;
-    return 0.5 * (1.0/MAX(0.0000001, z-tau) - 1.0/(z+tau));
-}
-
-void Seed::update(const double x, const double tau2)
-{
-    double norm_scale = sqrt(sigma2 + tau2);
-    if(std::isnan(norm_scale))
-        return;
-
-    double s2 = 1./(1./sigma2 + 1./tau2);
-    double m = s2*(mu/sigma2 + x/tau2);
-    double C1 = a/(a+b) * utils::normal_distribution<double>(x, mu, norm_scale);
-    double C2 = b/(a+b) * 1./z_range;
-    double normalization_constant = C1 + C2;
-    C1 /= normalization_constant;
-    C2 /= normalization_constant;
-    double f = C1*(a+1.)/(a+b+1.) + C2*a/(a+b+1.);
-    double e = C1*(a+1.)*(a+2.)/((a+b+1.)*(a+b+2.))
-        + C2*a*(a+1.0f)/((a+b+1.0f)*(a+b+2.0f));
-
-    // update parameters
-    double mu_new = C1*m+C2*mu;
-    sigma2 = C1*(s2 + m*m) + C2*(sigma2 + mu*mu) - mu_new*mu_new;
-    mu = mu_new;
-    a = (e-f)/(f-e/f);
-    b = a*(1.0f-f)/f;
-}
-
 //! LocalMapper
 LocalMapper::LocalMapper(const FastDetector::Ptr &fast_detector, double fps, bool report, bool verbose) :
     fast_detector_(fast_detector), delay_(static_cast<int>(1000.0/fps)), report_(report), verbose_(report&&verbose)
@@ -254,7 +195,7 @@ bool LocalMapper::processNewKeyFrame()
         const Vector2d px(corner.x, corner.y);
         const Vector3d fn(kf->cam_->lift(px));
         Feature::Ptr ft = Feature::create(px, fn, corner.level, nullptr);
-        new_seeds.emplace_back(Seed(ft, mean_depth, min_depth*0.5));
+        new_seeds.emplace_back(Seed::create(ft, mean_depth, min_depth*0.5));
     }
     seeds_buffer_.emplace_back(kf, std::make_shared<Seeds>(new_seeds));
 
@@ -287,12 +228,13 @@ bool LocalMapper::processNewFrame()
         SE3d T_ref_from_cur = T_cur_from_ref.inverse();
         for(auto it = seeds.begin(); it!=seeds.end(); it++)
         {
-            double depth;
-            if(!findEpipolarMatch(*it, keyframe, frame, T_cur_from_ref, depth))
+            const Seed::Ptr &seed = *it;
+            double depth = 1.0/seed->mu;
+            if(!findEpipolarMatch(seed->ft, keyframe, frame, T_cur_from_ref, seed->sigma2, depth))
                 continue;
 
-            double tau = it->computeTau(T_ref_from_cur, it->ft->fn, depth, px_error_angle);
-            it->update(1.0/depth, tau*tau);
+            double tau = seed->computeTau(T_ref_from_cur, seed->ft->fn, depth, px_error_angle);
+            seed->update(1.0/depth, tau*tau);
         }
     }
 
@@ -303,10 +245,11 @@ bool LocalMapper::processNewFrame()
     return true;
 }
 
-bool LocalMapper::findEpipolarMatch(const Seed &seed,
+bool LocalMapper::findEpipolarMatch(const Feature::Ptr &ft,
                                     const KeyFrame::Ptr &keyframe,
                                     const Frame::Ptr &frame,
                                     const SE3d &T_cur_from_ref,
+                                    const double sigma2,
                                     double &depth)
 {
     static const int patch_size = Align2DI::PatchSize;
@@ -314,8 +257,8 @@ bool LocalMapper::findEpipolarMatch(const Seed &seed,
     static const int half_patch_size = Align2DI::HalfPatchSize;
 
     //! check if in the view of current frame
-    const double z_ref = 1.0/seed.mu;
-    const Vector3d xyz_cur(T_cur_from_ref * (seed.ft->fn * z_ref ));
+    const double z_ref = 1.0/depth;
+    const Vector3d xyz_cur(T_cur_from_ref * (ft->fn * z_ref ));
     const double z_cur = xyz_cur[2];
     if(z_cur < 0.00f)
         return false;
@@ -325,21 +268,21 @@ bool LocalMapper::findEpipolarMatch(const Seed &seed,
         return false;
 
     //! d - inverse depth, z - depth
-    const double sigma = sqrt(seed.sigma2);
-    const double d_max = seed.mu + sigma;
-    const double d_min = MAX(seed.mu - sigma, 0.00000001f);
+    const double sigma = std::sqrt(sigma2);
+    const double d_max = depth + sigma;
+    const double d_min = MAX(depth- sigma, 0.00000001f);
     const double z_min = 1.0/d_max;
     const double z_max = 1.0/d_min;
 
     //! on unit plane in cur frame
-    Vector3d xyz_near = T_cur_from_ref * (seed.ft->fn * z_min);
-    Vector3d xyz_far  = T_cur_from_ref * (seed.ft->fn * z_max);
+    Vector3d xyz_near = T_cur_from_ref * (ft->fn * z_min);
+    Vector3d xyz_far  = T_cur_from_ref * (ft->fn * z_max);
     xyz_near /= xyz_near[2];
     xyz_far  /= xyz_far[2];
     Vector2d epl_dir = (xyz_near - xyz_far).head<2>();
 
     //! calculate best search level
-    const int level_ref = seed.ft->level;
+    const int level_ref = ft->level;
     const int level_cur = MapPoint::predictScale(z_ref, z_cur, level_ref, frame->nlevels_-1);
     const double factor = static_cast<double>(1 << level_cur);
     //! L * (1 << level_ref) / L' * (1 << level_cur) = z_ref / z_cur
@@ -354,14 +297,14 @@ bool LocalMapper::findEpipolarMatch(const Seed &seed,
 
     //! get warp patch
     Matrix2d A_cur_from_ref;
-    utils::getWarpMatrixAffine(keyframe->cam_, frame->cam_, seed.ft->px, seed.ft->fn, level_ref,
+    utils::getWarpMatrixAffine(keyframe->cam_, frame->cam_, ft->px, ft->fn, level_ref,
                                z_ref, T_cur_from_ref, patch_size, A_cur_from_ref);
 
     static const int patch_border_size = patch_size+2;
     cv::Mat image_ref = keyframe->getImage(level_ref);
     Matrix<double, patch_border_size, patch_border_size, RowMajor> patch_with_border;
     utils::warpAffine<double, patch_border_size>(image_ref, patch_with_border, A_cur_from_ref,
-                                                 seed.ft->px, level_ref, level_cur);
+                                                 ft->px, level_ref, level_cur);
 
     Matrix<double, patch_size, patch_size, RowMajor> patch;
     patch = patch_with_border.block(1, 1, patch_size, patch_size);
@@ -423,7 +366,7 @@ bool LocalMapper::findEpipolarMatch(const Seed &seed,
 
         double t1 = (double)cv::getTickCount();
         double time = (t1-t0)/cv::getTickFrequency();
-        LOG_IF(INFO, verbose_) << " Id" << seed.id << " Step: " << n_steps << " T:" << time << "(" << time/n_steps << ")"
+        LOG_IF(INFO, verbose_) << " Step: " << n_steps << " T:" << time << "(" << time/n_steps << ")"
                                << " best: [" << index_best << ", " << score_best<< "]"
                                << " second: [" << index_second << ", " << score_second<< "]";
     }
@@ -458,13 +401,13 @@ bool LocalMapper::findEpipolarMatch(const Seed &seed,
     Vector2d px_matched = estimate.head<2>() * factor;
     Vector3d fn_matched = frame->cam_->lift(px_matched);
 
-    LOG_IF(INFO, verbose_) << "Found! [" << seed.ft->px.transpose() << "] "
+    LOG_IF(INFO, verbose_) << "Found! [" << ft->px.transpose() << "] "
                            << "dst: [" << px_matched.transpose() << "] "
                            << "epl: [" << px_near.transpose() << "]--[" << px_far.transpose() << "]" << std::endl;
 
 //    showMatch(image_ref, image_cur, px_near, px_far, seed.ft->px/factor, px_matched/factor);
 
-    return triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed.ft->fn, fn_matched, depth);
+    return triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), ft->fn, fn_matched, depth);
 }
 
 bool LocalMapper::triangulate(const Matrix3d& R_cr,  const Vector3d& t_cr,

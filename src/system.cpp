@@ -32,7 +32,7 @@ System::System(std::string config_file) :
     fast_detector_ = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
     feature_tracker_ = FeatureTracker::create(width, height, grid_size, true);
     initializer_ = Initializer::create(fast_detector_, true);
-    mapper_ = LocalMapper::create(fast_detector_, fps, true, true);
+    mapper_ = LocalMapper::create(fast_detector_, fps, true, false);
     viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));
 
 }
