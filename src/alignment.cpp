@@ -185,8 +185,7 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
     estimate_ = estimate;
 
     //! Per-compute
-    jacbian_cache_.resize(PatchArea, 3);
-    Jres_.resize(3);
+    jacbian_cache_.resize(PatchArea, NoChange);
 
     //! get jacobian
     jacbian_cache_.col(0) = patch_gx;

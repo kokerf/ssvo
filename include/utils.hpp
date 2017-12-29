@@ -6,6 +6,8 @@
 
 namespace ssvo {
 
+#define USE_EIGEN
+
 namespace utils {
 
 inline int createPyramid(const cv::Mat &img,
@@ -44,6 +46,10 @@ inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src,
     const double wu0 = 1.0 - wu1;
     const double wv1 = v - iv;
     const double wv0 = 1.0 - wv1;
+    const double w_tl = wv0*wu0;
+    const double w_tr = wv0*wu1;
+    const double w_bl = wv1*wu0;
+    const double w_br = 1.0f - w_tl - w_tr - w_bl;
 
     const int half_size = Size / 2;
     const int expand_size = Size + 2;
@@ -53,10 +59,10 @@ inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src,
     Matrix<Td, expand_size1, expand_size1, RowMajor>
         patch = src.block(start_v, start_u, expand_size1, expand_size1).template cast<Td>();
     //! block(i,j,p,q) i-rows j-cols
-    Matrix<Td, expand_size, expand_size, RowMajor> mat_tl = (wv0*wu0) * patch.block(0, 0, expand_size, expand_size);
-    Matrix<Td, expand_size, expand_size, RowMajor> mat_tr = (wv1*wu0) * patch.block(1, 0, expand_size, expand_size);
-    Matrix<Td, expand_size, expand_size, RowMajor> mat_bl = (wv0*wu1) * patch.block(0, 1, expand_size, expand_size);
-    Matrix<Td, expand_size, expand_size, RowMajor> mat_br = (wv1*wu1) * patch.block(1, 1, expand_size, expand_size);
+    Matrix<Td, expand_size, expand_size, RowMajor> mat_tl = w_tl * patch.block(0, 0, expand_size, expand_size);
+    Matrix<Td, expand_size, expand_size, RowMajor> mat_tr = w_tr * patch.block(1, 0, expand_size, expand_size);
+    Matrix<Td, expand_size, expand_size, RowMajor> mat_bl = w_bl* patch.block(0, 1, expand_size, expand_size);
+    Matrix<Td, expand_size, expand_size, RowMajor> mat_br = w_br * patch.block(1, 1, expand_size, expand_size);
 
     Matrix<Td, expand_size, expand_size, RowMajor> mat_interpolate = mat_tl + mat_tr + mat_bl + mat_br;
     Matrix<Td, Size, Size, RowMajor> expand_img_x = mat_interpolate.block(1, 0, Size, Size);
@@ -76,16 +82,20 @@ inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src,
     const double wu0 = 1.0 - wu1;
     const double wv1 = v - iv;
     const double wv0 = 1.0 - wv1;
+    const double w_tl = wv0*wu0;
+    const double w_tr = wv0*wu1;
+    const double w_bl = wv1*wu0;
+    const double w_br = 1.0f - w_tl - w_tr - w_bl;
 
     const int half_size = Size / 2;
     const int expand_size = Size + 1;
     const int start_v = iv - half_size;
     const int start_u = iu - half_size;
     Matrix<Td, expand_size, expand_size, RowMajor> patch = src.block(start_v, start_u, expand_size, expand_size).template cast<Td>();
-    Matrix<Td, Size, Size, RowMajor> mat_tl = (wv0*wu0) * patch.block(0, 0, Size, Size);
-    Matrix<Td, Size, Size, RowMajor> mat_tr = (wv1*wu0) * patch.block(1, 0, Size, Size);
-    Matrix<Td, Size, Size, RowMajor> mat_bl = (wv0*wu1) * patch.block(0, 1, Size, Size);
-    Matrix<Td, Size, Size, RowMajor> mat_br = (wv1*wu1) * patch.block(1, 1, Size, Size);
+    Matrix<Td, Size, Size, RowMajor> mat_tl = w_tl * patch.block(0, 0, Size, Size);
+    Matrix<Td, Size, Size, RowMajor> mat_tr = w_tr * patch.block(1, 0, Size, Size);
+    Matrix<Td, Size, Size, RowMajor> mat_bl = w_bl * patch.block(0, 1, Size, Size);
+    Matrix<Td, Size, Size, RowMajor> mat_br = w_br * patch.block(1, 1, Size, Size);
 
     img = mat_tl + mat_tr + mat_bl + mat_br;
 }
