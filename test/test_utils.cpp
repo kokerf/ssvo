@@ -64,17 +64,75 @@ void interpolateMat_pixel(cv::Mat &ref_img, cv::Mat& ref_patch, const double u, 
     }
 }
 
+template<typename Ts, typename Td, int Size>
+inline void interpolateMat_array(const cv::Mat &src,
+                                Matrix<Td, Size, Size, RowMajor> &dst,
+                                Matrix<Td, Size, Size, RowMajor> &dx,
+                                Matrix<Td, Size, Size, RowMajor> &dy,
+                                const double u, const double v)
+{
+    assert(src.type() == cv::DataType<Ts>::type);
+
+    const int iu = floorf(u);
+    const int iv = floorf(v);
+    const double wu1 = u - iu;
+    const double wu0 = 1.0 - wu1;
+    const double wv1 = v - iv;
+    const double wv0 = 1.0 - wv1;
+    const double w_tl = wv0*wu0;
+    const double w_tr = wv0*wu1;
+    const double w_bl = wv1*wu0;
+    const double w_br = 1.0f - w_tl - w_tr - w_bl;
+
+    const int half_size = Size / 2;
+    const int expand_size = Size + 2;
+    const int half_expand_size = half_size+1;
+    const int start_v = iv - half_expand_size;
+    const int start_u = iu - half_expand_size;
+
+    Matrix<Td, expand_size, expand_size, RowMajor> dst_with_border;
+
+    const int src_step = src.cols;
+    const Ts* src_ptr = src.ptr<Ts>(start_v) + start_u;
+    Td* dst_border_ptr = dst_with_border.data();
+
+    for(size_t r = 0; r < expand_size; ++r)
+    {
+        const Ts* src_row_ptr = src_ptr + src_step * r;
+        for(size_t c = 0; c < expand_size; ++c, ++dst_border_ptr)
+        {
+            *dst_border_ptr = w_tl * src_row_ptr[c] + w_tr * src_row_ptr[c+1] + w_bl * src_row_ptr[c+src_step] + w_br * src_row_ptr[c+src_step+1];
+        }
+    }
+
+    dst_border_ptr = dst_with_border.data() + expand_size + 1;
+    Td* dst_ptr = dst.data();
+    Td* dx_ptr = dx.data();
+    Td* dy_ptr = dy.data();
+    for(size_t r = 0; r < Size; ++r)
+    {
+        const Td* dst_border_row_ptr = dst_border_ptr + expand_size * r;
+        for(size_t c = 0; c < Size; ++c, ++dst_ptr, ++dst_border_row_ptr, ++dx_ptr, ++dy_ptr)
+        {
+            *dst_ptr = *dst_border_row_ptr;
+            *dx_ptr = 0.5*(dst_border_row_ptr[1] - dst_border_row_ptr[-1]);
+            *dy_ptr = 0.5*(dst_border_row_ptr[expand_size] - dst_border_row_ptr[-expand_size]);
+        }
+    }
+}
+
+
 int main(int argc, char const *argv[])
 {
     cv::RNG rnger(cv::getTickCount());
-    cv::Mat cv_mat = cv::Mat(10,10,CV_32FC1);
+    cv::Mat cv_mat = cv::Mat(100,100,CV_32FC1);
     rnger.fill(cv_mat, cv::RNG::UNIFORM, cv::Scalar::all(0), cv::Scalar::all(256));
 
     cv::imshow("random image", cv_mat);
 
     Matrix<float , Dynamic, Dynamic, RowMajor> eigen_mat = Map<Matrix<float, Dynamic, Dynamic, RowMajor> >((float*)cv_mat.data, cv_mat.rows, cv_mat.cols);
 
-    const int size = 4;
+    const int size = 20;
     Matrix<float, size, size, RowMajor> img;
     Matrix<float, size, size, RowMajor> dx;
     Matrix<float, size, size, RowMajor> dy;
@@ -88,49 +146,85 @@ int main(int argc, char const *argv[])
 
     //std::cout << "Mat:\n" << cv_mat << std::endl;
 
-    const double y =4.0001;
-    const double x =3.9999;
+    const double y =4.0001+size/2;
+    const double x =3.9999+size/2;
     std::cout << "cv image:\n" << cv_mat<< std::endl;
     std::cout << "eigen image:\n" << eigen_mat<< std::endl;
     std::cout << "eigen bolck:\n" << eigen_mat.block<size,size>(int(y-size/2),int(x-size/2)) << std::endl;
 
+    //! =============================
+    utils::interpolateMat(eigen_mat, img, dx, dy, x, y);
+    std::cout << "eigen Mat:\n" << img << std::endl;
+    std::cout << "eigen Mat dx:\n" << dx << std::endl;
+    std::cout << "eigen Mat dy:\n" << dy << std::endl;
+
+    utils::interpolateMat<float, float, size>(eigen_mat, img_v, dx_v, dy_v, x, y);
+    std::cout << "eigen Vec:\n" << img_v.transpose() << std::endl;
+    std::cout << "eigen Vec dx:\n" << dx_v.transpose() << std::endl;
+    std::cout << "eigen Vec dy:\n" << dy_v.transpose() << std::endl;
+
+    interpolateMat2<float, size>(cv_mat, cv_img, cv_dx, cv_dy, x, y);
+    std::cout << "cv Mat:\n" << cv_img << std::endl;
+    std::cout << "cv Mat dx:\n" << cv_dx << std::endl;
+    std::cout << "cv Mat dy:\n" << cv_dy << std::endl;
+
+    interpolateMat_pixel<float, size>(cv_mat, cv_img1, x, y);
+    std::cout << "cv Mat pixel:\n" << cv_img1 << std::endl;
+
+    img.setZero();
+    utils::interpolateMat<float, float, size>(eigen_mat, img, x, y);
+    std::cout << "eigen Mat:\n" << img << std::endl;
+
+    img.setZero();
+    dx.setZero();
+    dy.setZero();
+    interpolateMat_array<float, float, size>(cv_mat, img, dx, dy, x, y);
+    std::cout << "eigen Mat:\n" << img << std::endl;
+    std::cout << "eigen Mat dx:\n" << dx << std::endl;
+    std::cout << "eigen Mat dy:\n" << dy << std::endl;
+
+
+    //! ==============================
+    const size_t N = 1000000;
     double t0 = (double)cv::getTickCount();
-    for(int i = 0; i < 1000; i++) {
+    for(size_t i = 0; i < N; i++) {
         utils::interpolateMat(eigen_mat, img, dx, dy, x, y);
-//        utils::interpolateMat<float, float, size>(eigen_mat, img, x, y);
     }
 
     double t1 = (double)cv::getTickCount();
-    for(int i = 0; i < 1000; i++) {
+    for(size_t i = 0; i < N; i++) {
         utils::interpolateMat<float, float, size>(eigen_mat, img_v, dx_v, dy_v, x, y);
     }
 
     double t2 = (double)cv::getTickCount();
-    for(int i = 0; i < 1000; i++) {
+    for(size_t i = 0; i < N; i++) {
         interpolateMat2<float, size>(cv_mat, cv_img, cv_dx, cv_dy, x, y);
     }
 
     double t3 = (double)cv::getTickCount();
-    for(int i = 0; i < 1000; i++) {
+    for(size_t i = 0; i < N; i++) {
         interpolateMat_pixel<float, size>(cv_mat, cv_img1, x, y);
     }
 
     double t4 = (double)cv::getTickCount();
-    std::cout << "eigen Mat:\n" << img << std::endl;
-    std::cout << "eigen Mat dx:\n" << dx << std::endl;
-    std::cout << "eigen Mat dy:\n" << dy << std::endl;
-    std::cout << "eigen Vec:\n" << img_v.transpose() << std::endl;
-    std::cout << "eigen Vec dx:\n" << dx_v.transpose() << std::endl;
-    std::cout << "eigen Vec dy:\n" << dy_v.transpose() << std::endl;
-    std::cout << "cv Mat:\n" << cv_img << std::endl;
-    std::cout << "cv Mat dx:\n" << cv_dx << std::endl;
-    std::cout << "cv Mat dy:\n" << cv_dy << std::endl;
-    std::cout << "cv Mat1:\n" << cv_img1 << std::endl;
+    for(size_t i = 0; i < N; i++) {
+        utils::interpolateMat<float, float, size>(eigen_mat, img, x, y);
+    }
 
-    std::cout << "time0(ms): " << (t1-t0)/cv::getTickFrequency() << std::endl;
-    std::cout << "time1(ms): " << (t2-t1)/cv::getTickFrequency() << std::endl;
-    std::cout << "time2(ms): " << (t3-t2)/cv::getTickFrequency() << std::endl;
-    std::cout << "time3(ms): " << (t4-t3)/cv::getTickFrequency() << std::endl;
+    double t5 = (double)cv::getTickCount();
+    for(size_t i = 0; i < N; i++) {
+        interpolateMat_array<float, float, size>(cv_mat, img, dx, dy, x, y);
+    }
+
+    double t6 = (double)cv::getTickCount();
+
+    size_t scale = N / 1000;
+    std::cout << "time0(ms): " << (t1-t0)/cv::getTickFrequency()/scale << std::endl;
+    std::cout << "time1(ms): " << (t2-t1)/cv::getTickFrequency()/scale << std::endl;
+    std::cout << "time2(ms): " << (t3-t2)/cv::getTickFrequency()/scale << std::endl;
+    std::cout << "time3(ms): " << (t4-t3)/cv::getTickFrequency()/scale << std::endl;
+    std::cout << "time4(ms): " << (t5-t4)/cv::getTickFrequency()/scale << std::endl;
+    std::cout << "time5(ms): " << (t6-t5)/cv::getTickFrequency()/scale << std::endl;
     cv::waitKey(0);
     return 0;
 }
