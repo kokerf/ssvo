@@ -65,6 +65,8 @@ private:
 
     bool findEpipolarMatch(const Seed &seed, const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame, const SE3d &T_cur_from_ref, double &depth);
 
+    bool triangulate(const Matrix3d& R_cr,  const Vector3d& t_cr, const Vector3d& fn_r, const Vector3d& fn_c, double &d_ref);
+
 public:
 
     Map::Ptr map_;

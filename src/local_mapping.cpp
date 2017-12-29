@@ -58,7 +58,9 @@ double Seed::computeTau(
     double beta_plus = beta + px_error_angle;
     double gamma_plus = M_PI-alpha-beta_plus; // triangle angles sum to PI
     double z_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
-    return (z_plus - z); // tau
+
+    double tau = z_plus - z;
+    return 0.5 * (1.0/MAX(0.0000001, z-tau) - 1.0/(z+tau));
 }
 
 void Seed::update(const double x, const double tau2)
@@ -140,7 +142,7 @@ void LocalMapper::insertNewFrame(Frame::Ptr frame, KeyFrame::Ptr keyframe, doubl
     keyframe->updateConnections();
 
     LOG_ASSERT(frame != nullptr) << "Error input! Frame should not be null!";
-    if(mapping_thread_ != nullptr)
+     if(mapping_thread_ != nullptr)
     {
         std::unique_lock<std::mutex> lock(mutex_kfs_);
 
@@ -163,8 +165,8 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
     map_->clear();
 
     //! create Key Frame
-    KeyFrame::Ptr keyframe_ref = ssvo::KeyFrame::create(frame_ref);
-    KeyFrame::Ptr keyframe_cur = ssvo::KeyFrame::create(frame_cur);
+    KeyFrame::Ptr keyframe_ref = KeyFrame::create(frame_ref);
+    KeyFrame::Ptr keyframe_cur = KeyFrame::create(frame_cur);
 
     std::vector<Feature::Ptr> fts_ref = keyframe_ref->getFeatures();
     std::vector<Feature::Ptr> fts_cur = keyframe_cur->getFeatures();
@@ -220,6 +222,20 @@ bool LocalMapper::processNewKeyFrame()
     const KeyFrame::Ptr &kf = current_frame_.second;
     const double mean_depth = current_depth_.first;
     const double min_depth = current_depth_.second;
+
+    //! check base line
+    for(auto &seeds_pair : seeds_buffer_)
+    {
+        const KeyFrame::Ptr ref_kf = seeds_pair.first;
+        Seeds &seeds = *seeds_pair.second;
+
+        SE3d T_ref_cur =  ref_kf->Tcw() * kf->pose();
+
+        double base_line = T_ref_cur.translation().norm();
+        std::cout << "b: " << base_line << "d: " << mean_depth << " " << min_depth << std::endl;
+    }
+
+
     std::vector<Feature::Ptr> fts = kf->getFeatures();
 
     Corners old_corners;
@@ -242,6 +258,10 @@ bool LocalMapper::processNewKeyFrame()
     }
     seeds_buffer_.emplace_back(kf, std::make_shared<Seeds>(new_seeds));
 
+    // TODO
+    if(seeds_buffer_.size() > 5)
+        seeds_buffer_.pop_front();
+
     LOG_IF(WARNING, report_) << "[Mapping] Add new keyframe " << kf->id_ << " with " << new_seeds.size() << " seeds";
 
     return true;
@@ -253,22 +273,32 @@ bool LocalMapper::processNewFrame()
         return false;
 
     const Frame::Ptr &frame = current_frame_.first;
+
+    double t0 = (double)cv::getTickCount();
+    double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
     for(auto &seeds_pair : seeds_buffer_)
     {
         const KeyFrame::Ptr keyframe = seeds_pair.first;
-        Seeds seeds = *seeds_pair.second;
+        Seeds &seeds = *seeds_pair.second;
 
         // TODO old seeds_pair remove
 
         SE3d T_cur_from_ref = frame->Tcw() * keyframe->pose();
+        SE3d T_ref_from_cur = T_cur_from_ref.inverse();
         for(auto it = seeds.begin(); it!=seeds.end(); it++)
         {
             double depth;
-            findEpipolarMatch(*it, keyframe, frame, T_cur_from_ref, depth);
+            if(!findEpipolarMatch(*it, keyframe, frame, T_cur_from_ref, depth))
+                continue;
 
-
+            double tau = it->computeTau(T_ref_from_cur, it->ft->fn, depth, px_error_angle);
+            it->update(1.0/depth, tau*tau);
         }
     }
+
+    double t1 = (double)cv::getTickCount();
+    if(!seeds_buffer_.empty())
+        LOG_IF(INFO, report_) << "Seeds update time: " << (t1-t0)/cv::getTickFrequency()/seeds_buffer_.size() << " * " << seeds_buffer_.size();
 
     return true;
 }
@@ -393,9 +423,9 @@ bool LocalMapper::findEpipolarMatch(const Seed &seed,
 
         double t1 = (double)cv::getTickCount();
         double time = (t1-t0)/cv::getTickFrequency();
-        LOG_IF(INFO, report_) << "Id" << seed.id << " Step: " << n_steps << " T:" << time << "(" << time/n_steps << ")"
-                              << " best: [" << index_best << ", " << score_best<< "]"
-                              << " second: [" << index_second << ", " << score_second<< "]";
+        LOG_IF(INFO, verbose_) << " Id" << seed.id << " Step: " << n_steps << " T:" << time << "(" << time/n_steps << ")"
+                               << " best: [" << index_best << ", " << score_best<< "]"
+                               << " second: [" << index_second << ", " << score_second<< "]";
     }
     else
     {
@@ -426,6 +456,7 @@ bool LocalMapper::findEpipolarMatch(const Seed &seed,
         return false;
 
     Vector2d px_matched = estimate.head<2>() * factor;
+    Vector3d fn_matched = frame->cam_->lift(px_matched);
 
     LOG_IF(INFO, verbose_) << "Found! [" << seed.ft->px.transpose() << "] "
                            << "dst: [" << px_matched.transpose() << "] "
@@ -433,6 +464,22 @@ bool LocalMapper::findEpipolarMatch(const Seed &seed,
 
 //    showMatch(image_ref, image_cur, px_near, px_far, seed.ft->px/factor, px_matched/factor);
 
+    return triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed.ft->fn, fn_matched, depth);
+}
+
+bool LocalMapper::triangulate(const Matrix3d& R_cr,  const Vector3d& t_cr,
+                              const Vector3d& fn_r, const Vector3d& fn_c, double &d_ref)
+{
+    Vector3d R_fn_r(R_cr * fn_r);
+    Vector2d b(t_cr.dot(R_fn_r), t_cr.dot(fn_c));
+    double A[4] = { R_fn_r.dot(R_fn_r), 0,
+                    R_fn_r.dot(fn_c), -fn_c.dot(fn_c)};
+    A[1] = -A[2];
+    double det = A[0]*A[3] - A[1]*A[2];
+    if(std::abs(det) < 0.000001)
+        return false;
+
+    d_ref = std::abs((b[0]*A[3] - A[1]*b[1])/det);
     return true;
 }
 
