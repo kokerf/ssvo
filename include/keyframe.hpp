@@ -21,6 +21,8 @@ public:
 
     std::vector<KeyFrame::Ptr> getConnectedKeyFrames();
 
+    const ImgPyr opticalImages() const = delete;    //! disable this function
+
     inline static KeyFrame::Ptr create(const Frame::Ptr frame)
     { return Ptr(new KeyFrame(frame)); }
 

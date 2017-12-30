@@ -8,161 +8,322 @@
 
 namespace ssvo{
 
+const int FrameCandidate::size = 200;
+
+FrameCandidate::FrameCandidate(const Frame::Ptr &frame) :
+    frame(frame)
+{
+    corners.resize(size);
+    pts.resize(size, cv::Point2f(0, 0));
+    idx.resize(size, -1);
+}
+
+FrameCandidate::FrameCandidate(const Frame::Ptr &frame, const FrameCandidate::Ptr &cand) :
+    frame(frame), pts(cand->pts), corners(cand->corners), idx(cand->idx)
+{}
+
+void FrameCandidate::update(const Frame::Ptr &frame)
+{
+    this->frame = frame;
+}
+
+void FrameCandidate::createFts()
+{
+    std::vector<cv::Point2f> temp_udist;
+    cv::undistortPoints(pts, temp_udist, frame->cam_->cvK(), frame->cam_->cvD());
+    fts.resize(size);
+    for(int i = 0; i < FrameCandidate::size; ++i)
+    {
+        fts[i].x = (double)temp_udist[i].x;
+        fts[i].y = (double)temp_udist[i].y;
+    }
+}
+
+int FrameCandidate::updateInliers(const std::vector<bool> &inliers)
+{
+    int count = 0;
+    for(int i = 0; i < size; ++i)
+    {
+        if(inliers[i])
+        {
+            count++;
+            continue;
+        }
+
+        idx[i] = -1;
+        pts[i].x = 0;
+        pts[i].y = 0;
+        corners[i] = Corner(0,0,0,0);
+    }
+    return count;
+}
+
+void FrameCandidate::getMatch(std::vector<bool> &mask, const int ref_idx)
+{
+    mask.resize(size);
+    for(int i = 0; i < size; ++i)
+    {
+        if(idx[i] != -1 && idx[i] <= ref_idx)
+            mask[i] = true;
+        else
+            mask[i] = false;
+    }
+}
+
+int FrameCandidate::checkReference(const int min_idx, const int max_idx, const int min_track)
+{
+    assert(min_idx <= max_idx);
+
+    const int N = max_idx-min_idx;
+    std::vector<int> count(N, 0);
+    for(int i = 0; i < size; ++i)
+    {
+        if(idx[i] == -1)
+            continue;
+
+        if(idx[i] < min_idx)
+            idx[i] = min_idx;
+
+        count[idx[i]-min_idx]++;
+    }
+
+
+    int delta = max_idx-1;
+    int corners_count = 0;
+    for(int i = 0; i < N; ++i)
+    {
+        corners_count += count[i];
+        if(corners_count < min_track)
+            continue;
+
+        delta = i;
+        break;
+    }
+
+    return delta;
+}
+
 Initializer::Initializer(const FastDetector::Ptr &fast_detector, bool verbose):
-    fast_detector_(fast_detector), verbose_(verbose)
+    fast_detector_(fast_detector), cand_ref_(nullptr), cand_cur_(nullptr), cand_last_(nullptr), verbose_(verbose)
 {};
 
-InitResult Initializer::addFirstImage(Frame::Ptr frame_ref)
+
+void Initializer::reset()
 {
-    reset();
+//    pts_ref_.clear();
+//    fts_ref_.clear();
+//    pts_cur_.clear();
+//    fts_cur_.clear();
+//    p3ds_.clear();
+//    disparities_.clear();
+//    inliers_.release();
+//    finished_ = false;
+//
+//    frame_ref_.reset();
+}
 
-    LOG_IF(WARNING, verbose_) << "[INIT][*] -- Added first image --";
-    //! get refrence frame
-    frame_ref_ = frame_ref;
-
+InitResult Initializer::createNewCorners(const FrameCandidate::Ptr &candidate)
+{
     Corners old_corners;
-    fast_detector_->detect(frame_ref_->image(), corners_, old_corners, Config::initMinCorners()/0.9, Config::fastMinEigen());
+    for(int i = 0; i < FrameCandidate::size; ++i)
+    {
+        if(candidate->idx[i] < 0)
+            continue;
+
+        old_corners.emplace_back(Corner(candidate->pts[i].x, candidate->pts[i].y, 0, 0));
+    }
+
+    Corners new_corners;
+    fast_detector_->detect(candidate->frame->images(), new_corners, old_corners, FrameCandidate::size/0.85, Config::fastMinEigen());
 
     //! check corner number of first image
-    const int N = corners_.size();
-    if(N < Config::initMinCorners())
+    if(old_corners.size() + new_corners.size() < FrameCandidate::size)
     {
-        LOG(WARNING) << "[INIT][0] First image has too less corners(" << corners_.size() << ") !!!";
         return RESET;
     }
-    LOG_IF(INFO, verbose_) << "[INIT][0] Detect corners: " << corners_.size();
 
-    //! create inital optical flow
-    pts_ref_.reserve(N);
-    pts_cur_.reserve(N);
-    fts_ref_.reserve(N);
-    for(const Corner &corner: corners_)
+    const int needed = FrameCandidate::size - old_corners.size();
+    std::nth_element(new_corners.begin(), new_corners.begin()+needed, new_corners.end(),
+                     [](const Corner &c1, const Corner &c2){ return c1.score > c2.score; });
+
+    new_corners.resize(needed);
+    auto new_corners_itr = new_corners.begin();
+    for(int i = 0; i < FrameCandidate::size; ++i, ++new_corners_itr)
     {
-        pts_ref_.push_back(cv::Point2f(corner.x, corner.y));
-        pts_cur_.push_back(cv::Point2f(corner.x, corner.y));
+        if(candidate->idx[i] >= 0)
+            continue;
+
+        const Corner &corner = *new_corners_itr;
+        candidate->idx[i] = candidate->frame->id_;
+        candidate->corners[i] = *new_corners_itr;
+        candidate->pts[i].x = corner.x;
+        candidate->pts[i].y = corner.y;
     }
-    std::vector<cv::Point2f> temp_udist;
-    cv::undistortPoints(pts_ref_, temp_udist, frame_ref_->cam_->cvK(), frame_ref_->cam_->cvD());
-    for(const cv::Point2f &p: temp_udist)
-    {
-        fts_ref_.push_back(cv::Point2d(p.x, p.y));
-    }
+
+    LOG_IF(INFO, verbose_) << "[INIT][0] New Detect corners: " << new_corners.size();
 
     return SUCCESS;
 }
 
-void Initializer::reset()
+bool Initializer::changeReference(int buffer_offset)
 {
-    pts_ref_.clear();
-    fts_ref_.clear();
-    pts_cur_.clear();
-    fts_cur_.clear();
-    p3ds_.clear();
-    disparities_.clear();
-    inliers_.release();
-    finished_ = false;
+    if(buffer_offset <= 0)
+        return false;
 
-    frame_ref_.reset();
-}
-
-InitResult Initializer::addSecondImage(Frame::Ptr frame_cur)
-{
-    if(finished_)
+    LOG_IF(INFO, verbose_) << "[INIT][1] Change reference frame with buffer offset: " << buffer_offset << " / " << frame_buffer_.size();
+    for(int i = buffer_offset; i > 0; i--)
     {
-        LOG(ERROR) << "[INIT][*] Last initialization is succeed! Plesase reset!";
-        return RESET;
+        frame_buffer_.pop_front();
     }
 
-    LOG_IF(INFO, verbose_) << "[INIT][*] -- Processing second image --";
+    if(frame_buffer_.empty())
+    {
+        frame_buffer_.push_back(cand_cur_);
+        cand_ref_ = cand_cur_;
+        cand_ref_->createFts();
+        return true;
+    }
 
-    frame_cur_ = frame_cur;
+    cand_ref_ = frame_buffer_.front();
+    cand_ref_->createFts();
+
+    //! change reference index in current
+    const int64_t ref_index = cand_ref_->frame->id_;
+    std::vector<int64_t> &index = cand_cur_->idx;
+    for(int i = 0; i < FrameCandidate::size; i++)
+    {
+        if(index[i] != -1 && index[i] < ref_index)
+            index[i] = ref_index;
+    }
+
+    return false;
+}
+
+InitResult Initializer::addImage(Frame::Ptr frame_cur)
+{
+//    if(finished_)
+//    {
+//        LOG(ERROR) << "[INIT][*] Last initialization is succeed! Plesase reset!";
+//        return RESET;
+//    }
+
+    LOG_IF(INFO, verbose_) << "[INIT][*] Processing Frame: " << frame_cur->id_;
+
+
+    //! create first candidate
+    if(frame_buffer_.empty())
+    {
+        frame_buffer_.push_back(FrameCandidate::create(frame_cur));
+        cand_ref_ = frame_buffer_.front();
+        createNewCorners(cand_ref_);
+        cand_ref_->createFts();
+        cand_cur_ = frame_buffer_.back();
+
+        return SUCCESS;
+    }
+
+    //! rest current candidate
+    cand_last_ = frame_buffer_.back();
+    cand_cur_ = FrameCandidate::create(frame_cur, cand_last_);
+    LOG_IF(INFO, verbose_) << "[INIT][*] Ref: " << cand_ref_->frame->id_
+                           << ", Lst: " << cand_last_->frame->id_
+                           << ", Cur: " << cand_cur_->frame->id_;
 
     double t1 = (double)cv::getTickCount();
 
     //! [1] KLT tracking
-    kltTrack(frame_ref_->getImage(0), frame_cur_->getImage(0), pts_ref_, pts_cur_, inliers_);
-    calcDisparity(pts_ref_, pts_cur_, inliers_, disparities_);
-    LOG_IF(INFO, verbose_) << "[INIT][1] KLT tracking points: " << disparities_.size();
-    if(disparities_.size() < Config::initMinTracked()) return RESET;
+    kltTrack(cand_last_->frame->opticalImages(), cand_cur_->frame->opticalImages(), Frame::optical_win_size_, cand_last_->pts, cand_cur_->pts, inliers_, true);
+    cand_cur_->updateInliers(inliers_);
+    //! if track too little corners in reference, then change reference
+    const int offset = cand_cur_->checkReference(cand_ref_->frame->id_, cand_cur_->frame->id_, Config::initMinTracked());
+    //! return if the buffer is empty
+    if(changeReference(offset))
+        return RESET;
+
+    std::vector<cv::Point2f> ref_pts;
+    std::vector<cv::Point2f> cur_pts;
+    getTrackedPoints(ref_pts, cur_pts);
+    cand_cur_->getMatch(inliers_, cand_ref_->frame->id_);
+    calcDisparity(ref_pts, cur_pts, inliers_, disparities_);
+//    LOG_IF(INFO, verbose_) << "[INIT][1] KLT tracking points: " << disparities_.size();
+//    if(disparities_.size() < Config::initMinTracked()) return RESET;
 
     double t2 = (double)cv::getTickCount();
 
-    //! [2] calculate disparities
+    //! [2] calculate disparities, remove outliers
     std::vector<std::pair<int, float> > disparities_temp = disparities_;
     std::sort(disparities_temp.begin(), disparities_temp.end(), [](const std::pair<int, float> disp1, const std::pair<int, float> disp2){return (disp1.second < disp2.second);});
     float disparity = disparities_temp.at(disparities_temp.size()/2).second;
     float max_disparity = disparities_temp.at(disparities_temp.size()*3/4).second * 2;
-    uchar* inliers_ptr = inliers_.ptr<uchar>(0);
     for(size_t i = 0; i < disparities_.size(); ++i)
     {
         if(disparities_[i].second > max_disparity)
         {
             const int id = disparities_[i].first;
-            inliers_ptr[id] = 0;
+            inliers_[id] = false;
+            cand_cur_->idx[id] = -1;
         }
     }
-
-    //! get undistorted points
-    std::vector<cv::Point2f> temp_udist;
-    cv::undistortPoints(pts_cur_, temp_udist, frame_cur_->cam_->cvK(), frame_cur_->cam_->cvD());
-    fts_cur_.resize(fts_ref_.size());
-    int idx = 0;
-    std::for_each(temp_udist.begin(), temp_udist.end(), [&](cv::Point2f& pt){fts_cur_[idx].x = pt.x; fts_cur_[idx].y = pt.y; idx++;});
-
     LOG_IF(INFO, verbose_) << "[INIT][2] Avage disparity: " << disparity;
     if(disparity < Config::initMinDisparity()) return FAILURE;
 
     double t3 = (double)cv::getTickCount();
 
     //! [3] geometry check by F matrix
+    //! find fundamental matrix
     Matrix3d E;
-    int inliers_count = Fundamental::findFundamentalMat(fts_ref_, fts_cur_, E, inliers_, Config::pixelUnSigma2(), Config::initMaxRansacIters(), true);
+    cand_cur_->createFts(); //! get undistorted points
+    int inliers_count = Fundamental::findFundamentalMat(cand_ref_->fts, cand_cur_->fts, E, inliers_, Config::pixelUnSigma2(), Config::initMaxRansacIters(), true);
 
     LOG_IF(INFO, verbose_) << "[INIT][3] Inliers after epipolar geometry check: " << inliers_count;
     if(inliers_count < Config::initMinInliers()) return FAILURE;
+//
+//    double t4 = (double)cv::getTickCount();
+//
+//    //! [4] cheirality check
+//    Matrix3d R1, R2;
+//    Vector3d t;
+//    Fundamental::decomposeEssentialMat(E, R1, R2, t);
+//
+//    Matrix3d K = Matrix3d::Identity(3,3);
+//    bool succeed = findBestRT(R1, R2, t, K, K, fts_ref_, fts_cur_, inliers_, p3ds_, T_);
+//    if(!succeed) return FAILURE;
+//    LOG_IF(INFO, verbose_) << "[INIT][4] Inliers after cheirality check: " << cv::countNonZero(inliers_);
+//
+//    double t5 = (double)cv::getTickCount();
+//
+//    //! [5] reprojective check
+//    inliers_count = checkReprejectErr(pts_ref_, pts_cur_, fts_ref_, fts_cur_, T_, inliers_, p3ds_, Config::pixelUnSigma2()*4);
+//    LOG_IF(INFO, verbose_) << "[INIT][5] Inliers after reprojective check: " << inliers_count;
+//    if(inliers_count < Config::initMinInliers()) return FAILURE;
+//
+//    double t6 = (double)cv::getTickCount();
+//    LOG_IF(WARNING, verbose_) << "[INIT][*] Time: " << (t2-t1)/cv::getTickFrequency() << " "
+//                              << (t3-t2)/cv::getTickFrequency() << " "
+//                              << (t4-t3)/cv::getTickFrequency() << " "
+//                              << (t5-t4)/cv::getTickFrequency() << " "
+//                              << (t6-t5)/cv::getTickFrequency();
+//
+//    finished_ = true;
 
-    double t4 = (double)cv::getTickCount();
-
-    //! [4] cheirality check
-    Matrix3d R1, R2;
-    Vector3d t;
-    Fundamental::decomposeEssentialMat(E, R1, R2, t);
-
-    Matrix3d K = Matrix3d::Identity(3,3);
-    bool succeed = findBestRT(R1, R2, t, K, K, fts_ref_, fts_cur_, inliers_, p3ds_, T_);
-    if(!succeed) return FAILURE;
-    LOG_IF(INFO, verbose_) << "[INIT][4] Inliers after cheirality check: " << cv::countNonZero(inliers_);
-
-    double t5 = (double)cv::getTickCount();
-
-    //! [5] reprojective check
-    inliers_count = checkReprejectErr(pts_ref_, pts_cur_, fts_ref_, fts_cur_, T_, inliers_, p3ds_, Config::pixelUnSigma2()*4);
-    LOG_IF(INFO, verbose_) << "[INIT][5] Inliers after reprojective check: " << inliers_count;
-    if(inliers_count < Config::initMinInliers()) return FAILURE;
-
-    double t6 = (double)cv::getTickCount();
-    LOG_IF(WARNING, verbose_) << "[INIT][*] Time: " << (t2-t1)/cv::getTickFrequency() << " "
-                              << (t3-t2)/cv::getTickFrequency() << " "
-                              << (t4-t3)/cv::getTickFrequency() << " "
-                              << (t5-t4)/cv::getTickFrequency() << " "
-                              << (t6-t5)/cv::getTickFrequency();
-
-    finished_ = true;
-    return SUCCESS;
+    int inlier_num = std::count(cand_cur_->idx.begin(), cand_cur_->idx.end(), -1);
+    if(inlier_num > 0)
+        createNewCorners(cand_cur_);
+    frame_buffer_.push_back(cand_cur_);
+    return FAILURE;
 }
 
 void Initializer::createInitalMap(std::vector<Vector3d> &points, double map_scale)
 {
     //! [6] create inital map
-    const size_t N = pts_ref_.size();
+    const size_t N = cand_ref_->pts.size();
 
     //! calculate mean depth
     double mean_depth = 0.0;
     size_t count = 0;
-    const uchar* inliers_ptr = inliers_.ptr<uchar>(0);
     for(size_t i = 0; i < N; ++i)
     {
-        if(inliers_ptr[i])
+        if(inliers_[i])
         {
             mean_depth += p3ds_[i][2];
             count++;
@@ -174,45 +335,51 @@ void Initializer::createInitalMap(std::vector<Vector3d> &points, double map_scal
     SE3d T_cur_from_ref(T_.topLeftCorner(3,3), T_.rightCols(1));
     SE3d T_ref_from_cur = T_cur_from_ref.inverse();
     T_ref_from_cur.translation() = T_ref_from_cur.translation() * scale;
-    frame_ref_->setPose(Matrix3d::Identity(), Vector3d::Zero());
-    frame_cur_->setPose(T_ref_from_cur);
+    cand_ref_->frame->setPose(Matrix3d::Identity(), Vector3d::Zero());
+    cand_cur_->frame->setPose(T_ref_from_cur);
 
     //! create and rescale map points
-    points.reserve(count);
-    for(size_t i = 0; i < N; ++i)
-    {
-        if(!inliers_ptr[i])
-            continue;
+    const std::vector<int64_t> &index = cand_cur_->idx;
 
-        Vector2d px_ref(pts_ref_[i].x, pts_ref_[i].y);
-        Vector2d px_cur(pts_cur_[i].x, pts_cur_[i].y);
-        Vector3d ft_ref(fts_ref_[i].x, fts_ref_[i].y, 1);
-        Vector3d ft_cur(fts_cur_[i].x, fts_cur_[i].y, 1);
-
-        points.emplace_back(p3ds_[i]*scale);
-
-        Feature::Ptr feature_ref = Feature::create(px_ref, ft_ref.normalized(), corners_[i].level, nullptr);
-        Feature::Ptr feature_cur = Feature::create(px_cur, ft_cur.normalized(), corners_[i].level, nullptr);
-
-        frame_ref_->addFeature(feature_ref);
-        frame_cur_->addFeature(feature_cur);
-    }
+//    points.reserve(count);
+//    for(size_t i = 0; i < N; ++i)
+//    {
+//        if(!inliers_[i])
+//            continue;
+//
+//        Vector2d px_ref(pts_ref_[i].x, pts_ref_[i].y);
+//        Vector2d px_cur(pts_cur_[i].x, pts_cur_[i].y);
+//        Vector3d ft_ref(fts_ref_[i].x, fts_ref_[i].y, 1);
+//        Vector3d ft_cur(fts_cur_[i].x, fts_cur_[i].y, 1);
+//
+//        points.emplace_back(p3ds_[i]*scale);
+//
+//        Feature::Ptr feature_ref = Feature::create(px_ref, ft_ref.normalized(), corners_[i].level, nullptr);
+//        Feature::Ptr feature_cur = Feature::create(px_cur, ft_cur.normalized(), corners_[i].level, nullptr);
+//
+//        frame_ref_->addFeature(feature_ref);
+//        frame_cur_->addFeature(feature_cur);
+//    }
 }
 
 void Initializer::getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur) const
 {
-    const int N = pts_ref_.size();
-    pts_ref.reserve(N);
-    pts_cur.reserve(N);
+    const int ref_id = cand_ref_->frame->id_;
+    const size_t track_points = std::count(cand_cur_->idx.begin(), cand_cur_->idx.end(), ref_id);
 
-    const uchar* inliers_ptr = inliers_.ptr<uchar>(0);
-    for(int i = 0; i < N; ++i)
+    pts_ref.clear();
+    pts_cur.clear();
+    pts_ref.reserve(track_points);
+    pts_cur.reserve(track_points);
+
+    const std::vector<int64_t> &index = cand_cur_->idx;
+    for(int i = 0; i < FrameCandidate::size; ++i)
     {
-        if(!inliers_ptr[i])
+        if(index[i] < 0 || index[i] > ref_id)
             continue;
 
-        pts_ref.push_back(pts_ref_[i]);
-        pts_cur.push_back(pts_cur_[i]);
+        pts_ref.push_back(cand_ref_->pts[i]);
+        pts_cur.push_back(cand_cur_->pts[i]);
     }
 }
 
@@ -228,94 +395,124 @@ void Initializer::drowOpticalFlow(const cv::Mat &src, cv::Mat &dst) const
     }
 }
 
-void Initializer::kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur,
-                           const std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, cv::Mat& inliers)
+void Initializer::drowOpticalFlowMatch(cv::Mat &dst) const
+{
+    const cv::Mat &cur = cand_cur_->frame->getImage(0);
+    const cv::Mat &ref = cand_ref_->frame->getImage(0);
+    const int cols = cur.cols;
+    const int rows = cur.rows;
+    dst = cv::Mat(rows, cols*2, CV_8UC3);
+    cv::cvtColor(ref, dst.colRange(0, cols), CV_GRAY2RGB);
+    cv::cvtColor(cur, dst.colRange(cols, 2*cols), CV_GRAY2RGB);
+
+    const int N = FrameCandidate::size;
+    const int ref_id = cand_ref_->frame->id_;
+    const std::vector<int64_t> &index = cand_cur_->idx;
+    for(int i = 0; i < N; ++i)
+    {
+        if(index[i] < 0 || index[i] > ref_id)
+            continue;
+
+        cv::RNG rng(i);
+        cv::Scalar color = cv::Scalar(rng.uniform(0,255), rng.uniform(0, 255), rng.uniform(0, 255));
+        cv::line(dst, cand_ref_->pts[i], cand_cur_->pts[i]+cv::Point2f(cols, 0), color);
+    }
+}
+
+void Initializer::kltTrack(const ImgPyr &imgs_ref, const ImgPyr &imgs_cur, const cv::Size win_size,
+                           const std::vector<cv::Point2f> &pts_ref, std::vector<cv::Point2f> &pts_cur,
+                           std::vector<bool> &status, bool track_forward)
 {
     const int N = pts_ref.size();
-    const int klt_win_size = 21;
     const int klt_max_iter = 30;
     const double klt_eps = 0.001;
     const int border = 8;
     const int x_min = border;
     const int y_min = border;
-    const int x_max = img_ref.cols - border;
-    const int y_max = img_ref.rows - border;
-
-    std::vector<cv::Point2f> pts_ref_temp;
-    std::vector<cv::Point2f> pts_cur_temp;
-    pts_ref_temp.reserve(N);
-    pts_cur_temp.reserve(N);
-    if(!inliers.empty())
-    {
-        const uchar* inliers_ptr = inliers.ptr<uchar>(0);
-        for (int idx = 0; idx < N; ++idx)
-        {
-            if(!inliers_ptr[idx])
-                continue;
-
-            pts_ref_temp.push_back(pts_ref[idx]);
-            pts_cur_temp.push_back(pts_cur[idx]);
-        }
-    }
-    else
-    {
-        inliers = cv::Mat(N, 1, CV_8UC1, cv::Scalar(255));
-        pts_ref_temp = pts_ref;
-        pts_cur_temp = pts_cur;
-    }
-
+    const int x_max = imgs_ref[0].cols - border;
+    const int y_max = imgs_cur[0].rows - border;
 
     std::vector<float> error;
-    std::vector<uchar> status;
+    std::vector<uchar> status_forward;
 
     cv::TermCriteria termcrit(cv::TermCriteria::COUNT+cv::TermCriteria::EPS, klt_max_iter, klt_eps);
-    // TODO 是不是需要考虑在不同level提取的交点，在其他level的得分会比较低，使得跟踪效果不好？
-    cv::calcOpticalFlowPyrLK(
-        img_ref, img_cur,
-        pts_ref_temp, pts_cur_temp,
-        status, error,
-        cv::Size(klt_win_size, klt_win_size), 3,
-        termcrit, cv::OPTFLOW_USE_INITIAL_FLOW
-    );
+    //! forward track
+    cv::calcOpticalFlowPyrLK(imgs_ref, imgs_cur, pts_ref, pts_cur, status_forward, error,
+                             win_size, 3, termcrit, cv::OPTFLOW_USE_INITIAL_FLOW);
 
-    pts_cur.resize(N);
-    uchar* inliers_ptr = inliers.ptr<uchar>(0);
-    int idx = 0;
+    status.resize(N, false);
+    std::fill(status.begin(), status.end(), false);
     for(int i = 0; i < N; ++i)
     {
-        if(!inliers_ptr[i])
-            continue;
-
-        const cv::Point2f pt = pts_cur_temp[idx];
-        if(!status[idx] || pt.x < x_min || pt.y < y_min || pt.x > x_max || pt.y > y_max)
+        const cv::Point2f &pt = pts_cur[i];
+        if(!status_forward[i] || pt.x < x_min || pt.y < y_min || pt.x > x_max || pt.y > y_max)
         {
-            inliers_ptr[i] = 0;
             pts_cur[i] = cv::Point2f(0,0);
         }
         else
         {
             pts_cur[i] = pt;
+            status[i] = true;
         }
-        idx++;
+
     }
+
+    if(!track_forward)
+        return;
+
+    std::vector<cv::Point2f> pts_cur_tracked;
+    std::vector<cv::Point2f> pts_ref_tracked;
+    std::vector<int> inlier_ids;
+    pts_cur_tracked.reserve(N);
+    inlier_ids.reserve(N);
+    for(int i = 0; i < N; ++i)
+    {
+        if(!status[i])
+            continue;
+
+        pts_cur_tracked.push_back(pts_cur[i]);
+        pts_ref_tracked.push_back(pts_ref[i]);
+        inlier_ids.push_back(i);
+    }
+
+    //! backward track
+    std::vector<uchar> status_back;
+    cv::calcOpticalFlowPyrLK(imgs_cur, imgs_ref, pts_cur_tracked, pts_ref_tracked, status_back, error,
+                             win_size, 3, termcrit, cv::OPTFLOW_USE_INITIAL_FLOW);
+
+    const int N1 = inlier_ids.size();
+    for(int i = 0; i < N1; ++i)
+    {
+        const int idx = inlier_ids[i];
+        const cv::Point2f &pt_real = pts_ref[idx];
+        const cv::Point2f &pt_estm = pts_ref_tracked[i];
+        const cv::Point2f delta = pt_real-pt_estm;
+        if(!status_back[i] || (delta.x*delta.x + delta.y*delta.y) > 2.0)
+        {
+            status[idx] = false;
+            pts_cur[idx] = cv::Point2f(0,0);
+        }
+    }
+
 }
 
 void Initializer::calcDisparity(const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2,
-                                const cv::Mat& inliers, std::vector<std::pair<int, float> >& disparities)
+                                const std::vector<bool> &mask, std::vector<std::pair<int, float> >& disparities)
 {
     const int N = pts1.size();
+    assert(N == pts2.size());
 
+    const size_t out_size= std::count(mask.begin(), mask.end(), true);
     disparities.clear();
-    disparities.reserve(N);
-    const uchar* inliers_ptr = inliers.ptr<uchar>(0);
+    disparities.reserve(out_size);
     for(int i = 0; i < N; i++)
     {
-        if(!inliers_ptr[i])
+        if(!mask[i])
             continue;
 
         float dx = pts2[i].x - pts1[i].x;
         float dy = pts2[i].y - pts1[i].y;
-        disparities.emplace_back(std::make_pair(i,sqrt(dx*dx + dy*dy)));
+        disparities.emplace_back(std::make_pair(i, std::sqrt(dx*dx + dy*dy)));
     }
 }
 
@@ -573,7 +770,7 @@ void Initializer::reduceVecor(std::vector<cv::Point2d>& fts, const cv::Mat& inli
 }
 
 int Fundamental::findFundamentalMat(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, Matrix3d &F,
-                                    cv::Mat& inliers, double sigma2, int max_iterations, const bool bE)
+                                    std::vector<bool> &inliers, double sigma2, int max_iterations, const bool bE)
 {
     assert(fts_prev.size() == fts_next.size());
 
@@ -631,8 +828,8 @@ void Fundamental::run8point(const std::vector<cv::Point2d>& fts_prev, const std:
 }
 
 
-int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, Matrix3d& F, cv::Mat& inliers,
-    const double sigma2, const int max_iterations, const bool bE)
+int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, Matrix3d& F,
+                           std::vector<bool> &inliers, const double sigma2, const int max_iterations, const bool bE)
 {
     const int N = fts_prev.size();
     const int modelPoints = 8;
@@ -642,10 +839,9 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::
 
     std::vector<int> total_points;
     total_points.reserve(N);
-    const uchar* inliers_ptr = inliers.ptr<uchar>(0);
     for(int i = 0; i < N; ++i)
     {
-        if(inliers_ptr[i])
+        if(inliers[i])
             total_points.push_back(i);
     }
     const int npoints = total_points.size();
@@ -656,7 +852,6 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::
     std::vector<cv::Point2d> fts1_norm;
     std::vector<cv::Point2d> fts2_norm;
     Matrix3d F_temp;
-    inliers = cv::Mat::zeros(N, 1, CV_8UC1);
     int max_inliers = 0;
     int niters = max_iters;
     for(int iter = 0; iter < niters; iter++)
@@ -675,20 +870,17 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::
         run8point(fts1, fts2, F_temp, bE);
 
         int inliers_count = 0;
-        cv::Mat inliers_temp = cv::Mat::zeros(N, 1, CV_8UC1);
-        uchar* inliers_ptr = inliers_temp.ptr<uchar>(0);
-        std::vector<int>::iterator total_points_iter = total_points.begin();
-        for(const std::vector<int>::iterator end_iter = total_points.end(); total_points_iter != end_iter; ++total_points_iter)
+        std::vector<bool> inliers_temp(N, false);
+        for(const int id : total_points)
         {
-            const int n = *total_points_iter;
             double error1, error2;
-            computeErrors(fts_prev[n], fts_next[n], F_temp, error1, error2);
+            computeErrors(fts_prev[id], fts_next[id], F_temp, error1, error2);
 
             const double error = MAX(error1, error2);
 
             if(error < threshold)
             {
-                inliers_ptr[n] = 0xff;
+                inliers_temp[id] = true;
                 inliers_count++;
             }
         }
@@ -696,7 +888,7 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::
         if(inliers_count > max_inliers)
         {
             max_inliers = inliers_count;
-            inliers = inliers_temp.clone();
+            inliers = inliers_temp;
 
             if(inliers_count < npoints)
             {
@@ -720,10 +912,8 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::
     fts2.clear();
     for(int n = 0; n < N; ++n)
     {
-        if(0 == inliers.at<uchar>(n, 0))
-        {
+        if(!inliers[n])
             continue;
-        }
 
         fts1.push_back(fts_prev[n]);
         fts2.push_back(fts_next[n]);

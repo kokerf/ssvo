@@ -124,7 +124,7 @@ int main(int argc, char const *argv[])
     std::vector<Corner> corners;
     std::vector<Corner> old_corners;
     Frame::Ptr frame_ref, frame_cur;
-    for(std::vector<std::string>::iterator i = img_file_names.begin(); i != img_file_names.end(); ++i)
+    for(std::vector<std::string>::iterator i = img_file_names.begin() + 100; i != img_file_names.end(); ++i)
     {
         cv::Mat img = cv::imread(*i, CV_LOAD_IMAGE_UNCHANGED);
         if(img.empty()) throw std::runtime_error("Could not open image: " + *i);
@@ -137,13 +137,13 @@ int main(int argc, char const *argv[])
         if(initial == 0)
         {
             frame_ref = Frame::create(gray, 0, camera);
-            if(initializer->addFirstImage(frame_ref) == SUCCESS)
+            if(initializer->addImage(frame_ref) == SUCCESS)
                 initial = 1;
         }
         else if(initial == 1)
         {
             frame_cur = Frame::create(gray, 1, camera);
-            InitResult result = initializer->addSecondImage(frame_cur);
+            InitResult result = initializer->addImage(frame_cur);
             if(result == RESET) {
                 initial = 0;
                 //continue;
@@ -152,11 +152,11 @@ int main(int argc, char const *argv[])
                 break;
 
             cv::Mat klt_img;
-            initializer->drowOpticalFlow(img, klt_img);
+            initializer->drowOpticalFlowMatch(klt_img);
             cv::imshow("KLTracking", klt_img);
         }
 
-        cv::waitKey(fps);
+        cv::waitKey(0);//fps);
     }
 
     ssvo::LocalMapper::Ptr mapper = ssvo::LocalMapper::create(detector, fps);

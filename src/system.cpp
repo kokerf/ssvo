@@ -70,7 +70,7 @@ void System::process(const cv::Mat &image, const double timestamp)
 
 System::Status System::processFirstFrame()
 {
-    InitResult result = initializer_->addFirstImage(current_frame_);
+    InitResult result = initializer_->addImage(current_frame_);
     if(result == RESET)
         return STATUS_INITAL_RESET;
 
@@ -79,7 +79,7 @@ System::Status System::processFirstFrame()
 
 System::Status System::processSecondFrame()
 {
-    InitResult result = initializer_->addSecondImage(current_frame_);
+    InitResult result = initializer_->addImage(current_frame_);
 
     if(result == RESET)
         return STATUS_INITAL_RESET;
@@ -189,7 +189,7 @@ bool System::changeReferenceKeyFrame()
     if(c1 || c2)
     {
         KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
-        mapper_->insertNewFrame(current_frame_, new_keyframe, median_depth, min_depth);
+//        mapper_->insertNewFrame(current_frame_, new_keyframe, median_depth, min_depth);
     }
     //! change reference keyframe
     else
@@ -209,7 +209,7 @@ bool System::changeReferenceKeyFrame()
             return false;
 
         reference_keyframe_ = best_keyframe;
-        mapper_->insertNewFrame(current_frame_, nullptr, median_depth, min_depth);
+//        mapper_->insertNewFrame(current_frame_, nullptr, median_depth, min_depth);
     }
 
     return true;

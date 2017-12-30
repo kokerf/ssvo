@@ -17,7 +17,9 @@ public:
 
     typedef std::shared_ptr<Frame> Ptr;
 
-    const ImgPyr image() const;
+    const ImgPyr images() const;
+
+    const ImgPyr opticalImages() const;
 
     const cv::Mat getImage(int level) const;
 
@@ -60,9 +62,6 @@ public:
     inline static Ptr create(const cv::Mat& img, const double timestamp, Camera::Ptr cam)
     { return Ptr(new Frame(img, timestamp, cam)); }
 
-    inline static Ptr create(const ImgPyr& img_pyr, const double timestamp, Camera::Ptr cam)
-    { return Ptr(new Frame(img_pyr, timestamp, cam)); }
-
     inline static void jacobian_xyz2uv(
         const Vector3d& xyz_in_f,
         Matrix<double,2,6,RowMajor>& J)
@@ -91,8 +90,6 @@ protected:
 
     Frame(const cv::Mat& img, const double timestamp, const Camera::Ptr &cam);
 
-    Frame(const ImgPyr& img_pyr, const double timestamp, const Camera::Ptr &cam);
-
     Frame(const ImgPyr& img_pyr, const uint64_t id, const double timestamp, const Camera::Ptr &cam);
 
 public:
@@ -105,7 +102,8 @@ public:
 
     Camera::Ptr cam_;
 
-    const int nlevels_;
+    const int max_level_;
+    static const cv::Size optical_win_size_;
 
     SE3d optimal_Tcw_;//! for optimization
 
@@ -123,6 +121,9 @@ protected:
 
     std::mutex mutex_pose_;
     std::mutex mutex_feature_;
+
+private:
+    ImgPyr optical_pyr_;
 };
 
 }

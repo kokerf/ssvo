@@ -7,7 +7,7 @@ namespace ssvo{
 uint64_t KeyFrame::next_id_ = 0;
 
 KeyFrame::KeyFrame(const Frame::Ptr frame):
-    Frame(frame->image(), next_id_++, frame->timestamp_, frame->cam_), frame_id_(frame->id_)
+    Frame(frame->images(), next_id_++, frame->timestamp_, frame->cam_), frame_id_(frame->id_)
 {
     fts_ = frame->features();
     setPose(frame->pose());

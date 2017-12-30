@@ -11,6 +11,36 @@ namespace ssvo{
 
 enum InitResult {RESET=-1, FAILURE=0, SUCCESS=1};
 
+//! fifo size = 3
+//!            /last
+//!   | [] [] [] | []
+//! ref/        cur/
+class FrameCandidate{
+public:
+    typedef std::shared_ptr<FrameCandidate> Ptr;
+    Frame::Ptr frame;
+    std::vector<Corner> corners;
+    std::vector<cv::Point2f> pts;
+    std::vector<cv::Point2d> fts;
+    std::vector<int64_t> idx;
+    static const int size;
+
+    void update(const Frame::Ptr &frame);
+    void createFts();
+    int updateInliers(const std::vector<bool> &inliers);
+    int checkReference(const int min_idx, const int max_idx, const int min_track);
+    void getMatch(std::vector<bool> &mask, const int ref_idx);
+
+    inline static Ptr create(const Frame::Ptr &frame)
+    {return std::make_shared<FrameCandidate>(FrameCandidate(frame));}
+    inline static Ptr create(const Frame::Ptr &frame, const FrameCandidate::Ptr &cand)
+    {return std::make_shared<FrameCandidate>(FrameCandidate(frame, cand));}
+
+private:
+    FrameCandidate(const Frame::Ptr &frame);
+    FrameCandidate(const Frame::Ptr &frame, const FrameCandidate::Ptr &cand);
+};
+
 class Initializer: public noncopyable
 {
 public:
@@ -20,23 +50,26 @@ public:
 
     InitResult addFirstImage(Frame::Ptr frame_ref);
 
-    InitResult addSecondImage(Frame::Ptr frame_cur);
+    InitResult addImage(Frame::Ptr frame_cur);
 
     void reset();
 
     void createInitalMap(std::vector<Vector3d> &points, double map_scale=1.0);
 
-    Frame::Ptr getReferenceFrame(){return frame_ref_;}
+    Frame::Ptr getReferenceFrame(){return cand_ref_->frame;}
 
     void getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur) const;
 
     void drowOpticalFlow(const cv::Mat& src, cv::Mat& dst) const;
 
-    static void kltTrack(const cv::Mat& img_ref, const cv::Mat& img_cur,
-                         const std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur, cv::Mat& inliers);
+    void drowOpticalFlowMatch(cv::Mat& dst) const;
+
+    static void kltTrack(const ImgPyr& imgs_ref, const ImgPyr& imgs_cur, const cv::Size win_size,
+                         const std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur,
+                         std::vector<bool> &status, bool track_forward = false);
 
     static void calcDisparity(const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2,
-                              const cv::Mat& inliers, std::vector<std::pair<int, float> >& disparities);
+                              const std::vector<bool> &mask, std::vector<std::pair<int, float> >& disparities);
 
     static bool findBestRT(const Matrix3d& R1, const Matrix3d& R2, const Vector3d& t,
                            const Matrix3d& K1, const Matrix3d& K2,
@@ -61,20 +94,24 @@ public:
 private:
     Initializer(const FastDetector::Ptr &fast_detector, bool verbose = false);
 
+    InitResult createNewCorners(const FrameCandidate::Ptr &candidate);
+
+    bool changeReference(int buffer_offset);
+
+
+
 private:
 
     FastDetector::Ptr fast_detector_;
-    Frame::Ptr frame_ref_;
-    Frame::Ptr frame_cur_;
 
-    Corners corners_;
-    std::vector<cv::Point2f> pts_ref_;
-    std::vector<cv::Point2f> pts_cur_;
-    std::vector<cv::Point2d> fts_ref_;
-    std::vector<cv::Point2d> fts_cur_;
+    std::deque<FrameCandidate::Ptr> frame_buffer_;
+
+    FrameCandidate::Ptr cand_ref_;//！ front of frame_buffer_
+    FrameCandidate::Ptr cand_cur_;
+    FrameCandidate::Ptr cand_last_;
     std::vector<Vector3d> p3ds_;
     std::vector<std::pair<int, float> > disparities_;
-    cv::Mat inliers_;
+    std::vector<bool> inliers_;
     Matrix<double, 3, 4> T_;
 
     bool finished_;
@@ -85,8 +122,8 @@ private:
 namespace Fundamental
 {
 
-int findFundamentalMat(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, Matrix3d &F,
-                                    cv::Mat& inliers, const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
+int findFundamentalMat(const std::vector<cv::Point2d> &pts_prev, const std::vector<cv::Point2d> &pts_next, Matrix3d &F,
+                       std::vector<bool> &inliers, const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
 
 inline void computeErrors(const cv::Point2d& p1, const cv::Point2d& p2, Matrix3d& F, double& err1, double& err2);
 
@@ -94,7 +131,7 @@ void Normalize(const std::vector<cv::Point2d>& pts, std::vector<cv::Point2d>& pt
 
 void run8point(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, Matrix3d& F, const bool bE = false);
 
-int runRANSAC(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, Matrix3d& F, cv::Mat& inliers,
+int runRANSAC(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, Matrix3d& F, std::vector<bool> &inliers,
                      const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
 
 void decomposeEssentialMat(const Matrix3d& E, Matrix3d& R1, Matrix3d& R2, Vector3d& t);

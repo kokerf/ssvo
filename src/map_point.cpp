@@ -54,7 +54,7 @@ void MapPoint::updateViewAndDepth()
     const double dist = ref_obs_dir.norm();
     Feature::Ptr ft = findObservation(refKF_);
     const int level_scale = 1 << ft->level;
-    const int max_scale = 1 << refKF_->nlevels_;
+    const int max_scale = 1 << refKF_->max_level_;
 
     // TODO whether change?
     max_distance_ = dist * level_scale; //! regard it is top level, we may obsevere the point if we go closer
@@ -147,7 +147,7 @@ bool MapPoint::getCloseViewObs(const Frame::Ptr &frame, KeyFrame::Ptr &keyframe,
     if(max_cos_angle < 0.5f)
         return false;
 
-    level = predictScale(dist, frame->nlevels_-1);
+    level = predictScale(dist, frame->max_level_);
 
     return true;
 }

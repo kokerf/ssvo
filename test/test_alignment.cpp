@@ -275,7 +275,7 @@ int main(int argc, char *argv[])
 
     std::vector<Corner> corners, old_corners;
     FastDetector::Ptr fast_detector = FastDetector::create(width, height, 8, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
-    fast_detector->detect(frame0->image(), corners, old_corners, 200, fast_min_eigen);
+    fast_detector->detect(frame0->images(), corners, old_corners, 200, fast_min_eigen);
 
     cv::Mat kps_img;
     std::vector<cv::KeyPoint> keypoints;
@@ -311,7 +311,7 @@ int main(int argc, char *argv[])
 
     frame1->setPose(Matrix3d::Identity(), Vector3d(0.0,0.0,0.0));//0.01, 0.02, 0.03));
     AlignSE3 align(true, true);
-    align.run(frame0, frame1, frame0->image().size()-1, 30, 1e-8);
+    align.run(frame0, frame1, frame0->images().size()-1, 30, 1e-8);
 
     double t0 = (double)cv::getTickCount();
     for(int i = 0; i < 1000; i++)
