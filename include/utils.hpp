@@ -136,7 +136,7 @@ inline Td interpolateMat(const cv::Mat& mat, const double u, const double v)
     double wy1 = v - y;
     double wy0 = 1.0 - wy1;
 
-    const int stride = mat.cols;
+    const int stride = mat.step[0]/mat.step[1];
     const Ts* ptr = mat.ptr<Ts>(y) + x;
     return (wx0*wy0)*ptr[0] + (wx1*wy0)*ptr[1] + (wx0*wy1)*ptr[stride] + (wx1*wy1)*ptr[stride + 1];
 }
