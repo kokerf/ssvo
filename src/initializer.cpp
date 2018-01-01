@@ -269,7 +269,7 @@ InitResult Initializer::addImage(Frame::Ptr frame_cur)
     int outliers = 0;
     if(!backward_check)
     {
-        float max_disparity = disparities_temp.at(disparities_temp.size() * 1 / 4).second * 3;
+        float max_disparity = disparities_temp.at(disparities_temp.size() * 1 / 5).second * 2;
         for(size_t i = 0; i < disparities_.size(); ++i)
         {
             if(disparities_[i].second > max_disparity)
@@ -762,54 +762,6 @@ void Initializer::triangulate(const Matrix<double, 3, 4>& P1, const Matrix<doubl
 
     P3D = V.col(3);
     P3D = P3D/P3D(3);
-}
-
-void Initializer::reduceVecor(std::vector<cv::Point2f>& pts, const cv::Mat& inliers)
-{
-    assert(inliers.cols == 1 || inliers.rows == 1);
-    assert(inliers.type() == CV_8UC1);
-    size_t size = MAX(inliers.cols, inliers.rows);
-    assert(size == pts.size());
-
-    std::vector<cv::Point2f>::iterator pts_iter = pts.begin();
-    cv::Mat inliers_mat = inliers.clone();
-    uchar* inliers_ptr = inliers_mat.ptr<uchar>(0);
-    for(;pts_iter!=pts.end();)
-    {
-        if(!(*inliers_ptr))
-        {
-            *inliers_ptr = inliers_mat.data[--size];
-            *pts_iter = pts.back();
-            pts.pop_back();
-            continue;
-        }
-        inliers_ptr++;
-        pts_iter++;
-    }
-}
-
-void Initializer::reduceVecor(std::vector<cv::Point2d>& fts, const cv::Mat& inliers)
-{
-    assert(inliers.cols == 1 || inliers.rows == 1);
-    assert(inliers.type() == CV_8UC1);
-    size_t size = MAX(inliers.cols, inliers.rows);
-    assert(size == fts.size());
-
-    std::vector<cv::Point2d>::iterator fts_iter = fts.begin();
-    cv::Mat inliers_mat = inliers.clone();
-    uchar* inliers_ptr = inliers_mat.ptr<uchar>(0);
-    for(;fts_iter!=fts.end();)
-    {
-        if(!(*inliers_ptr))
-        {
-            *inliers_ptr = inliers_mat.data[--size];
-            *fts_iter =fts.back();
-            fts.pop_back();
-            continue;
-        }
-        inliers_ptr++;
-        fts_iter++;
-    }
 }
 
 int Fundamental::findFundamentalMat(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, Matrix3d &F,

@@ -84,10 +84,6 @@ public:
     static void triangulate(const Matrix<double, 3, 4>& P1, const Matrix<double, 3, 4>& P2,
                             const cv::Point2d& ft1, const cv::Point2d& ft2, Vector4d& P3D);
 
-    static void reduceVecor(std::vector<cv::Point2f>& pts, const cv::Mat& inliers);
-
-    static void reduceVecor(std::vector<cv::Point2d>& fts, const cv::Mat& inliers);
-
     inline static Initializer::Ptr create(const FastDetector::Ptr &fast_detector, bool verbose = false)
     {return Initializer::Ptr(new Initializer(fast_detector, verbose));}
 
@@ -97,8 +93,6 @@ private:
     InitResult createNewCorners(const FrameCandidate::Ptr &candidate);
 
     bool changeReference(int buffer_offset);
-
-
 
 private:
 

@@ -159,6 +159,28 @@ double normal_distribution(T x, T mu, T sigma)
     return inv_sqrt_2pi / sigma * std::exp(-0.5 * a * a);
 }
 
+template <typename T>
+void reduceVecor(std::vector<T>& vecs, const std::vector<bool>& inliers)
+{
+    size_t size = inliers.size();
+    assert(size == vecs.size());
+
+    typename std::vector<T>::iterator vecs_iter = vecs.begin();
+    size_t idx = 0;
+    for(;vecs_iter!=vecs.end();)
+    {
+        if(!inliers[idx])
+        {
+            inliers[idx] = inliers[--size];
+            *vecs_iter = vecs.back();
+            vecs.pop_back();
+            continue;
+        }
+        idx++;
+        vecs_iter++;
+    }
+}
+
 }
 
 }
