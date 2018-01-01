@@ -123,8 +123,8 @@ int main(int argc, char const *argv[])
     int initial = 0;
     std::vector<Corner> corners;
     std::vector<Corner> old_corners;
-    Frame::Ptr frame_ref, frame_cur;
-    for(std::vector<std::string>::iterator i = img_file_names.begin() + 100; i != img_file_names.end(); ++i)
+    Frame::Ptr frame_cur;
+    for(std::vector<std::string>::iterator i = img_file_names.begin(); i != img_file_names.end(); ++i)
     {
         cv::Mat img = cv::imread(*i, CV_LOAD_IMAGE_UNCHANGED);
         if(img.empty()) throw std::runtime_error("Could not open image: " + *i);
@@ -136,19 +136,12 @@ int main(int argc, char const *argv[])
 
         if(initial == 0)
         {
-            frame_ref = Frame::create(gray, 0, camera);
-            if(initializer->addImage(frame_ref) == SUCCESS)
-                initial = 1;
-        }
-        else if(initial == 1)
-        {
-            frame_cur = Frame::create(gray, 1, camera);
-            InitResult result = initializer->addImage(frame_cur);
-            if(result == RESET) {
-                initial = 0;
-                //continue;
-            }
-            else if(result == SUCCESS)
+            frame_cur = Frame::create(gray, 0, camera);
+            InitResult res = initializer->addImage(frame_cur);
+
+            if(res == RESET)
+                initializer->reset();
+            else if(res == SUCCESS)
                 break;
 
             cv::Mat klt_img;
@@ -156,13 +149,13 @@ int main(int argc, char const *argv[])
             cv::imshow("KLTracking", klt_img);
         }
 
-        cv::waitKey(0);//fps);
+        cv::waitKey(fps);
     }
 
     ssvo::LocalMapper::Ptr mapper = ssvo::LocalMapper::create(detector, fps);
     std::vector<Vector3d> points;
     initializer->createInitalMap(points, 1.0);
-    mapper->createInitalMap(frame_ref, frame_cur, points);
+    mapper->createInitalMap(initializer->getReferenceFrame(), frame_cur, points);
 
     KeyFrame::Ptr kf0 = mapper->map_->getKeyFrame(0);
     KeyFrame::Ptr kf1 = mapper->map_->getKeyFrame(1);

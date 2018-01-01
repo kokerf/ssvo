@@ -9,7 +9,7 @@ using namespace Eigen;
 
 namespace ssvo{
 
-enum InitResult {RESET=-1, FAILURE=0, SUCCESS=1};
+enum InitResult {RESET=-2, READY=-1, FAILURE=0, SUCCESS=1};
 
 //! fifo size = 3
 //!            /last
@@ -19,16 +19,16 @@ class FrameCandidate{
 public:
     typedef std::shared_ptr<FrameCandidate> Ptr;
     Frame::Ptr frame;
-    std::vector<Corner> corners;
+    std::vector<int> level;
     std::vector<cv::Point2f> pts;
     std::vector<cv::Point2d> fts;
     std::vector<int64_t> idx;
     static const int size;
 
-    void update(const Frame::Ptr &frame);
     void createFts();
+    int getInliers(std::vector<bool> &inliers);
     int updateInliers(const std::vector<bool> &inliers);
-    int checkReference(const int min_idx, const int max_idx, const int min_track);
+    int checkTracking(const int min_idx, const int max_idx, const int min_track);
     void getMatch(std::vector<bool> &mask, const int ref_idx);
 
     inline static Ptr create(const Frame::Ptr &frame)
@@ -66,7 +66,7 @@ public:
 
     static void kltTrack(const ImgPyr& imgs_ref, const ImgPyr& imgs_cur, const cv::Size win_size,
                          const std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur,
-                         std::vector<bool> &status, bool track_forward = false);
+                         std::vector<bool> &status, bool track_forward = false, bool verbose = false);
 
     static void calcDisparity(const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2,
                               const std::vector<bool> &mask, std::vector<std::pair<int, float> >& disparities);
@@ -74,11 +74,11 @@ public:
     static bool findBestRT(const Matrix3d& R1, const Matrix3d& R2, const Vector3d& t,
                            const Matrix3d& K1, const Matrix3d& K2,
                            const std::vector<cv::Point2d>& fts1, const std::vector<cv::Point2d>& fts2,
-                           cv::Mat& mask, std::vector<Vector3d>& P3Ds, Matrix<double, 3, 4>& T);
+                           std::vector<bool>& mask, std::vector<Vector3d>& P3Ds, Matrix<double, 3, 4>& T);
 
     static int checkReprejectErr(const std::vector<cv::Point2f>& pts_ref, const std::vector<cv::Point2f>& pts_cur,
                                  const std::vector<cv::Point2d>& fts_ref, const std::vector<cv::Point2d>& fts_cur,
-                                 const Matrix<double, 3, 4>& T, cv::Mat& mask, std::vector<Vector3d>& p3ds,
+                                 const Matrix<double, 3, 4>& T, std::vector<bool>& mask, std::vector<Vector3d>& p3ds,
                                  const double sigma2);
 
     static void triangulate(const Matrix<double, 3, 4>& P1, const Matrix<double, 3, 4>& P2,
