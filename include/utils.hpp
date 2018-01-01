@@ -184,6 +184,8 @@ void kltTrack(const ImgPyr& imgs_ref, const ImgPyr& imgs_cur, const cv::Size win
               const std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur,
               std::vector<bool> &status, bool track_forward = false, bool verbose = false);
 
+bool triangulate(const Matrix3d &R_cr,  const Vector3d &t_cr, const Vector3d &fn_r, const Vector3d &fn_c, double &d_ref);
+
 namespace Fundamental
 {
 

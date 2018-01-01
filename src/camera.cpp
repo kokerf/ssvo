@@ -66,6 +66,25 @@ Vector3d Camera::lift(const Vector2d &px) const
     return xyz;
 }
 
+Vector3d Camera::lift(double x, double y) const
+{
+    Vector3d xyz(0, 0, 1);
+    if(distortion_)
+    {
+        double p[2] = {x, y};
+        cv::Mat pt_d = cv::Mat(1, 1, CV_64FC2, p);
+        cv::Mat pt_u = cv::Mat(1, 1, CV_64FC2, xyz.data());
+        cv::undistortPoints(pt_d, pt_u, cvK_, cvD_);
+    }
+    else
+    {
+        xyz[0] = (x - cx_) / fx_;
+        xyz[1] = (y - cy_) / fy_;
+    }
+
+    return xyz;
+}
+
 Vector2d Camera::project(const Vector3d &xyz) const
 {
     Vector2d px = xyz.head<2>() / xyz[2];

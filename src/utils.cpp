@@ -266,6 +266,22 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::
     return max_inliers;
 }
 
+bool triangulate(const Matrix3d& R_cr,  const Vector3d& t_cr, const Vector3d& fn_r, const Vector3d& fn_c, double &d_ref)
+{
+    Vector3d R_fn_r(R_cr * fn_r);
+    Vector2d b(t_cr.dot(R_fn_r), t_cr.dot(fn_c));
+    double A[4] = { R_fn_r.dot(R_fn_r), 0,
+                    R_fn_r.dot(fn_c), -fn_c.dot(fn_c)};
+    A[1] = -A[2];
+    double det = A[0]*A[3] - A[1]*A[2];
+    if(std::abs(det) < 0.000001)
+        return false;
+
+    d_ref = std::abs((b[0]*A[3] - A[1]*b[1])/det);
+    return true;
+}
+
+
 void Fundamental::Normalize(const std::vector<cv::Point2d>& fts, std::vector<cv::Point2d>& fts_norm, Matrix3d& T)
 {
     const int N = fts.size();
@@ -355,7 +371,7 @@ double Fundamental::computeErrorSquared(const Vector3d &p1, const Vector3d &p2, 
     Vector2d ab = b - a;
     double ap_costh = ap.dot(ab) / ab.norm();
 
-    return a.squaredNorm() - ap_costh*ap_costh;
+    return ap.squaredNorm() - ap_costh*ap_costh;
 }
 
 

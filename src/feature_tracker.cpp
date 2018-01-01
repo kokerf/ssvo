@@ -34,8 +34,8 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
 
     LOG_IF(INFO, report_) << "[FtTrack][1] -- Get Candidate KeyFrame --";
     std::vector<KeyFrame::Ptr> candidate_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames();
-    if(candidate_keyframes.size() > options_.border-1) {
-        candidate_keyframes.resize(options_.border-1);
+    if(candidate_keyframes.size() > options_.max_kfs) {
+        candidate_keyframes.resize(options_.max_kfs);
     }
 
     candidate_keyframes.push_back(frame->getRefKeyFrame());

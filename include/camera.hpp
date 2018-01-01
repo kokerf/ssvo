@@ -23,6 +23,8 @@ public:
 
     Vector3d lift(const Vector2d& px) const;
 
+    Vector3d lift(double x, double y) const;
+
     void liftPoints(std::vector<Vector2f>& pxs, std::vector<Vector3f>& fts) const;
 
     Vector2d project(const Vector3d& xyz) const;
