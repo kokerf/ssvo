@@ -137,15 +137,15 @@ int main(int argc, char const *argv[])
         if(initial == 0)
         {
             frame_cur = Frame::create(gray, 0, camera);
-            InitResult res = initializer->addImage(frame_cur);
+            Initializer::Result res = initializer->addImage(frame_cur);
 
-            if(res == RESET)
+            if(res == Initializer::RESET)
                 initializer->reset();
-            else if(res == SUCCESS)
+            else if(res == Initializer::SUCCESS)
                 break;
 
             cv::Mat klt_img;
-            initializer->drowOpticalFlowMatch(klt_img);
+            initializer->drowOpticalFlow(klt_img);
             cv::imshow("KLTracking", klt_img);
         }
 

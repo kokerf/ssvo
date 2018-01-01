@@ -8,7 +8,7 @@ namespace ssvo{
 std::string Config::FileName;
 
 System::System(std::string config_file) :
-    stage_(STAGE_FIRST_FRAME), status_(STATUS_INITAL_RESET)
+    stage_(STAGE_INITALIZE), status_(STATUS_INITAL_RESET)
 {
     LOG_ASSERT(!config_file.empty()) << "Empty Config file input!!!";
     Config::FileName = config_file;
@@ -52,13 +52,9 @@ void System::process(const cv::Mat &image, const double timestamp)
     {
         status_ = tracking();
     }
-    else if(STAGE_SECOND_FRAME== stage_)
+    else if(STAGE_INITALIZE == stage_)
     {
-        status_ = processSecondFrame();
-    }
-    else if(STAGE_FIRST_FRAME == stage_)
-    {
-        status_ = processFirstFrame();
+        status_ = initialize();
     }
     else if(STAGE_RELOCALIZING == stage_)
     {
@@ -68,23 +64,14 @@ void System::process(const cv::Mat &image, const double timestamp)
     finishFrame();
 }
 
-System::Status System::processFirstFrame()
+System::Status System::initialize()
 {
-    InitResult result = initializer_->addImage(current_frame_);
-    if(result == RESET)
+    const Initializer::Result result = initializer_->addImage(current_frame_);
+
+    if(result == Initializer::RESET)
         return STATUS_INITAL_RESET;
-
-    return STATUS_INITAL_SUCCEED;
-}
-
-System::Status System::processSecondFrame()
-{
-    InitResult result = initializer_->addImage(current_frame_);
-
-    if(result == RESET)
-        return STATUS_INITAL_RESET;
-    else if(result == FAILURE)
-        return STATUS_INITAL_FALIURE;
+    else if(result == Initializer::FAILURE || result == Initializer::READY)
+        return STATUS_INITAL_PROCESS;
 
     std::vector<Vector3d> points;
     initializer_->createInitalMap(points, Config::mapScale());
@@ -138,25 +125,17 @@ void System::finishFrame()
     Stage last_stage = stage_;
     if(STAGE_NORMAL_FRAME == stage_)
     {
-        if(STATUS_TRACKING_GOOD)
+        if(STATUS_TRACKING_GOOD == status_)
         {
             changeReferenceKeyFrame();
         }
     }
-    else if(STAGE_SECOND_FRAME == stage_)
-    {
-        switch(status_)
-        {
-            case STATUS_INITAL_FALIURE : stage_ = STAGE_SECOND_FRAME; break;
-            case STATUS_INITAL_RESET   : stage_ = STAGE_FIRST_FRAME; break;
-            case STATUS_INITAL_SUCCEED : stage_ = STAGE_NORMAL_FRAME; break;
-            default: break;
-        }
-    }
-    else if(STAGE_FIRST_FRAME == stage_)
+    else if(STAGE_INITALIZE == stage_)
     {
         if(STATUS_INITAL_SUCCEED == status_)
-            stage_ = STAGE_SECOND_FRAME;
+            stage_ = STAGE_NORMAL_FRAME;
+        else if(STATUS_INITAL_RESET == status_)
+            initializer_->reset();
     }
 
     //! update
@@ -230,9 +209,9 @@ void System::showImage(Stage stage)
             cv::circle(image, cv::Point2d(px[0], px[1]), 2, cv::Scalar(0, 255, 0), -1);
         }
     }
-    else if(STAGE_SECOND_FRAME == stage)
+    else if(STAGE_INITALIZE == stage)
     {
-        initializer_->drowOpticalFlow(image, image);
+        initializer_->drowOpticalFlow(image);
     }
 
     cv::imshow("SSVO Current Image", image);

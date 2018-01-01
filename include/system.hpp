@@ -17,15 +17,14 @@ class System: public noncopyable
 {
 public:
     enum Stage{
-        STAGE_FIRST_FRAME,
-        STAGE_SECOND_FRAME,
+        STAGE_INITALIZE,
         STAGE_NORMAL_FRAME,
         STAGE_RELOCALIZING
     };
 
     enum Status {
         STATUS_INITAL_RESET,
-        STATUS_INITAL_FALIURE,
+        STATUS_INITAL_PROCESS,
         STATUS_INITAL_SUCCEED,
         STATUS_TRACKING_BAD,
         STATUS_TRACKING_GOOD,
@@ -41,9 +40,7 @@ private:
 
     Status tracking();
 
-    Status processFirstFrame();
-
-    Status processSecondFrame();
+    Status initialize();
 
     void finishFrame();
 

@@ -97,12 +97,12 @@ int FrameCandidate::checkTracking(const int min_idx, const int max_idx, const in
         count[idx[i]-min_idx]++;
     }
 
-    std::cout << " [";
-    for(int j = 0; j < N; ++j)
-    {
-        std::cout << " " << count[j];
-    }
-    std::cout << " ]" << std::endl;
+//    std::cout << " [";
+//    for(int j = 0; j < N; ++j)
+//    {
+//        std::cout << " " << count[j];
+//    }
+//    std::cout << " ]" << std::endl;
 
     //! | ref [] ... [] cur |
     //!    0  1  ... n-1 n
@@ -136,7 +136,7 @@ void Initializer::reset()
     finished_ = false;
 }
 
-InitResult Initializer::createNewCorners(const FrameCandidate::Ptr &candidate)
+Initializer::Result Initializer::createNewCorners(const FrameCandidate::Ptr &candidate)
 {
     Corners old_corners;
     for(int i = 0; i < FrameCandidate::size; ++i)
@@ -153,6 +153,9 @@ InitResult Initializer::createNewCorners(const FrameCandidate::Ptr &candidate)
     //! check corner number of first image
     if(old_corners.size() + new_corners.size() < FrameCandidate::size)
     {
+        LOG_IF(WARNING, verbose_) << "[INIT][0] No enough corners detected!!! "
+                                  << new_corners.size() << "(new) + " << old_corners.size() << "(old) < "
+                                  << FrameCandidate::size;
         return RESET;
     }
 
@@ -206,7 +209,7 @@ bool Initializer::changeReference(int buffer_offset)
     return true;
 }
 
-InitResult Initializer::addImage(Frame::Ptr frame_cur)
+Initializer::Result Initializer::addImage(Frame::Ptr frame_cur)
 {
     LOG_ASSERT(!finished_) << "[INIT][*] Last initialization is succeed! Please reset!";
 
@@ -360,8 +363,6 @@ void Initializer::createInitalMap(std::vector<Vector3d> &points, double map_scal
     cand_cur_->frame->setPose(T_ref_from_cur);
 
     //! create and rescale map points
-    const std::vector<int64_t> &index = cand_cur_->idx;
-
     points.reserve(count);
     for(size_t i = 0; i < N; ++i)
     {
@@ -405,15 +406,17 @@ void Initializer::getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vecto
     }
 }
 
-void Initializer::drowOpticalFlow(const cv::Mat &src, cv::Mat &dst) const
+void Initializer::drowOpticalFlow(cv::Mat &dst) const
 {
     std::vector<cv::Point2f> pts_ref, pts_cur;
     getTrackedPoints(pts_ref, pts_cur);
 
-    dst = src.clone();
+    const cv::Mat src = cand_cur_->frame->getImage(0);
+    cv::cvtColor(src, dst, CV_GRAY2RGB);
     for(size_t i=0; i<pts_ref.size();i++)
     {
-        cv::line(dst, pts_ref[i], pts_cur[i], cv::Scalar(0, 255, 0));
+        cv::circle(dst, pts_cur[i], 2, cv::Scalar(0, 255, 0));
+        cv::line(dst, 2*pts_cur[i]-pts_ref[i], pts_cur[i], cv::Scalar(0, 255, 0));
     }
 }
 

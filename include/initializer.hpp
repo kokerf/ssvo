@@ -9,19 +9,17 @@ using namespace Eigen;
 
 namespace ssvo{
 
-enum InitResult {RESET=-2, READY=-1, FAILURE=0, SUCCESS=1};
-
-//! fifo size = 3
+//! fifo size = 4
 //!            /last
-//!   | [] [] [] | []
-//! ref/        cur/
+//!   | [] [] [] [] |
+//! ref/         \cur
 class FrameCandidate{
 public:
     typedef std::shared_ptr<FrameCandidate> Ptr;
     Frame::Ptr frame;
-    std::vector<int> level;
     std::vector<cv::Point2f> pts;
     std::vector<cv::Point2d> fts;
+    std::vector<int> level;
     std::vector<int64_t> idx;
     static const int size;
 
@@ -46,11 +44,13 @@ class Initializer: public noncopyable
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
+    enum Result {RESET=-2, READY=-1, FAILURE=0, SUCCESS=1};
+
     typedef std::shared_ptr<Initializer> Ptr;
 
-    InitResult addFirstImage(Frame::Ptr frame_ref);
+    Result addFirstImage(Frame::Ptr frame_ref);
 
-    InitResult addImage(Frame::Ptr frame_cur);
+    Result addImage(Frame::Ptr frame_cur);
 
     void reset();
 
@@ -60,7 +60,7 @@ public:
 
     void getTrackedPoints(std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur) const;
 
-    void drowOpticalFlow(const cv::Mat& src, cv::Mat& dst) const;
+    void drowOpticalFlow(cv::Mat& dst) const;
 
     void drowOpticalFlowMatch(cv::Mat& dst) const;
 
@@ -90,7 +90,7 @@ public:
 private:
     Initializer(const FastDetector::Ptr &fast_detector, bool verbose = false);
 
-    InitResult createNewCorners(const FrameCandidate::Ptr &candidate);
+    Result createNewCorners(const FrameCandidate::Ptr &candidate);
 
     bool changeReference(int buffer_offset);
 
