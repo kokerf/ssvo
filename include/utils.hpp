@@ -6,8 +6,6 @@
 
 namespace ssvo {
 
-#define USE_EIGEN
-
 namespace utils {
 
 inline int createPyramid(const cv::Mat &img,
@@ -181,8 +179,37 @@ void reduceVecor(std::vector<T>& vecs, const std::vector<bool>& inliers)
     }
 }
 
-}
+//! functions not using  template
+void kltTrack(const ImgPyr& imgs_ref, const ImgPyr& imgs_cur, const cv::Size win_size,
+              const std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur,
+              std::vector<bool> &status, bool track_forward = false, bool verbose = false);
 
-}
+namespace Fundamental
+{
+
+int findFundamentalMat(const std::vector<cv::Point2d> &pts_prev, const std::vector<cv::Point2d> &pts_next,
+                       Matrix3d &F, std::vector<bool> &inliers,
+                       const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
+
+void computeErrors(const cv::Point2d &p1, const cv::Point2d &p2, Matrix3d &F, double &err1, double &err2);
+
+double computeErrorSquared(const Vector3d &p1, const Vector3d &p2, const SE3d &T, const Vector2d &p);
+
+void Normalize(const std::vector<cv::Point2d>& pts, std::vector<cv::Point2d>& pts_norm, Matrix3d& T);
+
+void run8point(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next,
+               Matrix3d& F, const bool bE = false);
+
+int runRANSAC(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next,
+              Matrix3d& F, std::vector<bool> &inliers,
+              const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
+
+void decomposeEssentialMat(const Matrix3d& E, Matrix3d& R1, Matrix3d& R2, Vector3d& t);
+
+}//! namespace Fundamental
+
+}//! namespace utils
+
+}//! namespace ssvo
 
 #endif //_SSVO_UTILS_HPP_

@@ -104,6 +104,7 @@ LIST(APPEND SOURCEFILES
     src/frame.cpp
     src/keyframe.cpp
     src/map.cpp
+    src/utils.cpp
     src/feature_detector.cpp
     src/feature_tracker.cpp
     src/initializer.cpp

@@ -64,10 +64,6 @@ public:
 
     void drowOpticalFlowMatch(cv::Mat& dst) const;
 
-    static void kltTrack(const ImgPyr& imgs_ref, const ImgPyr& imgs_cur, const cv::Size win_size,
-                         const std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur,
-                         std::vector<bool> &status, bool track_forward = false, bool verbose = false);
-
     static void calcDisparity(const std::vector<cv::Point2f>& pts1, const std::vector<cv::Point2f>& pts2,
                               const std::vector<bool> &mask, std::vector<std::pair<int, float> >& disparities);
 
@@ -88,6 +84,7 @@ public:
     {return Initializer::Ptr(new Initializer(fast_detector, verbose));}
 
 private:
+
     Initializer(const FastDetector::Ptr &fast_detector, bool verbose = false);
 
     Result createNewCorners(const FrameCandidate::Ptr &candidate);
@@ -112,25 +109,6 @@ private:
 
     bool verbose_;
 };
-
-namespace Fundamental
-{
-
-int findFundamentalMat(const std::vector<cv::Point2d> &pts_prev, const std::vector<cv::Point2d> &pts_next, Matrix3d &F,
-                       std::vector<bool> &inliers, const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
-
-inline void computeErrors(const cv::Point2d& p1, const cv::Point2d& p2, Matrix3d& F, double& err1, double& err2);
-
-void Normalize(const std::vector<cv::Point2d>& pts, std::vector<cv::Point2d>& pts_norm, Matrix3d& T);
-
-void run8point(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, Matrix3d& F, const bool bE = false);
-
-int runRANSAC(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next, Matrix3d& F, std::vector<bool> &inliers,
-                     const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
-
-void decomposeEssentialMat(const Matrix3d& E, Matrix3d& R1, Matrix3d& R2, Vector3d& t);
-
-}//! namespace Fundamental
 
 }//! namspace ssvo
 

@@ -24,7 +24,7 @@ Frame::Frame(const cv::Mat &img, const double timestamp, const Camera::Ptr &cam)
 
     //! copy to image pyramid
     img_pyr_.resize(optical_pyr_.size());
-    for(int i = 0; i < optical_pyr_.size(); i++)
+    for(size_t i = 0; i < optical_pyr_.size(); i++)
         optical_pyr_[i].copyTo(img_pyr_[i]);
 
 }
