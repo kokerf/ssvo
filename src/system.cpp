@@ -97,6 +97,9 @@ System::Status System::initialize()
 
 System::Status System::tracking()
 {
+    //! track seeds
+    mapper_->insertNewFrame(current_frame_);
+
     // TODO 先验信息怎么设置？
     current_frame_->setPose(last_frame_->pose());
     //! alignment by SE3
@@ -116,6 +119,8 @@ System::Status System::tracking()
     LOG(WARNING) << "[System] Motion-Only BA";
     Optimizer::motionOnlyBundleAdjustment(current_frame_, true);
     LOG(WARNING) << "[System] Finish Motion-Only BA";
+
+    mapper_->finishFrame();
 
     return STATUS_TRACKING_GOOD;
 }
@@ -196,18 +201,14 @@ bool System::changeReferenceKeyFrame()
 
 void System::showImage(Stage stage)
 {
-    cv::Mat image = rgb_;
-    if(image.channels() < 3)
-        cv::cvtColor(image, image, CV_GRAY2RGB);
+//    cv::Mat image = rgb_;
+//    if(image.channels() < 3)
+//        cv::cvtColor(image, image, CV_GRAY2RGB);
 
+    cv::Mat image;
     if(STAGE_NORMAL_FRAME == stage)
     {
-        std::vector<Feature::Ptr> fts = current_frame_->getFeatures();
-        for(const Feature::Ptr &ft : fts)
-        {
-            Vector2d px = ft->px;
-            cv::circle(image, cv::Point2d(px[0], px[1]), 2, cv::Scalar(0, 255, 0), -1);
-        }
+        mapper_->drowTrackedPoints(image);
     }
     else if(STAGE_INITALIZE == stage)
     {

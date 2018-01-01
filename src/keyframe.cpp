@@ -79,12 +79,18 @@ void KeyFrame::updateConnections()
     orderedConnectedKeyFrames_ = std::multimap<int, KeyFrame::Ptr>(weight_connections.begin(), weight_connections.end());
 }
 
-std::vector<KeyFrame::Ptr> KeyFrame::getConnectedKeyFrames()
+std::set<KeyFrame::Ptr> KeyFrame::getConnectedKeyFrames(const int num)
 {
-    std::vector<KeyFrame::Ptr> kfs;
-    kfs.reserve(orderedConnectedKeyFrames_.size());
-    std::for_each(orderedConnectedKeyFrames_.begin(), orderedConnectedKeyFrames_.end(),
-                  [&](const std::pair<int, KeyFrame::Ptr> &item) { kfs.push_back(item.second); });
+    std::set<KeyFrame::Ptr> kfs;
+    if(num == -1) num == orderedConnectedKeyFrames_.size();
+    int count = 0;
+    for(const auto ordered_keyframe : orderedConnectedKeyFrames_)
+    {
+        kfs.insert(ordered_keyframe.second);
+        if(++count >= num)
+            break;
+    }
+
     return kfs;
 }
 

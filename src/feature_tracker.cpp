@@ -33,12 +33,8 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     resetGrid();
 
     LOG_IF(INFO, report_) << "[FtTrack][1] -- Get Candidate KeyFrame --";
-    std::vector<KeyFrame::Ptr> candidate_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames();
-    if(candidate_keyframes.size() > options_.max_kfs) {
-        candidate_keyframes.resize(options_.max_kfs);
-    }
-
-    candidate_keyframes.push_back(frame->getRefKeyFrame());
+    std::set<KeyFrame::Ptr> candidate_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_kfs);
+    candidate_keyframes.insert(frame->getRefKeyFrame());
 
     LOG_IF(INFO, report_) << "[FtTrack][2] -- Reproject Map Points --";
     double t1 = (double)cv::getTickCount();

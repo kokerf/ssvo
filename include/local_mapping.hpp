@@ -20,7 +20,13 @@ public:
 
     void createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, const std::vector<Vector3d> &points);
 
-    void insertNewFrame(Frame::Ptr frame, KeyFrame::Ptr keyframe, double mean_depth, double min_depth);
+    void insertNewFrame(const Frame::Ptr &frame);
+
+    bool finishFrame();
+
+    void insertNewKeyFrame(const KeyFrame::Ptr &keyframe, double mean_depth, double min_depth);
+
+    void drowTrackedPoints(cv::Mat &dst);
 
     static LocalMapper::Ptr create(const FastDetector::Ptr &fast_detector, double fps, bool report = false, bool verbose = false)
     { return LocalMapper::Ptr(new LocalMapper(fast_detector, fps, report, verbose));}
@@ -35,16 +41,22 @@ private:
 
     bool isRequiredStop();
 
+    int trackSeeds();
+
+    int updateSeeds();
+
+    int reprojectSeeds();
+
+    int createSeeds();
+
     bool checkNewFrame();
 
-    bool processNewKeyFrame();
-
-    bool processNewFrame();
+//    bool processNewKeyFrame();
+//
+//    bool processNewFrame();
 
     bool findEpipolarMatch(const Feature::Ptr &ft, const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame,
                            const SE3d &T_cur_from_ref, const double sigma, double &depth);
-
-    bool triangulate(const Matrix3d& R_cr,  const Vector3d& t_cr, const Vector3d& fn_r, const Vector3d& fn_c, double &d_ref);
 
 public:
 
@@ -52,15 +64,31 @@ public:
 
 private:
 
+    struct TrackSeed{
+        typedef std::shared_ptr<TrackSeed> Ptr;
+        KeyFrame::Ptr kf;
+        Seed::Ptr seed;
+        cv::Point2f px;
+        TrackSeed(const KeyFrame::Ptr &kf, const Seed::Ptr &seed, const cv::Point2f &px) :
+            kf(kf), seed(seed), px(px) {}
+    };
+
+    struct Option{
+        int max_kfs; //! max keyframes for seeds tracking(exclude current keyframe)
+    } options_;
+
     std::shared_ptr<std::thread> mapping_thread_;
 
     FastDetector::Ptr fast_detector_;
 
     std::deque<std::pair<Frame::Ptr, KeyFrame::Ptr> > frames_buffer_;
     std::deque<std::pair<double, double> > depth_buffer_;
-    std::deque<std::pair<KeyFrame::Ptr, std::shared_ptr<Seeds>> > seeds_buffer_;
+    std::deque<std::pair<KeyFrame::Ptr, std::shared_ptr<Seeds> > > seeds_buffer_;
+    std::list<TrackSeed::Ptr> tracked_seeds_;
 
-    std::pair<Frame::Ptr, KeyFrame::Ptr> current_frame_;
+    Frame::Ptr last_frame_;
+    Frame::Ptr current_frame_;
+    KeyFrame::Ptr current_keyframe_;
     std::pair<double, double> current_depth_;
 
     const int delay_;
