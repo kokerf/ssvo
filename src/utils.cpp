@@ -86,6 +86,9 @@ void kltTrack(const ImgPyr &imgs_ref, const ImgPyr &imgs_cur, const cv::Size win
         inlier_ids.push_back(i);
     }
 
+    if(inlier_ids.empty())
+        return;
+    
     //! backward track
     std::vector<uchar> status_back;
     cv::calcOpticalFlowPyrLK(imgs_cur, imgs_ref, pts_cur_to_track, pts_ref_tracked, status_back, error,
