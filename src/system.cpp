@@ -98,7 +98,9 @@ System::Status System::initialize()
 System::Status System::tracking()
 {
     //! track seeds
+    double t0 = (double)cv::getTickCount();
     mapper_->insertNewFrame(current_frame_);
+    double t1 = (double)cv::getTickCount();
 
     // TODO 先验信息怎么设置？
     current_frame_->setPose(last_frame_->pose());
@@ -107,20 +109,29 @@ System::Status System::tracking()
     align.run(last_frame_, current_frame_, Config::alignTopLevel(), 30, 1e-8);
 
     //! track local map
+    double t2 = (double)cv::getTickCount();
     LOG(WARNING) << "[System] Tracking local map";
     int matches = feature_tracker_->reprojectLoaclMap(current_frame_);
     LOG(WARNING) << "[System] Track with " << matches << " points";
 
     // TODO tracking status
-    if(matches < Config::minQualityFts())
-        return STATUS_TRACKING_BAD;
+//    if(matches < Config::minQualityFts())
+//        return STATUS_TRACKING_BAD;
 
     //! motion-only BA
+    double t3 = (double)cv::getTickCount();
     LOG(WARNING) << "[System] Motion-Only BA";
     Optimizer::motionOnlyBundleAdjustment(current_frame_, true);
     LOG(WARNING) << "[System] Finish Motion-Only BA";
+    double t4 = (double)cv::getTickCount();
 
     mapper_->finishFrame();
+    double t5 = (double)cv::getTickCount();
+    LOG(WARNING) << "[System] Time: " << (t1-t0)/cv::getTickFrequency() << " "
+                                      << (t2-t1)/cv::getTickFrequency() << " "
+                                      << (t3-t2)/cv::getTickFrequency() << " "
+                                      << (t4-t3)/cv::getTickFrequency() << " "
+                                      << (t5-t4)/cv::getTickFrequency();
 
     return STATUS_TRACKING_GOOD;
 }
@@ -156,44 +167,55 @@ void System::finishFrame()
 
 bool System::changeReferenceKeyFrame()
 {
-    std::map<KeyFrame::Ptr, int> overlap_kf = current_frame_->getOverLapKeyFrames();
-    const int overlap = overlap_kf[reference_keyframe_];
+    std::map<KeyFrame::Ptr, int> overlap_kfs = current_frame_->getOverLapKeyFrames();
+    const int overlap = overlap_kfs[reference_keyframe_];
 
     double median_depth = std::numeric_limits<double>::max();
     double min_depth = std::numeric_limits<double>::max();
     current_frame_->getSceneDepth(median_depth, min_depth);
 
-    SE3d T_cur_from_ref = current_frame_->Tcw() * reference_keyframe_->pose();
-    Vector3d tran = T_cur_from_ref.translation();
+    bool c1 = true;
+    for(const auto &op_kf : overlap_kfs)
+    {
+        SE3d T_cur_from_ref = current_frame_->Tcw() * op_kf.first->pose();
+        Vector3d tran = T_cur_from_ref.translation();
+        double dist1 = tran.dot(tran);
+        double dist2 = 0.2 * (T_cur_from_ref.rotationMatrix() - Matrix3d::Identity()).norm();
+        if(dist1 + dist2 < 0.12 * median_depth)
+        {
+            c1 = false;
+            break;
+        }
+    }
 
-    bool c1 = tran.dot(tran) > 0.12 * median_depth;
-    bool c2 = static_cast<double>(overlap) / reference_keyframe_->N() < 0.8;
+    bool c2 = false;//static_cast<double>(overlap) / reference_keyframe_->N() < 0.5;
 
     //! create new keyFrame
     if(c1 || c2)
     {
         KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
-//        mapper_->insertNewFrame(current_frame_, new_keyframe, median_depth, min_depth);
+        mapper_->insertNewKeyFrame(new_keyframe, median_depth, min_depth);
+
+        reference_keyframe_ = new_keyframe;
     }
     //! change reference keyframe
     else
     {
         int max_overlap = -1;
         KeyFrame::Ptr best_keyframe;
-        for(const auto &op : overlap_kf)
+        for(const auto &op_kf : overlap_kfs)
         {
-            if(op.second <= max_overlap)
+            if(op_kf.second <= max_overlap)
                 continue;
 
-            max_overlap = op.second;
-            best_keyframe = op.first;
+            max_overlap = op_kf.second;
+            best_keyframe = op_kf.first;
         }
 
         if(max_overlap < 1.2 * overlap)
             return false;
 
         reference_keyframe_ = best_keyframe;
-//        mapper_->insertNewFrame(current_frame_, nullptr, median_depth, min_depth);
     }
 
     return true;

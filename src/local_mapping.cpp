@@ -25,8 +25,85 @@ void showMatch(const cv::Mat &src, const cv::Mat &dst, const Vector2d &epl0, con
     cv::circle(src_show, p_src, 5, cv::Scalar(255,0,0));
     cv::circle(dst_show, p_dst, 5, cv::Scalar(255,0,0));
 
-    cv::imshow("cur", src_show);
+    cv::imshow("ref", src_show);
     cv::imshow("dst", dst_show);
+    cv::waitKey(0);
+}
+
+void showEplMatch(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame, const SE3d &T_cur_from_ref,
+                  int level_ref, int level_cur, const Vector3d &xyz_near, const Vector3d &xyz_far, const Vector3d &xyz_ref, const Vector2d &px_dst)
+{
+    cv::Mat src_show = keyframe->getImage(level_ref).clone();
+    cv::Mat dst_show = frame->getImage(level_cur).clone();
+    if(src_show.channels() == 1)
+        cv::cvtColor(src_show, src_show, CV_GRAY2RGB);
+    if(dst_show.channels() == 1)
+        cv::cvtColor(dst_show, dst_show, CV_GRAY2RGB);
+
+    const double depth_ref = xyz_ref[2];
+    const double depth_cur = (T_cur_from_ref*xyz_ref)[2];
+    Vector3d epl_near = xyz_near / xyz_near[2];
+    Vector3d epl_far  = xyz_far / xyz_far[2];
+
+    Vector2d epl0 = frame->cam_->project(epl_near);
+    Vector2d epl1 = frame->cam_->project(epl_far);
+
+    const double scale_cur = 1.0/(1<<level_cur);
+    const double scale_ref = 1.0/(1<<level_ref);
+    const Vector2d px_src = keyframe->cam_->project(xyz_ref);
+
+    cv::Point2d pl0(epl0[0]*scale_cur, epl0[1]*scale_cur);
+    cv::Point2d pl1(epl1[0]*scale_cur, epl1[1]*scale_cur);
+    cv::Point2d p_src(px_src[0]*scale_ref, px_src[1]*scale_ref);
+    cv::Point2d p_dst(px_dst[0], px_dst[1]);
+
+    cv::line(dst_show, pl0, pl1, cv::Scalar(0, 255, 0), 1);
+    cv::circle(dst_show, pl1, 2, cv::Scalar(0,0,255));
+    cv::circle(src_show, p_src, 5, cv::Scalar(255,0,0));
+    cv::circle(dst_show, p_dst, 5, cv::Scalar(255,0,0));
+
+    //! ref
+    SE3d T_ref_from_cur = T_cur_from_ref.inverse();
+    Vector3d xyz_near_cur(epl_near * depth_cur);
+    epl_far = T_ref_from_cur.translation();
+    epl_near = xyz_ref;
+    epl0 = keyframe->cam_->project(epl_near);
+    epl1 = keyframe->cam_->project(epl_far);
+    pl0.x = epl0[0]*scale_ref;
+    pl0.y = epl0[1]*scale_ref;
+    pl1.x = epl1[0]*scale_ref;
+    pl1.y = epl1[1]*scale_ref;
+
+    cv::line(src_show, pl0, pl1, cv::Scalar(0, 255, 0), 1);
+    cv::circle(src_show, pl1, 2, cv::Scalar(0,0,255));
+
+    cv::imshow("ref", src_show);
+    cv::imshow("dst", dst_show);
+    cv::waitKey(0);
+}
+
+void showAffine(const cv::Mat &src, const Vector2d &px_ref, const Matrix2d &A_ref_cur, const int size, const int level)
+{
+    cv::Mat src_show = src.clone();
+    if(src_show.channels() == 1)
+        cv::cvtColor(src_show, src_show, CV_GRAY2RGB);
+
+    const double half_size = size*0.5;
+    const int factor = 1 << level;
+    Vector2d tl = A_ref_cur * Vector2d(-half_size, -half_size) * factor;
+    Vector2d tr = A_ref_cur * Vector2d(half_size, -half_size) * factor;
+    Vector2d bl = A_ref_cur * Vector2d(-half_size, half_size) * factor;
+    Vector2d br = A_ref_cur * Vector2d(half_size, half_size) * factor;
+    cv::Point2d TL(tl[0]+px_ref[0], tl[1]+px_ref[1]);
+    cv::Point2d TR(tr[0]+px_ref[0], tr[1]+px_ref[1]);
+    cv::Point2d BL(bl[0]+px_ref[0], bl[1]+px_ref[1]);
+    cv::Point2d BR(br[0]+px_ref[0], br[1]+px_ref[1]);
+    cv::Scalar color(0, 255, 0);
+    cv::line(src_show, TL, TR, color, 1);
+    cv::line(src_show, TR, BR, color, 1);
+    cv::line(src_show, BR, BL, color, 1);
+    cv::line(src_show, BL, TL, color, 1);
+    cv::imshow("AFFINE", src_show);
     cv::waitKey(0);
 }
 
@@ -36,6 +113,11 @@ LocalMapper::LocalMapper(const FastDetector::Ptr &fast_detector, double fps, boo
 {
     map_ = Map::create();
     options_.max_kfs = 3;
+    options_.max_epl_length = 10;
+    options_.epl_dist2_threshold = 16 * Config::pixelUnSigma2();
+    options_.seed_converge_threshold = 1.0/200.0;
+    options_.klt_epslion = 0.0001;
+    options_.align_epslion = 0.0001;
 }
 
 void LocalMapper::startThread()
@@ -85,10 +167,17 @@ void LocalMapper::drowTrackedPoints(cv::Mat &dst)
     const cv::Mat src = current_frame_->getImage(0);
     std::vector<Feature::Ptr> fts = current_frame_->getFeatures();
     cv::cvtColor(src, dst, CV_GRAY2RGB);
+    int font_face = 1;
+    double font_scale = 0.5;
     for(const Feature::Ptr &ft : fts)
     {
-        Vector2d px = ft->px;
-        cv::circle(dst, cv::Point2f(px[0], px[1]), 2, cv::Scalar(0, 255, 0), -1);
+        Vector2d ft_px = ft->px;
+        cv::Point2f px(ft_px[0], ft_px[1]);
+        cv::Scalar color(0, 255, 0);
+        cv::circle(dst, px, 2, color, -1);
+
+        string id_str = std::to_string((current_frame_->Tcw()*ft->mpt->pose()).norm());
+        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
     }
 
     //! draw seeds
@@ -97,14 +186,18 @@ void LocalMapper::drowTrackedPoints(cv::Mat &dst)
         cv::Point2f px = track_seed->px;
         double convergence = track_seed->seed->z_range/std::sqrt(track_seed->seed->sigma2);
         double scale = MIN(convergence, 256.0) / 256.0;
-        cv::circle(dst, px, 2, cv::Scalar(0, 255*scale, 255*(1-scale)), -1);
+        cv::Scalar color(255*scale, 0, 255*(1-scale));
+        cv::circle(dst, px, 2, color, -1);
+
+//        string id_str = std::to_string();
+//        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
     }
 
 }
 
 void LocalMapper::insertNewFrame(const Frame::Ptr &frame)
 {
-    LOG_ASSERT(frame != nullptr) << "Error input! Frame should not be null!";
+    LOG_ASSERT(frame != nullptr) << "[Mapping] Error input! Frame should not be null!";
     if(mapping_thread_ != nullptr)
     {
         std::unique_lock<std::mutex> lock(mutex_kfs_);
@@ -116,21 +209,30 @@ void LocalMapper::insertNewFrame(const Frame::Ptr &frame)
     {
         last_frame_ = current_frame_;
         current_frame_ = frame;
-        trackSeeds();
+        const int num = trackSeeds();
+        LOG_IF(INFO, report_) << "[Mapping][1] Tracking seeds: " << num;
     }
 }
 
 bool LocalMapper::finishFrame()
 {
-    updateSeeds();
+    int rest_num = updateSeeds();
+    int reproj_num= reprojectSeeds();
+    LOG_IF(INFO, report_) << "[Mapping][2] Seeds updated: " << rest_num << ", reprojected: " << reproj_num;
     return true;
 }
 
-void LocalMapper::insertNewKeyFrame(const KeyFrame::Ptr &keyframe, double mean_depth, double min_depth)
+void LocalMapper::insertNewKeyFrame(const KeyFrame::Ptr &keyframe, double mean_depth, double min_depth, bool is_track)
 {
     LOG_ASSERT(keyframe != nullptr) << "Error input! Frame should not be null!";
 
     map_->insertKeyFrame(keyframe);
+    const Features &fts = keyframe->features();
+    for(const Feature::Ptr &ft : fts)
+    {
+        ft->mpt->addObservation(keyframe, ft);
+        ft->mpt->updateViewAndDepth();
+    }
     keyframe->updateConnections();
 
     if(mapping_thread_ != nullptr)
@@ -144,7 +246,8 @@ void LocalMapper::insertNewKeyFrame(const KeyFrame::Ptr &keyframe, double mean_d
     {
         current_keyframe_ = keyframe;
         current_depth_ = std::make_pair(mean_depth, min_depth);
-        createSeeds();
+        const int new_seeds = createSeeds(is_track);
+        LOG_IF(INFO, report_) << "[Mapping] New created seeds: " << new_seeds;
     }
 }
 
@@ -170,6 +273,7 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
         fts_cur[i]->mpt = mpt;
 
         map_->insertMapPoint(mpt);
+        mpt->resetType(MapPoint::STABLE);
 
         mpt->addObservation(keyframe_ref, fts_ref[i]);
         mpt->addObservation(keyframe_cur, fts_cur[i]);
@@ -179,17 +283,11 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
     Vector2d mean_depth, min_depth;
     keyframe_ref->getSceneDepth(mean_depth[0], min_depth[0]);
     keyframe_cur->getSceneDepth(mean_depth[1], min_depth[1]);
-    this->insertNewKeyFrame(keyframe_ref, mean_depth[0], min_depth[0]);
+    this->insertNewKeyFrame(keyframe_ref, mean_depth[0], min_depth[0], false);
     this->insertNewKeyFrame(keyframe_cur, mean_depth[1], min_depth[1]);
 
     //! set current frame and create inital seeds flow
     current_frame_ = frame_cur;
-    const auto &seed_to_track = seeds_buffer_.back();
-    for(const Seed::Ptr &seed : *seed_to_track.second)
-    {
-        const cv::Point2f px(seed->ft->px[0], seed->ft->px[1]);
-        tracked_seeds_.emplace_back(std::make_shared<TrackSeed>(TrackSeed(keyframe_cur, seed, px)));
-    }
 
     LOG_IF(INFO, report_) << "[Mapping] Creating inital map with " << map_->MapPointsInMap() << " map points";
 }
@@ -211,7 +309,7 @@ bool LocalMapper::checkNewFrame()
     return true;
 }
 
-int LocalMapper::createSeeds()
+int LocalMapper::createSeeds(bool is_track)
 {
     if(current_keyframe_ == nullptr)
         return 0;
@@ -238,6 +336,9 @@ int LocalMapper::createSeeds()
     Corners new_corners;
     fast_detector_->detect(current_keyframe_->images(), new_corners, old_corners, 150);
 
+    if(new_corners.empty())
+        return 0;
+
     Seeds new_seeds;
     for(const Corner &corner : new_corners)
     {
@@ -247,6 +348,16 @@ int LocalMapper::createSeeds()
         new_seeds.emplace_back(Seed::create(ft, current_depth_.first, current_depth_.second*0.5));
     }
     seeds_buffer_.emplace_back(current_keyframe_, std::make_shared<Seeds>(new_seeds));
+
+    if(is_track)
+    {
+        const auto &seed_to_track = seeds_buffer_.back();
+        for(const Seed::Ptr &seed : *seed_to_track.second)
+        {
+            const cv::Point2f px(seed->ft->px[0], seed->ft->px[1]);
+            tracked_seeds_.emplace_back(std::make_shared<TrackSeed>(TrackSeed(current_keyframe_, seed, px)));
+        }
+    }
 
     return (int)new_seeds.size();
 }
@@ -265,10 +376,14 @@ int LocalMapper::trackSeeds()
         pts_to_track.emplace_back(track_seed->px);
     }
 
+    if(pts_to_track.empty())
+        return 0;
+
     std::vector<cv::Point2f> pts_tracked = pts_to_track;
     std::vector<bool> status;
+    static cv::TermCriteria termcrit(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, options_.klt_epslion);
     utils::kltTrack(last_frame_->opticalImages(), current_frame_->opticalImages(), Frame::optical_win_size_,
-                    pts_to_track, pts_tracked, status, true);
+                    pts_to_track, pts_tracked, status, termcrit, true, verbose_);
 
     //! erase untracked seeds
     size_t idx = 0;
@@ -310,7 +425,6 @@ int LocalMapper::updateSeeds()
         }
     }
 
-    static double threshold = 16 * Config::pixelUnSigma2();
     static double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
     tracked_seeds_.clear();
     for(const auto &seed_map : seeds_map)
@@ -324,9 +438,9 @@ int LocalMapper::updateSeeds()
             const Vector3d fn_ref = track_seed->seed->ft->fn;
             const Vector3d fn_cur = current_frame_->cam_->lift(track_seed->px.x, track_seed->px.y);
             double err2 = utils::Fundamental::computeErrorSquared(
-                kf->pose().translation(), fn_ref*track_seed->seed->mu, T_cur_from_ref, fn_cur.head<2>());
+                kf->pose().translation(), fn_ref/track_seed->seed->mu, T_cur_from_ref, fn_cur.head<2>());
 
-            if(err2 > threshold)
+            if(err2 > options_.epl_dist2_threshold)
                 continue;
 
             //! update
@@ -334,9 +448,27 @@ int LocalMapper::updateSeeds()
             if(utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), fn_ref, fn_cur, depth))
             {
 
-                double tau = track_seed->seed->computeTau(T_ref_from_cur, fn_ref, depth, px_error_angle);
+                Vector3d xyz_cur = T_cur_from_ref * (fn_ref * depth);
+                Vector2d px_cur = current_frame_->cam_->project(xyz_cur);
+                Vector2d px_ref(track_seed->px.x, track_seed->px.y);
+                double delta_x = px_cur[0] - px_ref[0];
+                double delta_y = px_cur[1] - px_ref[1];
+                std::cout << "[upd error]: " << delta_x << " " << delta_y << " dip: " << (px_ref-track_seed->seed->ft->px).norm() << std::endl;
+
+//                double tau = track_seed->seed->computeTau(T_ref_from_cur, fn_ref, depth, px_error_angle);
+                double tau = track_seed->seed->computeVar(T_cur_from_ref, depth, options_.klt_epslion);
+                tau = tau + Config::pixelUnSigma();
                 track_seed->seed->update(1.0/depth, tau*tau);
+
+                //! check converge
+                if(track_seed->seed->sigma2 / track_seed->seed->z_range < options_.seed_converge_threshold)
+                {
+                    createFeatureFromSeed(track_seed->kf ,track_seed->seed);
+                    earseSeed(track_seed->kf ,track_seed->seed);
+                    continue;
+                }
             }
+
             tracked_seeds_.emplace_back(track_seed);
         }
     }
@@ -350,16 +482,142 @@ int LocalMapper::reprojectSeeds()
     std::set<KeyFrame::Ptr> candidate_keyframes = current_frame_->getRefKeyFrame()->getConnectedKeyFrames(options_.max_kfs);
     candidate_keyframes.insert(current_frame_->getRefKeyFrame());
 
-    for(const auto seeds_pair : seeds_buffer_)
-    {
-        if(!candidate_keyframes.count(seeds_pair.first))
-            continue;
+    std::set<Seed::Ptr> seed_tracking;
+    for(const TrackSeed::Ptr &tracked_seed : tracked_seeds_)
+        seed_tracking.insert(tracked_seed->seed);
 
-        const Seeds &seeds = *seeds_pair.second;
+    int count = 0;
+    static double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
+    auto buffer_itr = seeds_buffer_.begin();
+    for(;buffer_itr != seeds_buffer_.end();)
+    {
+        KeyFrame::Ptr keyframe = buffer_itr->first;
+        if(!candidate_keyframes.count(keyframe))
+        {
+            buffer_itr++;
+            continue;
+        }
+
+        SE3d T_cur_from_ref = current_frame_->Tcw() * keyframe->pose();
+        SE3d T_ref_from_cur = T_cur_from_ref.inverse();
+        Seeds &seeds = *buffer_itr->second;
+
+        Vector2d px_matched;
+        int level_matched;
+        auto seed_itr = seeds.begin();
+        for(; seed_itr != seeds.end();)
+        {
+            const Seed::Ptr &seed = *seed_itr;
+            if(seed_tracking.count(seed))
+            {
+                seed_itr++;
+                continue;
+            }
+
+            bool matched = findEpipolarMatch(seed, keyframe, current_frame_, T_cur_from_ref, px_matched, level_matched);
+            if(!matched)
+            {
+                seed_itr++;
+                continue;
+            }
+
+            //! check distance to epl, incase of the aligen draft
+            Vector2d fn_matched = current_frame_->cam_->lift(px_matched).head<2>();
+            double dist2 = utils::Fundamental::computeErrorSquared(keyframe->pose().translation(), seed->ft->fn/seed->mu, T_cur_from_ref, fn_matched);
+            if(dist2 > options_.epl_dist2_threshold)
+            {
+                seed_itr++;
+                continue;
+            }
+
+            double depth = -1;
+            const Vector3d fn_cur = current_frame_->cam_->lift(px_matched);
+            bool succeed = utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->ft->fn, fn_cur, depth);
+            if(!succeed)
+            {
+                seed_itr++;
+                continue;
+            }
+
+            Vector3d xyz_cur = T_cur_from_ref * (seed->ft->fn * depth);
+            Vector2d px_cur = current_frame_->cam_->project(xyz_cur);
+            double delta_x = px_cur[0] - px_matched[0];
+            double delta_y = px_cur[1] - px_matched[1];
+            std::cout << "[rpj error]: " << delta_x << " " << delta_y << " dip: " << (px_matched-seed->ft->px).norm() << std::endl;
+
+//            double tau = seed->computeTau(T_ref_from_cur, seed->ft->fn, depth, px_error_angle);
+            double tau = seed->computeVar(T_cur_from_ref, depth, options_.align_epslion);
+            tau = tau + Config::pixelUnSigma();
+            seed->update(1.0/depth, tau*tau);
+
+            //! check converge
+            if(seed->sigma2 / seed->z_range < options_.seed_converge_threshold)
+            {
+                createFeatureFromSeed(keyframe, seed);
+                seed_itr = seeds.erase(seed_itr);
+                continue;
+            }
+
+            const cv::Point2f px(px_matched[0], px_matched[1]);
+            tracked_seeds_.emplace_back(std::make_shared<TrackSeed>(TrackSeed(keyframe, seed, px)));
+            count++;
+            seed_itr++;
+        }
+
+        if(seeds.empty())
+            buffer_itr = seeds_buffer_.erase(buffer_itr);
+        else
+            buffer_itr++;
     }
 
+    return count;
 }
 
+
+bool LocalMapper::earseSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed)
+{
+    //! earse seed
+    auto buffer_itr = seeds_buffer_.begin();
+    for(; buffer_itr != seeds_buffer_.end(); buffer_itr++)
+    {
+        if(keyframe != buffer_itr->first)
+            continue;
+
+        Seeds &seeds = *buffer_itr->second;
+        auto seeds_itr = seeds.begin();
+        for(; seeds_itr != seeds.end(); seeds_itr++)
+        {
+            if(seed != *seeds_itr)
+                continue;
+
+            seeds_itr = seeds.erase(seeds_itr);
+            if(seeds.empty())
+                seeds_buffer_.erase(buffer_itr);
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool LocalMapper::createFeatureFromSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed)
+{
+    //! create new feature
+    // TODO add_observation 不用，需不需要找一下其他关键帧是否观测改点，增加约束
+    // TODO 把这部分放入一个队列，在单独线程进行处理
+    Feature::Ptr new_ft = seed->ft;
+    new_ft->mpt = MapPoint::create(new_ft->fn/seed->mu, keyframe);
+    keyframe->addFeature(new_ft);
+    map_->insertMapPoint(new_ft->mpt);
+    new_ft->mpt->addObservation(keyframe, new_ft);
+    new_ft->mpt->updateViewAndDepth();
+    std::cout << " Creat3 new seed as mpt: " << new_ft->mpt->id_ << ", " << 1.0/seed->mu << ", kf: " << keyframe->id_ << " his: ";
+    for(const auto his : seed->history){ std::cout << "[" << his.first << "," << his.second << "]";}
+    std::cout << std::endl;
+
+    return true;
+}
 
 //bool LocalMapper::processNewKeyFrame()
 //{
@@ -451,20 +709,22 @@ int LocalMapper::reprojectSeeds()
 //    return true;
 //}
 
-bool LocalMapper::findEpipolarMatch(const Feature::Ptr &ft,
+bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
                                     const KeyFrame::Ptr &keyframe,
                                     const Frame::Ptr &frame,
                                     const SE3d &T_cur_from_ref,
-                                    const double sigma2,
-                                    double &depth)
+                                    Vector2d &px_matched,
+                                    int &level_matched)
 {
     static const int patch_size = Align2DI::PatchSize;
     static const int patch_area = Align2DI::PatchArea;
     static const int half_patch_size = Align2DI::HalfPatchSize;
 
     //! check if in the view of current frame
-    const double z_ref = 1.0/depth;
-    const Vector3d xyz_cur(T_cur_from_ref * (ft->fn * z_ref ));
+    const Feature::Ptr &ft = seed->ft;
+    const double z_ref = 1.0/seed->mu;
+    const Vector3d xyz_ref(ft->fn * z_ref);
+    const Vector3d xyz_cur(T_cur_from_ref * xyz_ref);
     const double z_cur = xyz_cur[2];
     if(z_cur < 0.00f)
         return false;
@@ -474,15 +734,15 @@ bool LocalMapper::findEpipolarMatch(const Feature::Ptr &ft,
         return false;
 
     //! d - inverse depth, z - depth
-    const double sigma = std::sqrt(sigma2);
-    const double d_max = depth + sigma;
-    const double d_min = MAX(depth- sigma, 0.00000001f);
-    const double z_min = 1.0/d_max;
-    const double z_max = 1.0/d_min;
+    const double sigma = std::sqrt(seed->sigma2);
+    const double d_max = z_ref + sigma;
+    const double d_min = MAX(z_ref- sigma, 0.00000001f);
+    const double z_ref_min = 1.0/d_max;
+    const double z_ref_max = 1.0/d_min;
 
     //! on unit plane in cur frame
-    Vector3d xyz_near = T_cur_from_ref * (ft->fn * z_min);
-    Vector3d xyz_far  = T_cur_from_ref * (ft->fn * z_max);
+    Vector3d xyz_near = T_cur_from_ref * (ft->fn * z_ref_min);
+    Vector3d xyz_far  = T_cur_from_ref * (ft->fn * z_ref_max);
     xyz_near /= xyz_near[2];
     xyz_far  /= xyz_far[2];
     Vector2d epl_dir = (xyz_near - xyz_far).head<2>();
@@ -491,8 +751,6 @@ bool LocalMapper::findEpipolarMatch(const Feature::Ptr &ft,
     const int level_ref = ft->level;
     const int level_cur = MapPoint::predictScale(z_ref, z_cur, level_ref, frame->max_level_);
     const double factor = static_cast<double>(1 << level_cur);
-    //! L * (1 << level_ref) / L' * (1 << level_cur) = z_ref / z_cur
-//    const double scale = z_cur / z_ref * (1 << level_ref) / (1 << level_cur);
 
     //! px in image plane
     Vector2d px_near = frame->cam_->project(xyz_near) / factor;
@@ -501,10 +759,18 @@ bool LocalMapper::findEpipolarMatch(const Feature::Ptr &ft,
        !frame->cam_->isInFrame(px_near.cast<int>(), half_patch_size, level_cur))
         return false;
 
+    //! reject the seed whose epl is too long
+    double epl_length = (px_near-px_far).norm();
+//    if(epl_length > options_.max_epl_length)
+//        return false;
+
     //! get warp patch
     Matrix2d A_cur_from_ref;
     utils::getWarpMatrixAffine(keyframe->cam_, frame->cam_, ft->px, ft->fn, level_ref,
                                z_ref, T_cur_from_ref, patch_size, A_cur_from_ref);
+
+//    double det = A_cur_from_ref.determinant() / factor;
+//    std::cout << "***** det: " <<  det << std::endl;
 
     static const int patch_border_size = patch_size+2;
     cv::Mat image_ref = keyframe->getImage(level_ref);
@@ -520,13 +786,10 @@ bool LocalMapper::findEpipolarMatch(const Feature::Ptr &ft,
     Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > patch_eigen(patch.data(), patch_area, 1);
 
     Vector2d px_best(-1,-1);
-    double epl_length = (px_near-px_far).norm();
     if(epl_length > 2.0)
     {
         int n_steps = epl_length / 0.707;
         Vector2d step = epl_dir / n_steps;
-
-        // TODO check epl max length
 
         // TODO 使用模板来加速！！！
         //! SSD
@@ -540,7 +803,8 @@ bool LocalMapper::findEpipolarMatch(const Feature::Ptr &ft,
         Vector2d fn_start = xyz_far.head<2>() - step * 2;
         n_steps += 2;
         Vector2d fn(fn_start);
-        for(int i = 0; i < n_steps; ++i, fn += step) {
+        for(int i = 0; i < n_steps; ++i, fn += step)
+        {
             Vector2d px(frame->cam_->project(fn) / factor);
 
             //! always in frame's view
@@ -552,10 +816,13 @@ bool LocalMapper::findEpipolarMatch(const Feature::Ptr &ft,
 
             double score = zssd.compute_score(patch_cur);
 
-            if(score < score_best) {
+            if(score < score_best)
+            {
                 score_best = score;
                 index_best = i;
-            } else if(score < score_second) {
+            }
+            else if(score < score_second)
+            {
                 score_second = score;
                 index_second = i;
             }
@@ -592,20 +859,24 @@ bool LocalMapper::findEpipolarMatch(const Feature::Ptr &ft,
 
     Align2DI matcher(verbose_);
     Vector3d estimate(0,0,0); estimate.head<2>() = px_best;
-    if(!matcher.run(image_cur_eigen, patch_eigen, dx_eigen, dy_eigen, estimate))
-        return false;
+    if(!matcher.run(image_cur_eigen, patch_eigen, dx_eigen, dy_eigen, estimate, 30, options_.align_epslion))
+    {
+//        std::cout << "dx:\n " << dx << std::endl;
+//        std::cout << "dy:\n " << dy << std::endl;
 
-    // TODO 增加极点距离的检查？
-    //! check distance to epl, incase of the aligen draft
-    Vector2d a = estimate.head<2>() - px_far;
-    Vector2d b = px_near - px_far;
-    double lacos = a.dot(b) / b.norm();
-    double dist2 = a.squaredNorm() - lacos*lacos;
-    if(dist2 > 16) //! 4^2
-        return false;
+        static bool show = false;
+        if(show)
+        {
+            //        showMatch(keyframe->getImage(level_ref), current_frame_->getImage(level_cur), px_near, px_far, ft->px/factor, px_best);
+            showEplMatch(keyframe, frame, T_cur_from_ref, level_ref, level_cur, xyz_near, xyz_far, xyz_ref, px_best);
+            showAffine(keyframe->getImage(level_ref), ft->px/factor, A_cur_from_ref.inverse(), 8, level_ref);
+        }
 
-    Vector2d px_matched = estimate.head<2>() * factor;
-    Vector3d fn_matched = frame->cam_->lift(px_matched);
+        return false;
+    }
+
+    //! transform to level-0
+    px_matched = estimate.head<2>() * factor;
 
     LOG_IF(INFO, verbose_) << "Found! [" << ft->px.transpose() << "] "
                            << "dst: [" << px_matched.transpose() << "] "
@@ -613,7 +884,7 @@ bool LocalMapper::findEpipolarMatch(const Feature::Ptr &ft,
 
 //    showMatch(image_ref, image_cur, px_near, px_far, seed.ft->px/factor, px_matched/factor);
 
-    return utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), ft->fn, fn_matched, depth);
+    return true;
 }
 
 

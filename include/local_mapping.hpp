@@ -24,7 +24,7 @@ public:
 
     bool finishFrame();
 
-    void insertNewKeyFrame(const KeyFrame::Ptr &keyframe, double mean_depth, double min_depth);
+    void insertNewKeyFrame(const KeyFrame::Ptr &keyframe, double mean_depth, double min_depth, bool is_track = true);
 
     void drowTrackedPoints(cv::Mat &dst);
 
@@ -47,16 +47,20 @@ private:
 
     int reprojectSeeds();
 
-    int createSeeds();
+    int createSeeds(bool is_track);
 
     bool checkNewFrame();
+
+    bool earseSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed);
+
+    bool createFeatureFromSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed);
 
 //    bool processNewKeyFrame();
 //
 //    bool processNewFrame();
 
-    bool findEpipolarMatch(const Feature::Ptr &ft, const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame,
-                           const SE3d &T_cur_from_ref, const double sigma, double &depth);
+    bool findEpipolarMatch(const Seed::Ptr &seed, const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame,
+                           const SE3d &T_cur_from_ref, Vector2d &px_matched, int &level_matched);
 
 public:
 
@@ -75,6 +79,11 @@ private:
 
     struct Option{
         int max_kfs; //! max keyframes for seeds tracking(exclude current keyframe)
+        double max_epl_length;
+        double epl_dist2_threshold;
+        double seed_converge_threshold;
+        double klt_epslion;
+        double align_epslion;
     } options_;
 
     std::shared_ptr<std::thread> mapping_thread_;

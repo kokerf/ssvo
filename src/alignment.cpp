@@ -239,6 +239,19 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
 
 namespace utils{
 
+int getBestSearchLevel(const Matrix2d& A_cur_ref, const int max_level)
+{
+    // Compute patch level in other image
+    int search_level = 0;
+    double D = A_cur_ref.determinant();
+    while(D > 3.0 && search_level < max_level)
+    {
+        search_level += 1;
+        D *= 0.25;
+    }
+    return search_level;
+}
+
 void getWarpMatrixAffine(const Camera::Ptr &cam_ref,
                          const Camera::Ptr &cam_cur,
                          const Vector2d &px_ref,

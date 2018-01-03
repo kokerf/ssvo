@@ -19,6 +19,8 @@ public:
 
     static void motionOnlyBundleAdjustment(Frame::Ptr frame, bool report=false, bool verbose=false);
 
+    static void structureRefinement(Frame::Ptr &frame, int max_opt_pts, int max_iter, bool report=false, bool verbose=false);
+
     static Vector2d reprojectionError(const ceres::Problem &problem, ceres::ResidualBlockId id);
 
     static void reportInfo(const ceres::Problem &problem, const ceres::Solver::Summary summary, bool report=false, bool verbose=false);

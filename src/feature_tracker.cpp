@@ -145,14 +145,20 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
         const double factor = static_cast<double>(1 << track_level);
         Vector3d estimate(0,0,0); estimate.head<2>() = candidate.px / factor;
 
-//        cv::Mat show_ref, show_cur;
-//        cv::cvtColor(kf_ref->getImage(ft_ref->level), show_ref, CV_GRAY2RGB);
-//        cv::cvtColor(cur_image, show_cur, CV_GRAY2RGB);
-//        cv::circle(show_ref, cv::Point2i((int)ft_ref->px[0], (int)ft_ref->px[1])/(1 << ft_ref->level), 3, cv::Scalar(255,0,0));
-//        cv::circle(show_cur, cv::Point2i((int)estimate[0], (int)estimate[1]), 3, cv::Scalar(255,0,0));
-//        cv::imshow("ref track", show_ref);
-//        cv::imshow("cur track", show_cur);
-//        cv::waitKey(0);
+
+        static bool show = false;
+        if(show)
+        {
+            cv::Mat show_ref, show_cur;
+            cv::cvtColor(kf_ref->getImage(ft_ref->level), show_ref, CV_GRAY2RGB);
+            cv::cvtColor(frame->getImage(track_level), show_cur, CV_GRAY2RGB);
+            cv::circle(show_ref, cv::Point2i((int)ft_ref->px[0], (int)ft_ref->px[1])/(1 << ft_ref->level), 3, cv::Scalar(255,0,0));
+            cv::circle(show_cur, cv::Point2i((int)estimate[0], (int)estimate[1]), 3, cv::Scalar(255,0,0));
+            cv::imshow("ref track", show_ref);
+            cv::imshow("cur track", show_cur);
+            cv::waitKey(0);
+        }
+
 
         if(matcher.run(image_cur_eigen, patch_eigen, dx_eigen, dy_eigen, estimate))
         {

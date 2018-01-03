@@ -8,9 +8,19 @@ unsigned long int MapPoint::next_id_ = 0;
 const double MapPoint::log_level_factor_ = log(2.0f);
 
 MapPoint::MapPoint(const Vector3d &p, const KeyFrame::Ptr &kf) :
-        id_(next_id_++), pose_(p), n_obs_(0), min_distance_(0.0), max_distance_(0.0), refKF_(kf),
-        found_cunter_(1), visiable_cunter_(1)
+        id_(next_id_++), pose_(p), last_structure_optimal_(0), n_obs_(0), type_(SEED),
+        min_distance_(0.0), max_distance_(0.0), refKF_(kf), found_cunter_(1), visiable_cunter_(1)
 {
+}
+
+MapPoint::Type MapPoint::type()
+{
+    return type_;
+}
+
+void MapPoint::resetType(MapPoint::Type type)
+{
+    type_ = type;
 }
 
 void MapPoint::addObservation(const KeyFrame::Ptr kf, const Feature::Ptr ft)

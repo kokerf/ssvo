@@ -139,6 +139,8 @@ private:
 //! ========================== Utils =========================================
 namespace utils{
 
+int getBestSearchLevel(const Matrix2d& A_cur_ref, const int max_level);
+
 void getWarpMatrixAffine(const Camera::Ptr &cam_ref,
                          const Camera::Ptr &cam_cur,
                          const Vector2d &px_ref,
@@ -175,7 +177,8 @@ void warpAffine(const cv::Mat &img_ref,
         {
             Vector2d px_patch(x-half_patch_size, y-half_patch_size);
             px_patch *= px_pyr_scale;//! A_ref_from_cur is for level-0, so transform to it
-            const Vector2d px(A_ref_from_cur*px_patch + px_ref_pyr);
+            Vector2d affine = A_ref_from_cur*px_patch;
+            const Vector2d px(affine + px_ref_pyr);
 
             if(px[0]<0 || px[1]<0 || px[0]>=img_ref.cols-1 || px[1]>=img_ref.rows-1)
                 patch(y, x) = 0;

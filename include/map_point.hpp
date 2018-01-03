@@ -14,11 +14,21 @@ class MapPoint
 {
 public:
 
+    enum Type{
+        SEED,
+        STABLE,
+        BAD,
+    };
+
     typedef std::shared_ptr<MapPoint> Ptr;
 
     typedef std::shared_ptr<KeyFrame> KeyFramePtr;
 
     typedef std::shared_ptr<Frame> FramePtr;
+
+    Type type();
+
+    void resetType(Type type);
 
     void addObservation(const KeyFramePtr kf, const Feature::Ptr ft);
 
@@ -59,6 +69,7 @@ public:
     { return std::make_shared<MapPoint>(MapPoint(p, kf)); }
 
 private:
+
     MapPoint(const Vector3d &p, const KeyFramePtr &kf);
 
 public:
@@ -71,6 +82,7 @@ public:
     static const double log_level_factor_;
 
     Vector3d optimal_pose_;
+    uint64_t last_structure_optimal_;
 
 private:
     Vector3d pose_;
@@ -78,6 +90,8 @@ private:
     std::unordered_map<KeyFramePtr, Feature::Ptr> obs_;
 
     int n_obs_;
+
+    Type type_;
 
     Vector3d obs_dir_; //!< mean viewing direction, from map point to keyframe
     double min_distance_;

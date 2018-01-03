@@ -243,8 +243,9 @@ Initializer::Result Initializer::addImage(Frame::Ptr frame_cur)
     //! [1] KLT tracking
     const bool backward_check = true;
     cand_cur_->getInliers(inliers_);
+    static cv::TermCriteria termcrit(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, 0.001);
     utils::kltTrack(cand_last_->frame->opticalImages(), cand_cur_->frame->opticalImages(), Frame::optical_win_size_,
-                    cand_last_->pts, cand_cur_->pts, inliers_, backward_check, true);
+                    cand_last_->pts, cand_cur_->pts, inliers_, termcrit, backward_check, true);
     cand_cur_->updateInliers(inliers_);
     //! if track too little corners in reference, then change reference
     const int offset = cand_cur_->checkTracking(cand_ref_->frame->id_, cand_cur_->frame->id_, Config::initMinTracked());

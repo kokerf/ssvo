@@ -7,11 +7,9 @@ namespace utils {
 
 void kltTrack(const ImgPyr &imgs_ref, const ImgPyr &imgs_cur, const cv::Size win_size,
               const std::vector<cv::Point2f> &pts_ref, std::vector<cv::Point2f> &pts_cur,
-              std::vector<bool> &status, bool track_forward, bool verbose)
+              std::vector<bool> &status, cv::TermCriteria termcrit, bool track_forward, bool verbose)
 {
     const size_t total_size = pts_ref.size();
-    const int klt_max_iter = 30;
-    const double klt_eps = 0.001;
     const int border = 8;
     const int x_min = border;
     const int y_min = border;
@@ -49,7 +47,6 @@ void kltTrack(const ImgPyr &imgs_ref, const ImgPyr &imgs_cur, const cv::Size win
     std::vector<float> error;
     std::vector<uchar> status_forward;
 
-    cv::TermCriteria termcrit(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, klt_max_iter, klt_eps);
     //! forward track
     cv::calcOpticalFlowPyrLK(imgs_ref, imgs_cur, pts_ref_to_track, pts_cur_tracked, status_forward, error,
                              win_size, 3, termcrit, cv::OPTFLOW_USE_INITIAL_FLOW);
@@ -88,7 +85,7 @@ void kltTrack(const ImgPyr &imgs_ref, const ImgPyr &imgs_cur, const cv::Size win
 
     if(inlier_ids.empty())
         return;
-    
+
     //! backward track
     std::vector<uchar> status_back;
     cv::calcOpticalFlowPyrLK(imgs_cur, imgs_ref, pts_cur_to_track, pts_ref_tracked, status_back, error,

@@ -12,7 +12,6 @@ KeyFrame::KeyFrame(const Frame::Ptr frame):
     fts_ = frame->features();
     setPose(frame->pose());
 }
-
 void KeyFrame::updateConnections()
 {
     Features fts;
