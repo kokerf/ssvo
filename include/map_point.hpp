@@ -85,6 +85,7 @@ public:
     uint64_t last_structure_optimal_;
 
 private:
+    
     Vector3d pose_;
 
     std::unordered_map<KeyFramePtr, Feature::Ptr> obs_;

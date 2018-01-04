@@ -29,7 +29,7 @@ public:
 
     Vector2d project(const Vector3d& xyz) const;
 
-    Vector2d project(const Vector2d& fn) const;
+    Vector2d project(double x, double y) const;
 
     inline const int width() const { return width_; }
 

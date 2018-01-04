@@ -27,6 +27,9 @@ public:
     SE3d Tcw();
 
     //! Transform (w)orld from (c)amera
+    SE3d Twc();
+
+    //! Transform (w)orld from (c)amera
     SE3d pose();
 
     //! Principal ray in world frame

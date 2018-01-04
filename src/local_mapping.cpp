@@ -181,10 +181,10 @@ void LocalMapper::drowTrackedPoints(cv::Mat &dst)
     }
 
     //! draw seeds
-    for(const TrackSeed::Ptr &track_seed : tracked_seeds_)
+    for(const Seed::Ptr &seed : tracked_seeds_)
     {
-        cv::Point2f px = track_seed->px;
-        double convergence = track_seed->seed->z_range/std::sqrt(track_seed->seed->sigma2);
+        cv::Point2f px(seed->px_cur[0], seed->px_cur[1]);
+        double convergence = seed->z_range/std::sqrt(seed->sigma2);
         double scale = MIN(convergence, 256.0) / 256.0;
         cv::Scalar color(255*scale, 0, 255*(1-scale));
         cv::circle(dst, px, 2, color, -1);
@@ -335,10 +335,10 @@ int LocalMapper::createSeeds(bool is_track)
     // TODO 如果对应的seed收敛，在跟踪过的关键帧增加观测？
     if(current_frame_ != nullptr && current_keyframe_->frame_id_ == current_frame_->id_)
     {
-        for(const TrackSeed::Ptr &seed : tracked_seeds_)
+        for(const Seed::Ptr &seed : tracked_seeds_)
         {
-            const cv::Point2f px = seed->px;
-            old_corners.emplace_back(Corner(px.x, px.y, 0, seed->seed->ft->level));
+            const Vector2d &px = seed->px_cur;
+            old_corners.emplace_back(Corner(px[0], px[1], 0, seed->level_cur));
         }
     }
 
@@ -353,19 +353,14 @@ int LocalMapper::createSeeds(bool is_track)
     {
         const Vector2d px(corner.x, corner.y);
         const Vector3d fn(current_keyframe_->cam_->lift(px));
-        Feature::Ptr ft = Feature::create(px, fn, corner.level, nullptr);
-        new_seeds.emplace_back(Seed::create(ft, current_depth_.first, current_depth_.second*0.5));
+        new_seeds.emplace_back(Seed::create(current_keyframe_, px, fn, corner.level, current_depth_.first, current_depth_.second));
     }
     seeds_buffer_.emplace_back(current_keyframe_, std::make_shared<Seeds>(new_seeds));
 
     if(is_track)
     {
-        const auto &seed_to_track = seeds_buffer_.back();
-        for(const Seed::Ptr &seed : *seed_to_track.second)
-        {
-            const cv::Point2f px(seed->ft->px[0], seed->ft->px[1]);
-            tracked_seeds_.emplace_back(std::make_shared<TrackSeed>(TrackSeed(current_keyframe_, seed, px)));
-        }
+        for(const Seed::Ptr &seed : new_seeds)
+            tracked_seeds_.emplace_back(seed);
     }
 
     return (int)new_seeds.size();
@@ -373,13 +368,13 @@ int LocalMapper::createSeeds(bool is_track)
 
 int LocalMapper::createNewFeatures()
 {
-    std::map<KeyFrame::Ptr, std::deque<TrackSeed::Ptr> > seeds_map;
-    for(const TrackSeed::Ptr &track_seed : tracked_seeds_)
+    std::map<KeyFrame::Ptr, std::deque<Seed::Ptr> > seeds_map;
+    for(const Seed::Ptr &track_seed : tracked_seeds_)
     {
         const auto seeds_map_itr = seeds_map.lower_bound(track_seed->kf);
         if(seeds_map_itr == seeds_map.end())
         {
-            std::deque<TrackSeed::Ptr> new_deque;
+            std::deque<Seed::Ptr> new_deque;
             new_deque.push_back(track_seed);
             seeds_map.emplace(track_seed->kf, new_deque);
         }
@@ -394,42 +389,36 @@ int LocalMapper::createNewFeatures()
     for(const auto &seed_map : seeds_map)
     {
         KeyFrame::Ptr kf = seed_map.first;
-        const std::deque<TrackSeed::Ptr> &seeds_deque = seed_map.second;
+        const std::deque<Seed::Ptr> &seeds_deque = seed_map.second;
         const SE3d T_cur_from_ref = current_frame_->Tcw() * kf->pose();
-        for(const TrackSeed::Ptr &track_seed : seeds_deque)
+        for(const Seed::Ptr &seed : seeds_deque)
         {
-            Vector2d px_cur(track_seed->px.x, track_seed->px.y);
-            double disparity = (px_cur - track_seed->seed->ft->px).norm();
-            if(disparity > options_.min_disparity)
+            const Vector3d fn_cur = current_frame_->cam_->lift(seed->px_cur);
+            double depth;
+            bool succeed = utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->fn_ref, fn_cur, depth);
+            if(succeed)
             {
-                double depth;
-                const Vector3d fn_ref = track_seed->seed->ft->fn;
-                const Vector3d fn_cur = current_frame_->cam_->lift(px_cur);
-                bool succeed = utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), fn_ref, fn_cur, depth);
-                if(succeed)
-                {
-                    Feature::Ptr ref_ft = track_seed->seed->ft;
-                    Vector3d pose(fn_ref*depth);
-                    MapPoint::Ptr new_mpt = MapPoint::create(kf->pose()*pose, current_keyframe_);
-                    //! ref kf
-                    ref_ft->mpt = new_mpt;
-                    kf->addFeature(ref_ft);
-                    //! cur kf
-                    Feature::Ptr new_ft = Feature::create(px_cur, fn_cur, ref_ft->level, new_mpt);
-                    current_keyframe_->addFeature(new_ft);
+                Vector3d pose(seed->fn_ref*depth);
+                MapPoint::Ptr new_mpt = MapPoint::create(kf->Twc()*pose, current_keyframe_);
 
-                    //! mpt
-                    map_->insertMapPoint(new_mpt);
-                    new_mpt->addObservation(kf, ref_ft);
-                    new_mpt->addObservation(current_keyframe_, new_ft);
-                    new_mpt->updateViewAndDepth();
+                //! ft
+                Feature::Ptr ft_ref = Feature::create(seed->px_ref, seed->fn_ref, seed->level_ref, new_mpt);
+                Feature::Ptr ft_cur = Feature::create(seed->px_cur, fn_cur, seed->level_cur, new_mpt);
+
+                kf->addFeature(ft_ref);
+                current_keyframe_->addFeature(ft_cur);
+
+                //! mpt
+                map_->insertMapPoint(new_mpt);
+                new_mpt->addObservation(kf, ft_ref);
+                new_mpt->addObservation(current_keyframe_, ft_cur);
+                new_mpt->updateViewAndDepth();
 //                    Optimizer::refineMapPoint(new_mpt, 20, true, true);
-                    count++;
-                    continue;
-                }
+                count++;
+                continue;
             }
 
-            tracked_seeds_.push_back(track_seed);
+            tracked_seeds_.push_back(seed);
         }
     }
 
@@ -445,9 +434,9 @@ int LocalMapper::trackSeeds()
     //! track seeds by klt
     std::vector<cv::Point2f> pts_to_track;
     pts_to_track.reserve(tracked_seeds_.size());
-    for(const TrackSeed::Ptr &track_seed : tracked_seeds_)
+    for(const Seed::Ptr &seed : tracked_seeds_)
     {
-        pts_to_track.emplace_back(track_seed->px);
+        pts_to_track.emplace_back(cv::Point2f(seed->px_cur[0], seed->px_cur[1]));
     }
 
     if(pts_to_track.empty())
@@ -467,7 +456,10 @@ int LocalMapper::trackSeeds()
     {
         if(status[idx])
         {
-            (*track_seeds_itr)->px = pts_tracked[idx];
+            const cv::Point2f &px = pts_tracked[idx];
+            Vector2d &px_cur = (*track_seeds_itr)->px_cur;
+            px_cur[0] = px.x;
+            px_cur[1] = px.y;
             track_seeds_itr++;
             count++;
         }
@@ -483,13 +475,13 @@ int LocalMapper::trackSeeds()
 int LocalMapper::updateSeeds()
 {
     //! remove error tracked seeds and update
-    std::map<KeyFrame::Ptr, std::deque<TrackSeed::Ptr> > seeds_map;
-    for(const TrackSeed::Ptr &track_seed : tracked_seeds_)
+    std::map<KeyFrame::Ptr, std::deque<Seed::Ptr> > seeds_map;
+    for(const Seed::Ptr &track_seed : tracked_seeds_)
     {
         const auto seeds_map_itr = seeds_map.lower_bound(track_seed->kf);
         if(seeds_map_itr == seeds_map.end())
         {
-            std::deque<TrackSeed::Ptr> new_deque;
+            std::deque<Seed::Ptr> new_deque;
             new_deque.push_back(track_seed);
             seeds_map.emplace(track_seed->kf, new_deque);
         }
@@ -504,38 +496,37 @@ int LocalMapper::updateSeeds()
     for(const auto &seed_map : seeds_map)
     {
         KeyFrame::Ptr kf = seed_map.first;
-        const std::deque<TrackSeed::Ptr> &seeds_deque = seed_map.second;
+        const std::deque<Seed::Ptr> &seeds_deque = seed_map.second;
         const SE3d T_cur_from_ref = current_frame_->Tcw() * kf->pose();
         const SE3d T_ref_from_cur = T_cur_from_ref.inverse();
-        for(const TrackSeed::Ptr &track_seed : seeds_deque)
+        for(const Seed::Ptr &seed : seeds_deque)
         {
-            const Vector3d fn_ref = track_seed->seed->ft->fn;
-            const Vector3d fn_cur = current_frame_->cam_->lift(track_seed->px.x, track_seed->px.y);
+            const Vector3d fn_cur = current_frame_->cam_->lift(seed->px_cur);
             double err2 = utils::Fundamental::computeErrorSquared(
-                kf->pose().translation(), fn_ref/track_seed->seed->mu, T_cur_from_ref, fn_cur.head<2>());
+                kf->pose().translation(), seed->fn_ref/seed->mu, T_cur_from_ref, fn_cur.head<2>());
 
             if(err2 > options_.epl_dist2_threshold)
                 continue;
 
             //! update
             double depth = -1;
-            if(utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), fn_ref, fn_cur, depth))
+            if(utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->fn_ref, fn_cur, depth))
             {
-                double tau = track_seed->seed->computeTau(T_ref_from_cur, fn_ref, depth, px_error_angle);
+                double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
 //                double tau = track_seed->seed->computeVar(T_cur_from_ref, depth, options_.klt_epslion);
                 tau = tau + Config::pixelUnSigma();
-                track_seed->seed->update(1.0/depth, tau*tau);
+                seed->update(1.0/depth, tau*tau);
 
                 //! check converge
-                if(track_seed->seed->sigma2 / track_seed->seed->z_range < options_.seed_converge_threshold)
+                if(seed->sigma2 / seed->z_range < options_.seed_converge_threshold)
                 {
-                    createFeatureFromSeed(track_seed->kf ,track_seed->seed);
-                    earseSeed(track_seed->kf ,track_seed->seed);
+                    createFeatureFromSeed(seed);
+                    earseSeed(seed->kf, seed);
                     continue;
                 }
             }
 
-            tracked_seeds_.emplace_back(track_seed);
+            tracked_seeds_.emplace_back(seed);
         }
     }
 
@@ -549,8 +540,8 @@ int LocalMapper::reprojectSeeds()
     candidate_keyframes.insert(current_frame_->getRefKeyFrame());
 
     std::set<Seed::Ptr> seed_tracking;
-    for(const TrackSeed::Ptr &tracked_seed : tracked_seeds_)
-        seed_tracking.insert(tracked_seed->seed);
+    for(const Seed::Ptr &seed : tracked_seeds_)
+        seed_tracking.insert(seed);
 
     int count = 0;
     static double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
@@ -589,7 +580,7 @@ int LocalMapper::reprojectSeeds()
 
             //! check distance to epl, incase of the aligen draft
             Vector2d fn_matched = current_frame_->cam_->lift(px_matched).head<2>();
-            double dist2 = utils::Fundamental::computeErrorSquared(keyframe->pose().translation(), seed->ft->fn/seed->mu, T_cur_from_ref, fn_matched);
+            double dist2 = utils::Fundamental::computeErrorSquared(keyframe->pose().translation(), seed->fn_ref/seed->mu, T_cur_from_ref, fn_matched);
             if(dist2 > options_.epl_dist2_threshold)
             {
                 seed_itr++;
@@ -598,14 +589,14 @@ int LocalMapper::reprojectSeeds()
 
             double depth = -1;
             const Vector3d fn_cur = current_frame_->cam_->lift(px_matched);
-            bool succeed = utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->ft->fn, fn_cur, depth);
+            bool succeed = utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->fn_ref, fn_cur, depth);
             if(!succeed)
             {
                 seed_itr++;
                 continue;
             }
 
-            double tau = seed->computeTau(T_ref_from_cur, seed->ft->fn, depth, px_error_angle);
+            double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
 //            double tau = seed->computeVar(T_cur_from_ref, depth, options_.align_epslion);
             tau = tau + Config::pixelUnSigma();
             seed->update(1.0/depth, tau*tau);
@@ -613,13 +604,14 @@ int LocalMapper::reprojectSeeds()
             //! check converge
             if(seed->sigma2 / seed->z_range < options_.seed_converge_threshold)
             {
-                createFeatureFromSeed(keyframe, seed);
+                createFeatureFromSeed(seed);
                 seed_itr = seeds.erase(seed_itr);
                 continue;
             }
 
-            const cv::Point2f px(px_matched[0], px_matched[1]);
-            tracked_seeds_.emplace_back(std::make_shared<TrackSeed>(TrackSeed(keyframe, seed, px)));
+            //! update px
+            seed->px_cur = px_matched;
+            tracked_seeds_.emplace_back(seed);
             count++;
             seed_itr++;
         }
@@ -661,19 +653,20 @@ bool LocalMapper::earseSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed
     return false;
 }
 
-bool LocalMapper::createFeatureFromSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed)
+bool LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
 {
     //! create new feature
     // TODO add_observation 不用，需不需要找一下其他关键帧是否观测改点，增加约束
     // TODO 把这部分放入一个队列，在单独线程进行处理
-    Feature::Ptr new_ft = seed->ft;
-    Vector3d pose(new_ft->fn/seed->mu);
-    new_ft->mpt = MapPoint::create(keyframe->pose() * pose, keyframe);
-    keyframe->addFeature(new_ft);
-    map_->insertMapPoint(new_ft->mpt);
-    new_ft->mpt->addObservation(keyframe, new_ft);
-    new_ft->mpt->updateViewAndDepth();
-    std::cout << " Creat3 new seed as mpt: " << new_ft->mpt->id_ << ", " << 1.0/seed->mu << ", kf: " << keyframe->id_ << " his: ";
+    MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->mu), seed->kf);
+
+    const Vector2d px_ref(seed->kf->cam_->project(seed->fn_ref[0], seed->fn_ref[0]));
+    Feature::Ptr ft = Feature::create(px_ref, seed->fn_ref, seed->level_ref, mpt);
+    seed->kf->addFeature(ft);
+    map_->insertMapPoint(mpt);
+    mpt->addObservation(seed->kf, ft);
+    mpt->updateViewAndDepth();
+    std::cout << " Creat3 new seed as mpt: " << ft->mpt->id_ << ", " << 1.0/seed->mu << ", kf: " << seed->kf->id_ << " his: ";
     for(const auto his : seed->history){ std::cout << "[" << his.first << "," << his.second << "]";}
     std::cout << std::endl;
 
@@ -782,9 +775,8 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
     static const int half_patch_size = Align2DI::HalfPatchSize;
 
     //! check if in the view of current frame
-    const Feature::Ptr &ft = seed->ft;
     const double z_ref = 1.0/seed->mu;
-    const Vector3d xyz_ref(ft->fn * z_ref);
+    const Vector3d xyz_ref(seed->fn_ref * z_ref);
     const Vector3d xyz_cur(T_cur_from_ref * xyz_ref);
     const double z_cur = xyz_cur[2];
     if(z_cur < 0.00f)
@@ -802,15 +794,16 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
     const double z_ref_max = 1.0/d_min;
 
     //! on unit plane in cur frame
-    Vector3d xyz_near = T_cur_from_ref * (ft->fn * z_ref_min);
-    Vector3d xyz_far  = T_cur_from_ref * (ft->fn * z_ref_max);
+    Vector3d xyz_near = T_cur_from_ref * (seed->fn_ref * z_ref_min);
+    Vector3d xyz_far  = T_cur_from_ref * (seed->fn_ref * z_ref_max);
     xyz_near /= xyz_near[2];
     xyz_far  /= xyz_far[2];
     Vector2d epl_dir = (xyz_near - xyz_far).head<2>();
 
     //! calculate best search level
-    const int level_ref = ft->level;
+    const int level_ref = seed->level_ref;
     const int level_cur = MapPoint::predictScale(z_ref, z_cur, level_ref, frame->max_level_);
+    seed->level_cur = level_cur;
     const double factor = static_cast<double>(1 << level_cur);
 
     //! px in image plane
@@ -827,7 +820,8 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
 
     //! get warp patch
     Matrix2d A_cur_from_ref;
-    utils::getWarpMatrixAffine(keyframe->cam_, frame->cam_, ft->px, ft->fn, level_ref,
+
+    utils::getWarpMatrixAffine(keyframe->cam_, frame->cam_, seed->px_ref, seed->fn_ref, level_ref,
                                z_ref, T_cur_from_ref, patch_size, A_cur_from_ref);
 
 //    double det = A_cur_from_ref.determinant() / factor;
@@ -837,7 +831,7 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
     cv::Mat image_ref = keyframe->getImage(level_ref);
     Matrix<double, patch_border_size, patch_border_size, RowMajor> patch_with_border;
     utils::warpAffine<double, patch_border_size>(image_ref, patch_with_border, A_cur_from_ref,
-                                                 ft->px, level_ref, level_cur);
+                                                 seed->px_ref, level_ref, level_cur);
 
     Matrix<double, patch_size, patch_size, RowMajor> patch;
     patch = patch_with_border.block(1, 1, patch_size, patch_size);
@@ -866,7 +860,7 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
         Vector2d fn(fn_start);
         for(int i = 0; i < n_steps; ++i, fn += step)
         {
-            Vector2d px(frame->cam_->project(fn) / factor);
+            Vector2d px(frame->cam_->project(fn[0], fn[1]) / factor);
 
             //! always in frame's view
             if(!frame->cam_->isInFrame(px.cast<int>(), half_patch_size, level_cur))
@@ -896,7 +890,7 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
             return false;
 
         Vector2d pn_best = fn_start + index_best * step;
-        px_best = frame->cam_->project(pn_best) / factor;
+        px_best = frame->cam_->project(pn_best[0], pn_best[1]) / factor;
 
         double t1 = (double)cv::getTickCount();
         double time = (t1-t0)/cv::getTickFrequency();
@@ -930,7 +924,7 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
         {
             //        showMatch(keyframe->getImage(level_ref), current_frame_->getImage(level_cur), px_near, px_far, ft->px/factor, px_best);
             showEplMatch(keyframe, frame, T_cur_from_ref, level_ref, level_cur, xyz_near, xyz_far, xyz_ref, px_best);
-            showAffine(keyframe->getImage(level_ref), ft->px/factor, A_cur_from_ref.inverse(), 8, level_ref);
+            showAffine(keyframe->getImage(level_ref), seed->px_ref/factor, A_cur_from_ref.inverse(), 8, level_ref);
         }
 
         return false;
@@ -939,7 +933,7 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
     //! transform to level-0
     px_matched = estimate.head<2>() * factor;
 
-    LOG_IF(INFO, verbose_) << "Found! [" << ft->px.transpose() << "] "
+    LOG_IF(INFO, verbose_) << "Found! [" << seed->px_ref.transpose() << "] "
                            << "dst: [" << px_matched.transpose() << "] "
                            << "epl: [" << px_near.transpose() << "]--[" << px_far.transpose() << "]" << std::endl;
 

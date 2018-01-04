@@ -55,7 +55,7 @@ private:
 
     bool earseSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed);
 
-    bool createFeatureFromSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed);
+    bool createFeatureFromSeed(const Seed::Ptr &seed);
 
 //    bool processNewKeyFrame();
 //
@@ -69,15 +69,6 @@ public:
     Map::Ptr map_;
 
 private:
-
-    struct TrackSeed{
-        typedef std::shared_ptr<TrackSeed> Ptr;
-        KeyFrame::Ptr kf;
-        Seed::Ptr seed;
-        cv::Point2f px;
-        TrackSeed(const KeyFrame::Ptr &kf, const Seed::Ptr &seed, const cv::Point2f &px) :
-            kf(kf), seed(seed), px(px) {}
-    };
 
     struct Option{
         int max_kfs; //! max keyframes for seeds tracking(exclude current keyframe)
@@ -96,7 +87,7 @@ private:
     std::deque<std::pair<Frame::Ptr, KeyFrame::Ptr> > frames_buffer_;
     std::deque<std::pair<double, double> > depth_buffer_;
     std::deque<std::pair<KeyFrame::Ptr, std::shared_ptr<Seeds> > > seeds_buffer_;
-    std::list<TrackSeed::Ptr> tracked_seeds_;
+    Seeds tracked_seeds_;
 
     Frame::Ptr last_frame_;
     Frame::Ptr current_frame_;

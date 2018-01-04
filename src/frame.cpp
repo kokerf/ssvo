@@ -56,6 +56,12 @@ SE3d Frame::Tcw()
     return Tcw_;
 }
 
+SE3d Frame::Twc()
+{
+    std::lock_guard<std::mutex> lock(mutex_pose_);
+    return Twc_;
+}
+
 SE3d Frame::pose()
 {
     std::lock_guard<std::mutex> lock(mutex_pose_);

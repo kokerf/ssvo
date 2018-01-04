@@ -109,13 +109,11 @@ Vector2d Camera::project(const Vector3d &xyz) const
     return px;
 }
 
-Vector2d Camera::project(const Vector2d &fn) const
+Vector2d Camera::project(double x, double y) const
 {
-    Vector2d px(fn);
+    Vector2d px(x, y);
     if(distortion_)
     {
-        const double x = px[0];
-        const double y = px[1];
         const double x2 = x * x;
         const double y2 = y * y;
         const double r2 = x2 + y2;

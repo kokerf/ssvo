@@ -8,7 +8,7 @@ unsigned long int MapPoint::next_id_ = 0;
 const double MapPoint::log_level_factor_ = log(2.0f);
 
 MapPoint::MapPoint(const Vector3d &p, const KeyFrame::Ptr &kf) :
-        id_(next_id_++), pose_(p), last_structure_optimal_(0), n_obs_(0), type_(SEED),
+        id_(next_id_++), last_structure_optimal_(0), pose_(p), n_obs_(0), type_(SEED),
         min_distance_(0.0), max_distance_(0.0), refKF_(kf), found_cunter_(1), visiable_cunter_(1)
 {
 }

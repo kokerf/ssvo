@@ -1,3 +1,4 @@
+#include "keyframe.hpp"
 #include "feature.hpp"
 #include "utils.hpp"
 
@@ -10,8 +11,8 @@ Feature::Feature(const Vector2d &px, const Vector3d &fn, const int level, const 
 }
 
 //! Seed
-Seed::Seed(const Feature::Ptr &ft, double depth_mean, double depth_min) :
-    ft(ft),
+Seed::Seed(const KeyFrame::Ptr &kf, const Vector2d &px, const Vector3d &fn, const int level, double depth_mean, double depth_min) :
+    kf(kf), fn_ref(fn), px_ref(px), level_ref(level), px_cur(px), level_cur(level),
     a(10),
     b(10),
     mu(1.0/depth_mean),
