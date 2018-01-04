@@ -24,7 +24,7 @@ public:
 
     bool finishFrame();
 
-    void insertNewKeyFrame(const KeyFrame::Ptr &keyframe, double mean_depth, double min_depth, bool is_track = true);
+    void insertNewKeyFrame(const KeyFrame::Ptr &keyframe, double mean_depth, double min_depth, bool optimal = true, bool create_seeds = true);
 
     void drowTrackedPoints(cv::Mat &dst);
 
@@ -47,7 +47,9 @@ private:
 
     int reprojectSeeds();
 
-    int createSeeds(bool is_track);
+    int createSeeds(bool is_track = true);
+
+    int createNewFeatures();
 
     bool checkNewFrame();
 
@@ -84,6 +86,7 @@ private:
         double seed_converge_threshold;
         double klt_epslion;
         double align_epslion;
+        double min_disparity;
     } options_;
 
     std::shared_ptr<std::thread> mapping_thread_;

@@ -2,7 +2,7 @@
 #include "local_mapping.hpp"
 #include "config.hpp"
 #include "utils.hpp"
-#include "initializer.hpp"
+#include "optimizer.hpp"
 
 namespace ssvo{
 
@@ -39,8 +39,7 @@ void showEplMatch(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame, const 
         cv::cvtColor(src_show, src_show, CV_GRAY2RGB);
     if(dst_show.channels() == 1)
         cv::cvtColor(dst_show, dst_show, CV_GRAY2RGB);
-
-    const double depth_ref = xyz_ref[2];
+    
     const double depth_cur = (T_cur_from_ref*xyz_ref)[2];
     Vector3d epl_near = xyz_near / xyz_near[2];
     Vector3d epl_far  = xyz_far / xyz_far[2];
@@ -118,6 +117,7 @@ LocalMapper::LocalMapper(const FastDetector::Ptr &fast_detector, double fps, boo
     options_.seed_converge_threshold = 1.0/200.0;
     options_.klt_epslion = 0.0001;
     options_.align_epslion = 0.0001;
+    options_.min_disparity = 30;
 }
 
 void LocalMapper::startThread()
@@ -217,12 +217,12 @@ void LocalMapper::insertNewFrame(const Frame::Ptr &frame)
 bool LocalMapper::finishFrame()
 {
     int rest_num = updateSeeds();
-    int reproj_num= reprojectSeeds();
+    int reproj_num = reprojectSeeds();
     LOG_IF(INFO, report_) << "[Mapping][2] Seeds updated: " << rest_num << ", reprojected: " << reproj_num;
     return true;
 }
 
-void LocalMapper::insertNewKeyFrame(const KeyFrame::Ptr &keyframe, double mean_depth, double min_depth, bool is_track)
+void LocalMapper::insertNewKeyFrame(const KeyFrame::Ptr &keyframe, double mean_depth, double min_depth, bool optimal, bool create_seeds)
 {
     LOG_ASSERT(keyframe != nullptr) << "Error input! Frame should not be null!";
 
@@ -246,8 +246,17 @@ void LocalMapper::insertNewKeyFrame(const KeyFrame::Ptr &keyframe, double mean_d
     {
         current_keyframe_ = keyframe;
         current_depth_ = std::make_pair(mean_depth, min_depth);
-        const int new_seeds = createSeeds(is_track);
-        LOG_IF(INFO, report_) << "[Mapping] New created seeds: " << new_seeds;
+
+        int new_features = createNewFeatures();
+
+        if(optimal)
+            Optimizer::localBundleAdjustment(current_keyframe_, true, true);
+
+        int new_seeds = 0;
+        if(create_seeds)
+            new_seeds = createSeeds();
+
+        LOG_IF(INFO, report_) << "[Mapping] New created features:" << new_features << ", seeds: " << new_seeds;
     }
 }
 
@@ -283,8 +292,8 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
     Vector2d mean_depth, min_depth;
     keyframe_ref->getSceneDepth(mean_depth[0], min_depth[0]);
     keyframe_cur->getSceneDepth(mean_depth[1], min_depth[1]);
-    this->insertNewKeyFrame(keyframe_ref, mean_depth[0], min_depth[0], false);
-    this->insertNewKeyFrame(keyframe_cur, mean_depth[1], min_depth[1]);
+    this->insertNewKeyFrame(keyframe_ref, mean_depth[0], min_depth[0], false, false);
+    this->insertNewKeyFrame(keyframe_cur, mean_depth[1], min_depth[1], false);
 
     //! set current frame and create inital seeds flow
     current_frame_ = frame_cur;
@@ -360,6 +369,71 @@ int LocalMapper::createSeeds(bool is_track)
     }
 
     return (int)new_seeds.size();
+}
+
+int LocalMapper::createNewFeatures()
+{
+    std::map<KeyFrame::Ptr, std::deque<TrackSeed::Ptr> > seeds_map;
+    for(const TrackSeed::Ptr &track_seed : tracked_seeds_)
+    {
+        const auto seeds_map_itr = seeds_map.lower_bound(track_seed->kf);
+        if(seeds_map_itr == seeds_map.end())
+        {
+            std::deque<TrackSeed::Ptr> new_deque;
+            new_deque.push_back(track_seed);
+            seeds_map.emplace(track_seed->kf, new_deque);
+        }
+        else
+        {
+            seeds_map_itr->second.push_back(track_seed);
+        }
+    }
+
+    int count = 0;
+    tracked_seeds_.clear();
+    for(const auto &seed_map : seeds_map)
+    {
+        KeyFrame::Ptr kf = seed_map.first;
+        const std::deque<TrackSeed::Ptr> &seeds_deque = seed_map.second;
+        const SE3d T_cur_from_ref = current_frame_->Tcw() * kf->pose();
+        for(const TrackSeed::Ptr &track_seed : seeds_deque)
+        {
+            Vector2d px_cur(track_seed->px.x, track_seed->px.y);
+            double disparity = (px_cur - track_seed->seed->ft->px).norm();
+            if(disparity > options_.min_disparity)
+            {
+                double depth;
+                const Vector3d fn_ref = track_seed->seed->ft->fn;
+                const Vector3d fn_cur = current_frame_->cam_->lift(px_cur);
+                bool succeed = utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), fn_ref, fn_cur, depth);
+                if(succeed)
+                {
+                    Feature::Ptr ref_ft = track_seed->seed->ft;
+                    Vector3d pose(fn_ref*depth);
+                    MapPoint::Ptr new_mpt = MapPoint::create(kf->pose()*pose, current_keyframe_);
+                    //! ref kf
+                    ref_ft->mpt = new_mpt;
+                    kf->addFeature(ref_ft);
+                    //! cur kf
+                    Feature::Ptr new_ft = Feature::create(px_cur, fn_cur, ref_ft->level, new_mpt);
+                    current_keyframe_->addFeature(new_ft);
+
+                    //! mpt
+                    map_->insertMapPoint(new_mpt);
+                    new_mpt->addObservation(kf, ref_ft);
+                    new_mpt->addObservation(current_keyframe_, new_ft);
+                    new_mpt->updateViewAndDepth();
+//                    Optimizer::refineMapPoint(new_mpt, 20, true, true);
+                    count++;
+                    continue;
+                }
+            }
+
+            tracked_seeds_.push_back(track_seed);
+        }
+    }
+
+    return count;
 }
 
 
@@ -447,16 +521,8 @@ int LocalMapper::updateSeeds()
             double depth = -1;
             if(utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), fn_ref, fn_cur, depth))
             {
-
-                Vector3d xyz_cur = T_cur_from_ref * (fn_ref * depth);
-                Vector2d px_cur = current_frame_->cam_->project(xyz_cur);
-                Vector2d px_ref(track_seed->px.x, track_seed->px.y);
-                double delta_x = px_cur[0] - px_ref[0];
-                double delta_y = px_cur[1] - px_ref[1];
-                std::cout << "[upd error]: " << delta_x << " " << delta_y << " dip: " << (px_ref-track_seed->seed->ft->px).norm() << std::endl;
-
-//                double tau = track_seed->seed->computeTau(T_ref_from_cur, fn_ref, depth, px_error_angle);
-                double tau = track_seed->seed->computeVar(T_cur_from_ref, depth, options_.klt_epslion);
+                double tau = track_seed->seed->computeTau(T_ref_from_cur, fn_ref, depth, px_error_angle);
+//                double tau = track_seed->seed->computeVar(T_cur_from_ref, depth, options_.klt_epslion);
                 tau = tau + Config::pixelUnSigma();
                 track_seed->seed->update(1.0/depth, tau*tau);
 
@@ -539,14 +605,8 @@ int LocalMapper::reprojectSeeds()
                 continue;
             }
 
-            Vector3d xyz_cur = T_cur_from_ref * (seed->ft->fn * depth);
-            Vector2d px_cur = current_frame_->cam_->project(xyz_cur);
-            double delta_x = px_cur[0] - px_matched[0];
-            double delta_y = px_cur[1] - px_matched[1];
-            std::cout << "[rpj error]: " << delta_x << " " << delta_y << " dip: " << (px_matched-seed->ft->px).norm() << std::endl;
-
-//            double tau = seed->computeTau(T_ref_from_cur, seed->ft->fn, depth, px_error_angle);
-            double tau = seed->computeVar(T_cur_from_ref, depth, options_.align_epslion);
+            double tau = seed->computeTau(T_ref_from_cur, seed->ft->fn, depth, px_error_angle);
+//            double tau = seed->computeVar(T_cur_from_ref, depth, options_.align_epslion);
             tau = tau + Config::pixelUnSigma();
             seed->update(1.0/depth, tau*tau);
 
@@ -607,7 +667,8 @@ bool LocalMapper::createFeatureFromSeed(const KeyFrame::Ptr &keyframe, const See
     // TODO add_observation 不用，需不需要找一下其他关键帧是否观测改点，增加约束
     // TODO 把这部分放入一个队列，在单独线程进行处理
     Feature::Ptr new_ft = seed->ft;
-    new_ft->mpt = MapPoint::create(new_ft->fn/seed->mu, keyframe);
+    Vector3d pose(new_ft->fn/seed->mu);
+    new_ft->mpt = MapPoint::create(keyframe->pose() * pose, keyframe);
     keyframe->addFeature(new_ft);
     map_->insertMapPoint(new_ft->mpt);
     new_ft->mpt->addObservation(keyframe, new_ft);
@@ -761,8 +822,8 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
 
     //! reject the seed whose epl is too long
     double epl_length = (px_near-px_far).norm();
-//    if(epl_length > options_.max_epl_length)
-//        return false;
+    if(epl_length > options_.max_epl_length)
+        return false;
 
     //! get warp patch
     Matrix2d A_cur_from_ref;

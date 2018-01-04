@@ -20,8 +20,8 @@ bool triangulate(const Matrix3d& R_cr,  const Vector3d& t_cr,
                     R_fn_r.dot(fn_c), -fn_c.dot(fn_c)};
     A[1] = -A[2];
     double det = A[0]*A[3] - A[1]*A[2];
-    if(std::abs(det) < 0.000001)
-        return false;
+   if(std::abs(det) < 0.000001)
+       return false;
 
     d_ref = std::abs((b[0]*A[3] - A[1]*b[1])/det);
     d_cur = std::abs((A[0]*b[1] - b[0]*A[2])/det);
@@ -67,8 +67,8 @@ depthFromTriangulationExact(
     const double b = f_c_in_r.dot(t_r_c);
     const double denom = (a*b - f_c_in_r.dot(f_c_in_r));
 
-    if(abs(denom) < 0.000001)
-        return false;
+   if(abs(denom) < 0.000001)
+       return false;
 
     depth_in_c = (b-a*t_r_c.dot(t_r_c)) / denom;
     depth_in_r = (t_r_c + f_c_in_r*depth_in_c).norm();
@@ -84,8 +84,8 @@ bool depthFromTriangulation(
 {
     Matrix<double,3,2> A; A << R_c_r * f_ref, f_cur;
     const Matrix2d AtA = A.transpose()*A;
-    if(AtA.determinant() < 0.000001)
-        return false;
+   if(AtA.determinant() < 0.000001)
+       return false;
     // d = - (ATA)^(-1) * AT * t
     const Vector2d depth2 = - AtA.inverse()*A.transpose()*t_c_r;
     depth = fabs(depth2[0]);
@@ -101,13 +101,17 @@ int main()
     K(1,2) = 240.0;
     Matrix3d Kinv = K.inverse();
 
-    Matrix3d R_cfr; R_cfr.setIdentity();
-    Vector3d t_cfr(0,0.3,0.3);
+    AngleAxisd angle(20.0, Vector3d(0,0,1));
+    Matrix3d R_cfr; R_cfr = angle.toRotationMatrix();
+    Vector3d t_cfr(0.,0.01,0.01);
 
     Matrix3d R_rfc = R_cfr.transpose();
     Vector3d t_rfc = -R_rfc*t_cfr;
 
-    const double depth_ref = 7.0;
+    std::cout << "R_c_r:\n" << R_cfr << "\n t_c_r:" << t_cfr.transpose() << std::endl;
+    std::cout << "R_r_c:\n" << R_rfc << "\n t_r_c:" << t_rfc.transpose() << std::endl;
+
+    const double depth_ref = 1.0;
     const Vector3d px_ref(200, 300, 1);
     const Vector3d fn_ref = Kinv * px_ref;
 

@@ -56,6 +56,7 @@ protected:
     Matrix<double, Dynamic, Num, RowMajor> jacbian_cache_;
     Matrix<double, Num, Num, RowMajor> Hessian_;
     Matrix<double, Num, 1> Jres_;
+    std::list<std::string> logs_;
 };
 
 

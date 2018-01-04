@@ -53,7 +53,7 @@ public:
     std::list<std::pair<double, double> > history;
 
     double computeTau(const SE3d &T_ref_cur, const Vector3d& f, const double z, const double px_error_angle);
-    double computeVar(const SE3d &T_cur_ref, const double d, const double delta);
+//    double computeVar(const SE3d &T_cur_ref, const double d, const double delta);
     void update(const double x, const double tau2);
     inline static Ptr create(const Feature::Ptr &ft, double depth_mean, double depth_min)
     {return std::make_shared<Seed>(Seed(ft, depth_mean, depth_min));}

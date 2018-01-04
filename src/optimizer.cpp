@@ -200,53 +200,35 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report
     reportInfo(problem, summary, report, verbose);
 }
 
-void Optimizer::structureRefinement(const Frame::Ptr &frame, int max_opt_pts, int max_iter, bool report, bool verbose)
+void Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool report, bool verbose)
 {
-    std::vector<Feature::Ptr> fts = frame->getFeatures();
-    std::deque<MapPoint::Ptr> mpts;
-    for(const Feature::Ptr &ft : fts)
-    {
-        if(ft->mpt == nullptr)
-            continue;
-
-        mpts.push_back(ft->mpt);
-    }
-
-    std::nth_element(mpts.begin(), mpts.begin()+max_opt_pts, mpts.end(), mptOptimizeOrder);
-    auto it_end = mpts.begin()+max_opt_pts;
-
-    double scale = Config::pixelUnSigma2() * 4;
+    mpt->optimal_pose_ = mpt->pose();
+    ceres::Problem problem;
+    double scale = Config::pixelUnSigma() * 2;
     ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
-    for(auto it = mpts.begin(); it != it_end ; ++it)
+
+    //! add obvers kf
+    const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+    for(const auto &obs_item : obs)
     {
-        const MapPoint::Ptr &mpt = *it;
-
-        ceres::Problem problem;
-        mpt->optimal_pose_ = mpt->pose();
-
-        //! add obvers kf
-        const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
-        for(const auto &obs_item : obs)
-        {
-            const KeyFrame::Ptr &kf = obs_item.first;
-            const Feature::Ptr &ft = obs_item.second;
-            ceres::CostFunction *cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn[0] / ft->fn[2], ft->fn[1] / ft->fn[2]);
-            problem.AddResidualBlock(cost_function, lossfunction, kf->Tcw().data(), mpt->optimal_pose_.data());
-            problem.SetParameterBlockConstant(kf->Tcw().data());
-        }
-
-        // TODO cur obs
-
-        ceres::Solver::Options options;
-        ceres::Solver::Summary summary;
-        options.linear_solver_type = ceres::DENSE_SCHUR;
-        options.minimizer_progress_to_stdout = report & verbose;
-        options.max_linear_solver_iterations = max_iter;
-
-        ceres::Solve(options, &problem, &summary);
-
-        mpt->setPose(mpt->optimal_pose_);
+        const KeyFrame::Ptr &kf = obs_item.first;
+        const Feature::Ptr &ft = obs_item.second;
+        kf->optimal_Tcw_ = kf->Tcw();
+        ceres::CostFunction *cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn[0] / ft->fn[2], ft->fn[1] / ft->fn[2]);
+        problem.AddResidualBlock(cost_function, lossfunction, kf->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+        problem.SetParameterBlockConstant(kf->optimal_Tcw_.data());
     }
+
+    ceres::Solver::Options options;
+    ceres::Solver::Summary summary;
+    options.linear_solver_type = ceres::DENSE_SCHUR;
+    options.minimizer_progress_to_stdout = report & verbose;
+    options.max_linear_solver_iterations = max_iter;
+
+    ceres::Solve(options, &problem, &summary);
+
+    mpt->setPose(mpt->optimal_pose_);
+    reportInfo(problem, summary, report, verbose);
 }
 
 Vector2d Optimizer::reprojectionError(const ceres::Problem& problem, ceres::ResidualBlockId id)

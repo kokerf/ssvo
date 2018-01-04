@@ -193,6 +193,9 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
     jacbian_cache_.col(2).setConstant(1);
 
     Hessian_ = jacbian_cache_.transpose() * jacbian_cache_;
+    if(Hessian_.determinant() < 1e-10)
+        return false;
+
     invHessian_ = Hessian_.inverse();
 
     Vector3d update;
@@ -221,9 +224,10 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
         update = invHessian_ * Jres_;
         estimate_.noalias() -= update;
 
-        LOG_IF(INFO, verbose_) << "iter:" << iter
-                               << " estimate: [" << estimate_[0] << ", " << estimate_[1] << ", " << estimate_[2]
-                               << "] res: " << residual.norm()/PatchArea;
+        using std::to_string;
+        std::string log = "iter:" + to_string(iter) + " res: " + to_string(residual.norm()/PatchArea) +
+                          " estimate: [" + to_string(estimate_[0]) + ", " + to_string(estimate_[1]) + ", " + to_string(estimate_[2]) + "]\n";
+        logs_.push_back(log);
 
         if(update.dot(update) < min_update_squared)
         {
@@ -231,6 +235,10 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
             break;
         }
     }
+
+    std::string output;
+    std::for_each(logs_.begin(), logs_.end(), [&](const std::string &s){output += s;});
+    LOG_IF(INFO, verbose_) << output;
 
     estimate = estimate_;
     return converged;

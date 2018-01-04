@@ -21,7 +21,7 @@ public:
 
     static void localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report=false, bool verbose=false);
 
-    static void structureRefinement(const Frame::Ptr &frame, int max_opt_pts, int max_iter, bool report=false, bool verbose=false);
+    static void refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool report=false, bool verbose=false);
 
     static Vector2d reprojectionError(const ceres::Problem &problem, ceres::ResidualBlockId id);
 

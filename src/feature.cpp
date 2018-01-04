@@ -5,9 +5,8 @@ namespace ssvo{
 
 //! Feature
 Feature::Feature(const Vector2d &px, const Vector3d &fn, const int level, const std::shared_ptr<MapPoint> &mpt):
-    px(px), fn(fn), level(level), type(STABLE), mpt(mpt)
+    px(px), fn(fn), level(level), mpt(mpt)
 {
-    if(mpt == nullptr) type = CANDIDATE;
 }
 
 //! Seed

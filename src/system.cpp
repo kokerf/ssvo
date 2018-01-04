@@ -188,7 +188,7 @@ bool System::changeReferenceKeyFrame()
         }
     }
 
-    bool c2 = false;//static_cast<double>(overlap) / reference_keyframe_->N() < 0.5;
+    bool c2 = static_cast<double>(overlap) / reference_keyframe_->N() < 0.5;
 
     //! create new keyFrame
     if(c1 || c2)
