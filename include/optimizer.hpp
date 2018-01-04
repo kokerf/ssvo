@@ -15,11 +15,13 @@ class Optimizer: public noncopyable
 {
 public:
 
-    static void twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, bool report=false, bool verbose=false);
+    static void twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame::Ptr &kf2, bool report=false, bool verbose=false);
 
-    static void motionOnlyBundleAdjustment(Frame::Ptr frame, bool report=false, bool verbose=false);
+    static void motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool report=false, bool verbose=false);
 
-    static void structureRefinement(Frame::Ptr &frame, int max_opt_pts, int max_iter, bool report=false, bool verbose=false);
+    static void localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report=false, bool verbose=false);
+
+    static void structureRefinement(const Frame::Ptr &frame, int max_opt_pts, int max_iter, bool report=false, bool verbose=false);
 
     static Vector2d reprojectionError(const ceres::Problem &problem, ceres::ResidualBlockId id);
 

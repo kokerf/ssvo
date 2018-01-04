@@ -74,15 +74,24 @@ void evalueErrors(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, double& error)
 
         double predicted_x1 = p1[0] / p1[2];
         double predicted_y1 = p1[1] / p1[2];
-        double dx1 = predicted_x1 - ft1->fn[0]/ft1->fn[2];
-        double dy1 = predicted_y1 - ft1->fn[1]/ft1->fn[2];
-        residuals[0] += dx1*dx1 + dy1*dy1;
+        double obversed_x1 = ft1->fn[0]/ft1->fn[2];
+        double obversed_y1 = ft1->fn[1]/ft1->fn[2];
+        double dx1 = predicted_x1 - obversed_x1;
+        double dy1 = predicted_y1 - obversed_y1;
+        double res1 = dx1*dx1 + dy1*dy1;
+        residuals[0] += res1;
 
         double predicted_x2 = p2[0] / p2[2];
         double predicted_y2 = p2[1] / p2[2];
-        double dx2 = predicted_x2 - ft2->fn[0]/ft2->fn[2];
-        double dy2 = predicted_y2 - ft2->fn[1]/ft2->fn[2];
-        residuals[1] += dx2*dx2 + dy2*dy2;
+        double obversed_x2 = ft2->fn[0]/ft2->fn[2];
+        double obversed_y2 = ft2->fn[1]/ft2->fn[2];
+        double dx2 = predicted_x2 - obversed_x2;
+        double dy2 = predicted_y2 - obversed_y2;
+        double res2 = dx2*dx2 + dy2*dy2;
+        residuals[1] += res2;
+//        std::cout << "[" << obversed_x1 << ", " << obversed_y1 << "]-[" << predicted_x1 <<", " << predicted_y1 <<"] "
+//                  << "[" << obversed_x2 << ", " << obversed_y2 << "]-[" << predicted_x2 <<", " << predicted_y2 <<"] "
+//                  << res1 << " " << res2 << " " << 0.5*(res1+res2) << std::endl;
     }
 
     error = 0.5*(residuals[0] + residuals[1]);

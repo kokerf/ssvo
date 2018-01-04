@@ -5,7 +5,7 @@
 namespace ssvo{
 
 
-void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, bool report, bool verbose)
+void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame::Ptr &kf2, bool report, bool verbose)
 {
     kf1->optimal_Tcw_ = kf1->Tcw();
     kf2->optimal_Tcw_ = kf2->Tcw();
@@ -60,7 +60,7 @@ void Optimizer::twoViewBundleAdjustment(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, bo
     reportInfo(problem, summary, report, verbose);
 }
 
-void Optimizer::motionOnlyBundleAdjustment(Frame::Ptr frame, bool report, bool verbose)
+void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool report, bool verbose)
 {
     frame->optimal_Tcw_ = frame->Tcw();
 
@@ -68,7 +68,7 @@ void Optimizer::motionOnlyBundleAdjustment(Frame::Ptr frame, bool report, bool v
     ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
     problem.AddParameterBlock(frame->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
 
-    double scale = Config::pixelUnSigma2() * 4;
+    double scale = Config::pixelUnSigma() * 2;
     ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
 
     std::vector<Feature::Ptr> fts = frame->getFeatures();
@@ -112,7 +112,95 @@ bool mptOptimizeOrder(const MapPoint::Ptr &mpt1, const MapPoint::Ptr &mpt2)
     return false;
 }
 
-void Optimizer::structureRefinement(Frame::Ptr &frame, int max_opt_pts, int max_iter, bool report, bool verbose)
+void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report, bool verbose)
+{
+
+    std::set<KeyFrame::Ptr> local_keyframes = keyframe->getConnectedKeyFrames();
+    local_keyframes.insert(keyframe);
+    std::unordered_set<MapPoint::Ptr> local_mapoints;
+    std::list<KeyFrame::Ptr> fixed_keyframe;
+
+    for(const KeyFrame::Ptr &kf : local_keyframes)
+    {
+        MapPoints mpts = kf->getMapPoints();
+        for(const MapPoint::Ptr &mpt : mpts)
+        {
+            local_mapoints.insert(mpt);
+        }
+    }
+
+    for(const MapPoint::Ptr &mpt : local_mapoints)
+    {
+        std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+        for(const auto item : obs)
+        {
+            if(local_keyframes.count(item.first))
+                continue;
+
+            fixed_keyframe.push_back(item.first);
+        }
+    }
+
+    ceres::Problem problem;
+    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
+
+    for(const KeyFrame::Ptr &kf : fixed_keyframe)
+    {
+        kf->optimal_Tcw_ = kf->Tcw();
+        problem.AddParameterBlock(kf->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
+        problem.SetParameterBlockConstant(kf->optimal_Tcw_.data());
+    }
+
+    for(const KeyFrame::Ptr &kf : local_keyframes)
+    {
+        kf->optimal_Tcw_ = kf->Tcw();
+        problem.AddParameterBlock(kf->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
+        if(kf->id_ == 0)
+            problem.SetParameterBlockConstant(kf->optimal_Tcw_.data());
+    }
+
+    double scale = Config::pixelUnSigma() * 2;
+    ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
+    for(const MapPoint::Ptr &mpt : local_mapoints)
+    {
+        mpt->optimal_pose_ = mpt->pose();
+        std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+
+        for(const auto &item : obs)
+        {
+            const KeyFrame::Ptr &kf = item.first;
+            const Feature::Ptr &ft = item.second;
+            ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft->fn[0]/ft->fn[2], ft->fn[1]/ft->fn[2]);
+            problem.AddResidualBlock(cost_function1, lossfunction, kf->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+        }
+    }
+
+
+    ceres::Solver::Options options;
+    ceres::Solver::Summary summary;
+    options.linear_solver_type = ceres::DENSE_SCHUR;
+    options.minimizer_progress_to_stdout = report & verbose;
+
+
+    ceres::Solve(options, &problem, &summary);
+
+    //! update pose
+    for(const KeyFrame::Ptr &kf : local_keyframes)
+    {
+        kf->setTcw(kf->optimal_Tcw_);
+    }
+
+    //! update mpts & remove mappoint with large error
+    for(const MapPoint::Ptr &mpt : local_mapoints)
+    {
+        mpt->setPose(mpt->optimal_pose_);
+    }
+
+    //! Report
+    reportInfo(problem, summary, report, verbose);
+}
+
+void Optimizer::structureRefinement(const Frame::Ptr &frame, int max_opt_pts, int max_iter, bool report, bool verbose)
 {
     std::vector<Feature::Ptr> fts = frame->getFeatures();
     std::deque<MapPoint::Ptr> mpts;
