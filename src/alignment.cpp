@@ -2,8 +2,10 @@
 #include "alignment.hpp"
 #include "optimizer.hpp"
 
-
 namespace ssvo{
+
+template<>
+const Pattern<49, 13> AlignPattern<13, 49, 3>::pattern_(pattern5);
 
 //
 // Align SE3
@@ -180,6 +182,7 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
                    const int max_iterations,
                    const double epslion)
 {
+    logs_.clear();
     const double min_update_squared = epslion*epslion;
     bool converged = false;
     estimate_ = estimate;
@@ -227,6 +230,77 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
         using std::to_string;
         std::string log = "iter:" + to_string(iter) + " res: " + to_string(residual.norm()/PatchArea) +
                           " estimate: [" + to_string(estimate_[0]) + ", " + to_string(estimate_[1]) + ", " + to_string(estimate_[2]) + "]\n";
+        logs_.push_back(log);
+
+        if(update.dot(update) < min_update_squared)
+        {
+            converged = true;
+            break;
+        }
+    }
+
+    std::string output;
+    std::for_each(logs_.begin(), logs_.end(), [&](const std::string &s){output += s;});
+    LOG_IF(INFO, verbose_) << output;
+
+    estimate = estimate_;
+    return converged;
+}
+
+//! Align patch
+bool AlignP2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
+                    const Matrix<double, PatternNum, 3> &patch_idxy,
+                    Matrix<double, ParaNum, 1> &estimate,
+                    const int max_iterations,
+                    const double epslion)
+{
+    logs_.clear();
+    const double min_update_squared = epslion*epslion;
+    bool converged = false;
+    estimate_ = estimate;
+
+    Matrix<double, PatternNum, 1> patch_ref = patch_idxy.leftCols<1>();
+    //! get jacobian
+    jacbian_cache_.leftCols<2>()= patch_idxy.rightCols<2>();
+    jacbian_cache_.col(2).setConstant(1);
+
+    Hessian_ = jacbian_cache_.transpose() * jacbian_cache_;
+    if(Hessian_.determinant() < 1e-10)
+        return false;
+
+    invHessian_ = Hessian_.inverse();
+
+    Vector3d update;
+
+    for(int iter = 0; iter < max_iterations; iter++)
+    {
+        const double u = estimate_[0];
+        const double v = estimate_[1];
+        const double idiff = estimate_[2];
+
+        if(u < border_ || v < border_ || u + border_ >= image.cols() - 1 || v + border_ >= image.rows() - 1)
+        {
+            LOG_IF(INFO, verbose_) << "WARNING! The estimate pixel location is out of the scope!";
+            return false;
+        }
+
+        // compute interpolation weights
+        Matrix<double, PatchSize, PatchSize, RowMajor> patch_cur;
+        Matrix<double, PatternNum, 1> residual;
+        utils::interpolateMat<uchar, double, PatchSize>(image, patch_cur, u, v);
+        pattern_.getPattern(patch_cur, residual);
+        residual.noalias() -= patch_ref;
+        residual.array() += idiff;
+
+        Jres_ = jacbian_cache_.transpose() * residual;
+
+        //! update
+        update = invHessian_ * Jres_;
+        estimate_.noalias() -= update;
+
+        using std::to_string;
+        std::string log = "iter:" + to_string(iter) + " res: " + to_string(residual.norm()/PatternNum) +
+            " estimate: [" + to_string(estimate_[0]) + ", " + to_string(estimate_[1]) + ", " + to_string(estimate_[2]) + "]\n";
         logs_.push_back(log);
 
         if(update.dot(update) < min_update_squared)

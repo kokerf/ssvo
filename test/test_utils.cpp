@@ -38,11 +38,11 @@ inline void interpolateMat2(cv::Mat &ref_img, cv::Mat& ref_patch,
             //std::cout << "ref: " << (int)ref_img_ptr[0] << " "<< (int)ref_img_ptr[1] << " " << (int)ref_img_ptr[stride] << " " << (int)ref_img_ptr[stride+1] << std::endl;
             *ref_patch_ptr = w_tl * ref_img_ptr[0] + w_tr * ref_img_ptr[1] + w_bl * ref_img_ptr[stride] + w_br * ref_img_ptr[stride+1];
 
-            *ref_dx_ptr = ((w_tl * ref_img_ptr[1] + w_tr * ref_img_ptr[2] + w_bl * ref_img_ptr[stride+1] + w_br * ref_img_ptr[stride+2]) -
-                (w_tl * ref_img_ptr[-1] + w_tr * ref_img_ptr[0] + w_bl * ref_img_ptr[stride-1] + w_br * ref_img_ptr[stride])) * 0.5;
-
-            *ref_dy_ptr = ((w_tl * ref_img_ptr[stride] + w_tr * ref_img_ptr[1+stride] + w_bl * ref_img_ptr[stride*2] + w_br * ref_img_ptr[1+(stride*2)]) -
-                (w_tl * ref_img_ptr[-stride] + w_tr * ref_img_ptr[1-stride] + w_bl * ref_img_ptr[0] + w_br * ref_img_ptr[1])) * 0.5;
+//            *ref_dx_ptr = ((w_tl * ref_img_ptr[1] + w_tr * ref_img_ptr[2] + w_bl * ref_img_ptr[stride+1] + w_br * ref_img_ptr[stride+2]) -
+//                (w_tl * ref_img_ptr[-1] + w_tr * ref_img_ptr[0] + w_bl * ref_img_ptr[stride-1] + w_br * ref_img_ptr[stride])) * 0.5;
+//
+//            *ref_dy_ptr = ((w_tl * ref_img_ptr[stride] + w_tr * ref_img_ptr[1+stride] + w_bl * ref_img_ptr[stride*2] + w_br * ref_img_ptr[1+(stride*2)]) -
+//                (w_tl * ref_img_ptr[-stride] + w_tr * ref_img_ptr[1-stride] + w_bl * ref_img_ptr[0] + w_br * ref_img_ptr[1])) * 0.5;
 
         }
     }
@@ -125,21 +125,21 @@ inline void interpolateMat_array(const cv::Mat &src,
 int main(int argc, char const *argv[])
 {
     cv::RNG rnger(cv::getTickCount());
-    cv::Mat cv_mat = cv::Mat(100,100,CV_32FC1);
+    cv::Mat cv_mat = cv::Mat(100,100,CV_8UC1);
     rnger.fill(cv_mat, cv::RNG::UNIFORM, cv::Scalar::all(0), cv::Scalar::all(256));
 
     cv::imshow("random image", cv_mat);
 
-    Matrix<float , Dynamic, Dynamic, RowMajor> eigen_mat = Map<Matrix<float, Dynamic, Dynamic, RowMajor> >((float*)cv_mat.data, cv_mat.rows, cv_mat.cols);
+    Matrix<uchar , Dynamic, Dynamic, RowMajor> eigen_mat = Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> >((uchar*)cv_mat.data, cv_mat.rows, cv_mat.cols);
 
-    const int size = 20;
-    Matrix<float, size, size, RowMajor> img;
-    Matrix<float, size, size, RowMajor> dx;
-    Matrix<float, size, size, RowMajor> dy;
+    const int size = 8;
+    Matrix<double, size, size, RowMajor> img;
+    Matrix<double, size, size, RowMajor> dx;
+    Matrix<double, size, size, RowMajor> dy;
 
-    Matrix<float, size*size, 1> img_v;
-    Matrix<float, size*size, 1> dx_v;
-    Matrix<float, size*size, 1> dy_v;
+    Matrix<double, size*size, 1> img_v;
+    Matrix<double, size*size, 1> dx_v;
+    Matrix<double, size*size, 1> dy_v;
 
     cv::Mat cv_img, cv_dx, cv_dy;
     cv::Mat cv_img1;
@@ -158,27 +158,27 @@ int main(int argc, char const *argv[])
     std::cout << "eigen Mat dx:\n" << dx << std::endl;
     std::cout << "eigen Mat dy:\n" << dy << std::endl;
 
-    utils::interpolateMat<float, float, size>(eigen_mat, img_v, dx_v, dy_v, x, y);
+    utils::interpolateMat<uchar, double, size>(eigen_mat, img_v, dx_v, dy_v, x, y);
     std::cout << "eigen Vec:\n" << img_v.transpose() << std::endl;
     std::cout << "eigen Vec dx:\n" << dx_v.transpose() << std::endl;
     std::cout << "eigen Vec dy:\n" << dy_v.transpose() << std::endl;
 
-    interpolateMat2<float, size>(cv_mat, cv_img, cv_dx, cv_dy, x, y);
+    interpolateMat2<uchar, size>(cv_mat, cv_img, cv_dx, cv_dy, x, y);
     std::cout << "cv Mat:\n" << cv_img << std::endl;
     std::cout << "cv Mat dx:\n" << cv_dx << std::endl;
     std::cout << "cv Mat dy:\n" << cv_dy << std::endl;
 
-    interpolateMat_pixel<float, size>(cv_mat, cv_img1, x, y);
+    interpolateMat_pixel<uchar, size>(cv_mat, cv_img1, x, y);
     std::cout << "cv Mat pixel:\n" << cv_img1 << std::endl;
 
     img.setZero();
-    utils::interpolateMat<float, float, size>(eigen_mat, img, x, y);
+    utils::interpolateMat<uchar, double, size>(eigen_mat, img, x, y);
     std::cout << "eigen Mat:\n" << img << std::endl;
 
     img.setZero();
     dx.setZero();
     dy.setZero();
-    interpolateMat_array<float, float, size>(cv_mat, img, dx, dy, x, y);
+    interpolateMat_array<uchar, double, size>(cv_mat, img, dx, dy, x, y);
     std::cout << "eigen Mat:\n" << img << std::endl;
     std::cout << "eigen Mat dx:\n" << dx << std::endl;
     std::cout << "eigen Mat dy:\n" << dy << std::endl;
@@ -193,27 +193,27 @@ int main(int argc, char const *argv[])
 
     double t1 = (double)cv::getTickCount();
     for(size_t i = 0; i < N; i++) {
-        utils::interpolateMat<float, float, size>(eigen_mat, img_v, dx_v, dy_v, x, y);
+        utils::interpolateMat<uchar, double, size>(eigen_mat, img_v, dx_v, dy_v, x, y);
     }
 
     double t2 = (double)cv::getTickCount();
     for(size_t i = 0; i < N; i++) {
-        interpolateMat2<float, size>(cv_mat, cv_img, cv_dx, cv_dy, x, y);
+        interpolateMat2<uchar, size>(cv_mat, cv_img, cv_dx, cv_dy, x, y);
     }
 
     double t3 = (double)cv::getTickCount();
     for(size_t i = 0; i < N; i++) {
-        interpolateMat_pixel<float, size>(cv_mat, cv_img1, x, y);
+        interpolateMat_pixel<uchar, size>(cv_mat, cv_img1, x, y);
     }
 
     double t4 = (double)cv::getTickCount();
     for(size_t i = 0; i < N; i++) {
-        utils::interpolateMat<float, float, size>(eigen_mat, img, x, y);
+        utils::interpolateMat<uchar, double, size>(eigen_mat, img, x, y);
     }
 
     double t5 = (double)cv::getTickCount();
     for(size_t i = 0; i < N; i++) {
-        interpolateMat_array<float, float, size>(cv_mat, img, dx, dy, x, y);
+        interpolateMat_array<uchar, double, size>(cv_mat, img, dx, dy, x, y);
     }
 
     double t6 = (double)cv::getTickCount();

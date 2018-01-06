@@ -8,30 +8,6 @@ namespace ssvo {
 
 namespace utils {
 
-inline int createPyramid(const cv::Mat &img,
-                         ImgPyr &img_pyr,
-                         const int nlevels = 4,
-                         const cv::Size min_size = cv::Size(40, 40))
-{
-    assert(!img.empty());
-
-    img_pyr.resize(nlevels);
-    img.copyTo(img_pyr[0]);
-
-    for (int i = 1; i < nlevels; ++i) {
-        cv::Size size(round(img_pyr[i - 1].cols >> 1), round(img_pyr[i - 1].rows >> 1));
-
-        if (size.height < min_size.height || size.width < min_size.width) {
-            img_pyr.resize(i);
-            return i;
-        }
-
-        cv::resize(img_pyr[i - 1], img_pyr[i], size, 0, 0, cv::INTER_LINEAR);
-    }
-
-    return nlevels;
-}
-
 template<typename Ts, typename Td, int Size>
 inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src,
                            Matrix<Td, Size, Size, RowMajor> &img,
@@ -140,7 +116,7 @@ inline Td interpolateMat(const cv::Mat& mat, const double u, const double v)
 }
 
 template<class T>
-T getMedian(std::vector<T> &data_vec)
+inline T getMedian(std::vector<T> &data_vec)
 {
     assert(!data_vec.empty());
     typename std::vector<T>::iterator it = data_vec.begin()+floor(data_vec.size()/2);
@@ -149,7 +125,7 @@ T getMedian(std::vector<T> &data_vec)
 }
 
 template <typename T>
-double normal_distribution(T x, T mu, T sigma)
+inline double normal_distribution(T x, T mu, T sigma)
 {
     static const double inv_sqrt_2pi = 0.3989422804014327f;
     double a = (x - mu) / sigma;
@@ -158,7 +134,7 @@ double normal_distribution(T x, T mu, T sigma)
 }
 
 template <typename T>
-void reduceVecor(std::vector<T>& vecs, const std::vector<bool>& inliers)
+inline void reduceVecor(std::vector<T>& vecs, const std::vector<bool>& inliers)
 {
     size_t size = inliers.size();
     assert(size == vecs.size());
@@ -177,6 +153,13 @@ void reduceVecor(std::vector<T>& vecs, const std::vector<bool>& inliers)
         idx++;
         vecs_iter++;
     }
+}
+
+inline double reprojectError(const Vector2d &fn, const SE3d &Tcw, const Vector3d &pw)
+{
+    Vector3d xyz_cur(Tcw*pw);
+    Vector2d resdual = fn - xyz_cur.head<2>()/xyz_cur[2];
+    return resdual.squaredNorm();
 }
 
 //! functions not using  template

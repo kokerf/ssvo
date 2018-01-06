@@ -6,39 +6,9 @@
 #include "keyframe.hpp"
 #include "frame.hpp"
 #include "utils.hpp"
+#include "pattern.hpp"
 
 namespace ssvo {
-
-template <int T>
-struct Pattern
-{
-    enum{Size = T};
-    const std::array<std::array<int, 2>, T> data;
-
-    inline std::array<int, T> make_index(int stride)
-    {
-        std::array<int, T> index;
-        for(int i=0; i < T; i++){ index[i] = data[i][0] + stride*data[i][1];}
-        return index;
-    };
-};
-
-const Pattern<16> pattern{
-    {{
-         {0, -3}, {1, -3}, {2, -2}, {3, -1},
-         {3, 0}, {3, 1}, {2, 2}, {1, 3},
-         {0, 3}, {-1, 3}, {-2, 2}, {-3, 1},
-         {-3, 0}, {-3, -1}, {-2, -2}, {-1, -3}
-     }}
-};
-
-const Pattern<8> pattern1{
-    {{
-        {0, -3}, { 2, -2}, { 3, 0}, { 2,  2},
-        {0,  3}, {-2,  2}, {-3, 0}, {-2, -2},
-    }}
-};
-
 
 template <int Size, int Num>
 class Align{
@@ -51,12 +21,13 @@ public:
         Parameters = Num,
     };
 
+    std::list<std::string> logs_;
+
 protected:
     Matrix<double, Dynamic, PatchArea, RowMajor> ref_patch_cache_;
     Matrix<double, Dynamic, Num, RowMajor> jacbian_cache_;
     Matrix<double, Num, Num, RowMajor> Hessian_;
     Matrix<double, Num, 1> Jres_;
-    std::list<std::string> logs_;
 };
 
 
@@ -111,6 +82,49 @@ private:
     Matrix<double, Parameters, Parameters, RowMajor> invHessian_;
     Vector3d estimate_;
 };
+
+//! ====================== Pattern align
+template <int Size, int NumPn, int NumPr>
+class AlignPattern
+{
+public:
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+    enum {
+        PatternNum = NumPn,
+        PatchSize = Size+2, //! patch size with border
+        HalfPatchSize = PatchSize/2,
+        ParaNum = NumPr,
+    };
+
+    static const Pattern<NumPn, Size> pattern_;
+    std::list<std::string> logs_;
+
+protected:
+    Matrix<double, NumPn, NumPr, RowMajor> jacbian_cache_;
+    Matrix<double, NumPr, NumPr, RowMajor> Hessian_;
+    Matrix<double, NumPr, NumPr, RowMajor> invHessian_;
+    Matrix<double, NumPr, 1> Jres_;
+    Matrix<double, NumPr, 1> estimate_;
+};
+
+
+class AlignP2DI : public AlignPattern<13, 49, 3>
+{
+public:
+
+    AlignP2DI(bool verbose=false) : verbose_(verbose) {}
+
+    bool run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
+             const Matrix<double, PatternNum, 3> &patch_idxy,
+             Matrix<double, ParaNum, 1> &estimate, const int max_iterations = 30, const double epslion = 1E-2f);
+
+private:
+
+    const bool verbose_;
+    const int border_ = HalfPatchSize;
+
+};
+
 
 template <typename T, int Size>
 class ZSSD{

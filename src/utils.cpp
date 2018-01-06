@@ -20,18 +20,22 @@ void kltTrack(const ImgPyr &imgs_ref, const ImgPyr &imgs_cur, const cv::Size win
     std::vector<cv::Point2f> pts_cur_tracked;
     std::vector<int> inlier_ids;
 
-    if(status.empty()) {
+    if(status.empty())
+    {
         pts_ref_to_track = pts_ref;
         pts_cur_tracked = pts_cur;
         inlier_ids.resize(total_size);
         for(size_t i = 0; i < total_size; ++i)
             inlier_ids[i] = i;
-    } else {
+    }
+    else
+    {
         assert(status.size() == total_size);
         pts_ref_to_track.reserve(total_size);
         pts_cur_tracked.reserve(total_size);
         inlier_ids.reserve(total_size);
-        for(size_t i = 0; i < total_size; ++i) {
+        for(size_t i = 0; i < total_size; ++i)
+        {
             if(!status[i])
                 continue;
 
@@ -56,9 +60,12 @@ void kltTrack(const ImgPyr &imgs_ref, const ImgPyr &imgs_cur, const cv::Size win
     for(int i = 0; i < track_size; ++i) {
         const cv::Point2f &pt = pts_cur_tracked[i];
         const int idx = inlier_ids[i];
-        if(!status_forward[i] || pt.x < x_min || pt.y < y_min || pt.x > x_max || pt.y > y_max) {
+        if(!status_forward[i] || pt.x < x_min || pt.y < y_min || pt.x > x_max || pt.y > y_max)
+        {
             pts_cur[idx] = cv::Point2f(0, 0);
-        } else {
+        }
+        else
+        {
             pts_cur[idx] = pt;
             status[idx] = true;
         }
@@ -74,7 +81,8 @@ void kltTrack(const ImgPyr &imgs_ref, const ImgPyr &imgs_cur, const cv::Size win
     inlier_ids.reserve(track_size);
     pts_cur_to_track.reserve(track_size);
     pts_ref_tracked.reserve(track_size);
-    for(size_t i = 0; i < total_size; ++i) {
+    for(size_t i = 0; i < total_size; ++i)
+    {
         if(!status[i])
             continue;
 
@@ -95,12 +103,14 @@ void kltTrack(const ImgPyr &imgs_ref, const ImgPyr &imgs_cur, const cv::Size win
 
     int out = 0;
     const int N1 = inlier_ids.size();
-    for(int i = 0; i < N1; ++i) {
+    for(int i = 0; i < N1; ++i)
+    {
         const int idx = inlier_ids[i];
         const cv::Point2f &pt_real = pts_ref[idx];
         const cv::Point2f &pt_estm = pts_ref_tracked[i];
         const cv::Point2f delta = pt_real - pt_estm;
-        if(!status_back[i] || (delta.x * delta.x + delta.y * delta.y) > 2.0) {
+        if(!status_back[i] || (delta.x * delta.x + delta.y * delta.y) > 2.0)
+        {
             status[idx] = false;
             pts_cur[idx] = cv::Point2f(0, 0);
             out++;
@@ -168,7 +178,6 @@ void Fundamental::run8point(const std::vector<cv::Point2d>& fts_prev, const std:
     if(fabs(F22) > std::numeric_limits<double>::epsilon())
         F /= F22;
 }
-
 
 int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, Matrix3d& F,
                            std::vector<bool> &inliers, const double sigma2, const int max_iterations, const bool bE)

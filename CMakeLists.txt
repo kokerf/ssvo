@@ -142,6 +142,9 @@ target_link_libraries(test_alignment_2d  ${LINK_LIBS})
 add_executable(test_triangulation test/test_triangulation.cpp)
 target_link_libraries(test_triangulation  ${LINK_LIBS})
 
+add_executable(test_pattern test/test_parttern.cpp ${SOURCEFILES})
+target_link_libraries(test_pattern  ${LINK_LIBS})
+
 ## -----------------------
 ## Build VO
 ## -----------------------

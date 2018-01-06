@@ -23,7 +23,7 @@ int main(int argc, char *argv[])
 
     std::vector<cv::Point2f> corners;
     cv::goodFeaturesToTrack(gray, corners, 30, 0.1, 5);
-    LOG_ASSERT(!gray.empty()) << "No corners detected!";
+    LOG_ASSERT(!corners.empty()) << "No corners detected!";
 
     cv::Mat show = rgb.clone();
     for(size_t i = 0; i < corners.size(); i++)
