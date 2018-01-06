@@ -23,10 +23,52 @@ void MapPoint::resetType(MapPoint::Type type)
     type_ = type;
 }
 
-void MapPoint::addObservation(const KeyFrame::Ptr kf, const Feature::Ptr ft)
+void MapPoint::setBad()
 {
-    obs_.insert(std::make_pair(kf, ft));
+    type_ = BAD;
+}
+
+void MapPoint::addObservation(const KeyFrame::Ptr &kf, const Feature::Ptr &ft)
+{
+    obs_.emplace(kf, ft);
     n_obs_++;
+}
+
+bool MapPoint::removeObservation(const KeyFramePtr &kf)
+{
+    Feature::Ptr ft = obs_[kf];
+    if(ft != nullptr)
+    {
+        kf->removeFeature(ft);
+        obs_.erase(kf);
+        if(obs_.empty())
+        {
+            setBad();
+            return true;
+        }
+        else if(kf == refKF_)
+        {
+            updateRefKF();
+        }
+
+        updateViewAndDepth();
+        return true;
+    }
+
+    return false;
+}
+
+void MapPoint::updateRefKF()
+{
+    uint64_t min_id = std::numeric_limits<uint64_t>::max();
+    for(const auto &item : obs_)
+    {
+        if(item.first->id_ < min_id)
+        {
+            min_id = item.first->id_;
+            refKF_ = item.first;
+        }
+    }
 }
 
 std::map<KeyFrame::Ptr, Feature::Ptr> MapPoint::getObservations()
@@ -36,11 +78,7 @@ std::map<KeyFrame::Ptr, Feature::Ptr> MapPoint::getObservations()
 
 Feature::Ptr MapPoint::findObservation(const KeyFrame::Ptr kf)
 {
-    auto it = obs_.find(kf);
-    if(it == obs_.end())
-        return nullptr;
-    else
-        return it->second;
+    return obs_[kf];
 }
 
 void MapPoint::updateViewAndDepth()

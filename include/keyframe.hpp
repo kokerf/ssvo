@@ -19,7 +19,7 @@ public:
 
     MapPoints getMapPoints();
 
-    std::set<KeyFrame::Ptr> getConnectedKeyFrames(const int num=-1);
+    std::set<KeyFrame::Ptr> getConnectedKeyFrames(int num=-1);
 
     const ImgPyr opticalImages() const = delete;    //! disable this function
 

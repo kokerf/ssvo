@@ -8,6 +8,7 @@ namespace ssvo{
 Feature::Feature(const Vector2d &px, const Vector3d &fn, const int level, const std::shared_ptr<MapPoint> &mpt):
     px(px), fn(fn), level(level), mpt(mpt)
 {
+    assert(fn[2] == 1);
 }
 
 //! Seed
@@ -18,7 +19,9 @@ Seed::Seed(const KeyFrame::Ptr &kf, const Vector2d &px, const Vector3d &fn, cons
     mu(1.0/depth_mean),
     z_range(1.0/depth_min),
     sigma2(z_range*z_range/36)
-{}
+{
+    assert(fn_ref[2] == 1);
+}
 
 double Seed::computeTau(
     const SE3d& T_ref_cur,

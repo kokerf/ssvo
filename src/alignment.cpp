@@ -21,11 +21,12 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
                    int max_iterations,
                    double epslion)
 {
+    logs_.clear();
     double epslion_squared = epslion*epslion;
     ref_frame_ = reference_frame;
     cur_frame_ = current_frame;
 
-    const size_t N = ref_frame_->features().size();
+    const size_t N = ref_frame_->N();
     LOG_ASSERT(N != 0) << " AlignSE3: Frame(" << reference_frame->id_ << ") "<< " no features to track!" ;
 
     ref_feature_cache_.resize(NoChange, N);
@@ -57,8 +58,9 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
             SE3d::Tangent se3 = Hessian_.ldlt().solve(Jres_);
             T_cur_from_ref_ = T_cur_from_ref_ * SE3d::exp(-se3);
 
-            LOG_IF(INFO, verbose_) << "Level: " << l << " Residual: " << res << " step: " << se3.dot(se3)
-                                   << " SE3: [" << T_cur_from_ref_.log().transpose() << "]";
+            using std::to_string;
+            std::string log = "Level: " + to_string(l) + " iter:" + to_string(i) + " res: " + to_string(res) + " step: " + to_string(se3.dot(se3));
+            logs_.push_back(log);
 
             //! termination
             if(se3.dot(se3) < epslion_squared)
@@ -67,7 +69,13 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
     }
 
     cur_frame_->setTcw(T_cur_from_ref_*ref_frame_->Tcw());
-    LOG_IF(INFO, verbose_) << "T_cur_from_ref:\n " << T_cur_from_ref_.matrix3x4();
+    if(verbose_)
+    {
+        std::string output;
+        std::for_each(logs_.begin(), logs_.end(), [&](const std::string &s) { output += s; });
+        LOG(INFO) << output;
+        LOG(INFO) << "T_cur_from_ref:\n " << T_cur_from_ref_.matrix3x4();
+    }
 
     return true;
 }
@@ -239,9 +247,12 @@ bool Align2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
         }
     }
 
-    std::string output;
-    std::for_each(logs_.begin(), logs_.end(), [&](const std::string &s){output += s;});
-    LOG_IF(INFO, verbose_) << output;
+    if(verbose_)
+    {
+        std::string output;
+        std::for_each(logs_.begin(), logs_.end(), [&](const std::string &s) { output += s; });
+        LOG(INFO) << output;
+    }
 
     estimate = estimate_;
     return converged;
@@ -310,9 +321,12 @@ bool AlignP2DI::run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
         }
     }
 
-    std::string output;
-    std::for_each(logs_.begin(), logs_.end(), [&](const std::string &s){output += s;});
-    LOG_IF(INFO, verbose_) << output;
+    if(verbose_)
+    {
+        std::string output;
+        std::for_each(logs_.begin(), logs_.end(), [&](const std::string &s) { output += s; });
+        LOG(INFO) << output;
+    }
 
     estimate = estimate_;
     return converged;

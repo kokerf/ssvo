@@ -376,8 +376,8 @@ void Initializer::createInitalMap(std::vector<Vector3d> &points, double map_scal
         points.emplace_back(p3ds_[i]*scale);
 
         LOG_ASSERT(cand_cur_->level[i] >= 0) << "Error in level, index:" << i;
-        Feature::Ptr feature_ref = Feature::create(px_ref, ft_ref.normalized(), cand_cur_->level[i], nullptr);
-        Feature::Ptr feature_cur = Feature::create(px_cur, ft_cur.normalized(), cand_cur_->level[i], nullptr);
+        Feature::Ptr feature_ref = Feature::create(px_ref, ft_ref, cand_cur_->level[i], nullptr);
+        Feature::Ptr feature_cur = Feature::create(px_cur, ft_cur, cand_cur_->level[i], nullptr);
 
         cand_ref_->frame->addFeature(feature_ref);
         cand_cur_->frame->addFeature(feature_cur);

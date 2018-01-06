@@ -36,7 +36,7 @@ void KeyFrame::updateConnections()
         }
     }
 
-    LOG_ASSERT(!connection_counter.empty()) << "No connections find in KF: " << id_;
+    LOG_ASSERT(!connection_counter.empty()) << " No connections find in KF: " << id_;
 
     // TODO how to select proper connections
     int connection_threshold = Config::minConnectionObservations();
@@ -78,10 +78,10 @@ void KeyFrame::updateConnections()
     orderedConnectedKeyFrames_ = std::multimap<int, KeyFrame::Ptr>(weight_connections.begin(), weight_connections.end());
 }
 
-std::set<KeyFrame::Ptr> KeyFrame::getConnectedKeyFrames(const int num)
+std::set<KeyFrame::Ptr> KeyFrame::getConnectedKeyFrames(int num)
 {
     std::set<KeyFrame::Ptr> kfs;
-    if(num == -1) num == orderedConnectedKeyFrames_.size();
+    if(num == -1) num = orderedConnectedKeyFrames_.size();
     int count = 0;
     for(const auto ordered_keyframe : orderedConnectedKeyFrames_)
     {

@@ -47,7 +47,8 @@ private:
 
     float map_point_size;
     float key_frame_size;
-    float key_frame_line_size;
+    float key_frame_line_width;
+    float key_frame_graph_line_width;
 
 };
 

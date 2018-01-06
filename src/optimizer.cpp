@@ -1,6 +1,7 @@
 #include <iomanip>
 #include "optimizer.hpp"
 #include "config.hpp"
+#include "utils.hpp"
 
 namespace ssvo{
 
@@ -155,7 +156,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report
     {
         kf->optimal_Tcw_ = kf->Tcw();
         problem.AddParameterBlock(kf->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
-        if(kf->id_ == 0)
+        if(kf->id_ <= 1)
             problem.SetParameterBlockConstant(kf->optimal_Tcw_.data());
     }
 
@@ -181,7 +182,6 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report
     options.linear_solver_type = ceres::DENSE_SCHUR;
     options.minimizer_progress_to_stdout = report & verbose;
 
-
     ceres::Solve(options, &problem, &summary);
 
     //! update pose
@@ -191,12 +191,28 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report
     }
 
     //! update mpts & remove mappoint with large error
+    int n = 0;
+    double max_residual = Config::pixelUnSigma2() * 2;
     for(const MapPoint::Ptr &mpt : local_mapoints)
     {
+        std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+        for(const auto &item : obs)
+        {
+            double residual = utils::reprojectError(item.second->fn.head<2>(), item.first->Tcw(), mpt->optimal_pose_);
+            if(residual < max_residual)
+                continue;
+
+            mpt->removeObservation(item.first);
+            n++;
+        }
+
         mpt->setPose(mpt->optimal_pose_);
     }
 
     //! Report
+    LOG_IF(INFO, report) << "[Optimizer] KFs: " << local_keyframes.size()
+                         << "  Mpts: " << local_mapoints.size()
+                         << " Remove " << n << " outlier in loacl ba.";
     reportInfo(problem, summary, report, verbose);
 }
 

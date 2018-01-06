@@ -120,16 +120,28 @@ Features Frame::features()
     return fts_;
 }
 
+size_t Frame::N()
+{
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+    return fts_.size();
+}
+
 std::vector<Feature::Ptr> Frame::getFeatures()
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
     return std::vector<Feature::Ptr>(fts_.begin(), fts_.end());
 }
 
-void Frame::addFeature(const Feature::Ptr ft)
+void Frame::addFeature(const Feature::Ptr &ft)
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
     fts_.push_back(ft);
+}
+
+void Frame::removeFeature(const Feature::Ptr &ft)
+{
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+    fts_.remove(ft);
 }
 
 bool Frame::getSceneDepth(double &depth_mean, double &depth_min)

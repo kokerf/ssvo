@@ -28,11 +28,15 @@ public:
 
     Type type();
 
+    void setBad();
+
     void resetType(Type type);
 
-    void addObservation(const KeyFramePtr kf, const Feature::Ptr ft);
+    void addObservation(const KeyFramePtr &kf, const Feature::Ptr &ft);
 
     std::map<KeyFramePtr, Feature::Ptr> getObservations();
+
+    bool removeObservation(const KeyFramePtr &kf);
 
     Feature::Ptr findObservation(const KeyFramePtr kf);
 
@@ -72,6 +76,8 @@ private:
 
     MapPoint(const Vector3d &p, const KeyFramePtr &kf);
 
+    void updateRefKF();
+
 public:
 
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -85,7 +91,7 @@ public:
     uint64_t last_structure_optimal_;
 
 private:
-    
+
     Vector3d pose_;
 
     std::unordered_map<KeyFramePtr, Feature::Ptr> obs_;

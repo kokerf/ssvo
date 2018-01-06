@@ -46,17 +46,19 @@ public:
 
     bool isVisiable(const Vector3d &xyz_w);
 
+    size_t N();
+
     Features features();
 
     std::vector<Feature::Ptr> getFeatures();
 
-    void addFeature(const Feature::Ptr ft);
+    void addFeature(const Feature::Ptr &ft);
+
+    void removeFeature(const Feature::Ptr &ft);
 
     bool getSceneDepth(double &depth_mean, double &depth_min);
 
     std::map<std::shared_ptr<KeyFrame>, int> getOverLapKeyFrames();
-
-    inline int N() const {return fts_.size();}
 
     inline void setRefKeyFrame(const std::shared_ptr<KeyFrame> &kf) {ref_keyframe_ = kf;}
 

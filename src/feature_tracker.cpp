@@ -33,23 +33,32 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     resetGrid();
 
     LOG_IF(INFO, report_) << "[FtTrack][1] -- Get Candidate KeyFrame --";
-    std::set<KeyFrame::Ptr> candidate_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_kfs);
-    candidate_keyframes.insert(frame->getRefKeyFrame());
+    std::set<KeyFrame::Ptr> candidate_keyframes;
+    std::set<KeyFrame::Ptr> connected_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_kfs);
+    connected_keyframes.insert(frame->getRefKeyFrame());
+    candidate_keyframes = connected_keyframes;
+
+    for(const KeyFrame::Ptr &kf : connected_keyframes)
+    {
+        std::set<KeyFrame::Ptr> sub_connected_keyframe = kf->getConnectedKeyFrames(options_.max_kfs);
+        for(const KeyFrame::Ptr &sub_kf : sub_connected_keyframe)
+        {
+            candidate_keyframes.insert(sub_kf);
+        }
+    }
 
     LOG_IF(INFO, report_) << "[FtTrack][2] -- Reproject Map Points --";
     double t1 = (double)cv::getTickCount();
-    for(KeyFrame::Ptr kf : candidate_keyframes)
+    for(const KeyFrame::Ptr &kf : candidate_keyframes)
     {
-        for(Feature::Ptr ft : kf->features())
+        const std::vector<Feature::Ptr> &fts = kf->getFeatures();
+        for(const Feature::Ptr &ft : fts)
         {
-            if(ft->mpt == nullptr) {
+            if(ft->mpt == nullptr)
                 continue;
-            }
 
             if(frame->isVisiable(ft->mpt->pose()))
-            {
                 reprojectMapPoint(frame, ft->mpt);
-            }
         }
     }
 
@@ -164,7 +173,7 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
         {
             Vector2d new_px = estimate.head<2>() * factor;
             Vector3d new_ft = frame->cam_->lift(new_px);
-            Feature::Ptr new_feature = Feature::create(new_px, new_ft.normalized(), track_level, mpt);
+            Feature::Ptr new_feature = Feature::create(new_px, new_ft, track_level, mpt);
             frame->addFeature(new_feature);
             mpt->increaseVisible();
             mpt->increaseFound();

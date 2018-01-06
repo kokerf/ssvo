@@ -9,7 +9,8 @@ Viewer::Viewer(const Map::Ptr &map, cv::Size image_size) : map_(map), image_size
 
     map_point_size = 3;
     key_frame_size = 0.05;
-    key_frame_line_size = 2;
+    key_frame_line_width= 2;
+    key_frame_graph_line_width = 1;
 
     pongolin_thread_ = std::make_shared<std::thread>(std::bind(&Viewer::run, this));
 }
@@ -132,6 +133,28 @@ void Viewer::drawKeyFrames()
         SE3d pose = kf->pose();
         drawCamera(pose.matrix(), cv::Scalar(0.0, 1.0, 0.2));
     }
+
+    glLineWidth(key_frame_graph_line_width);
+    glColor4f(0.0f,1.0f,0.0f,0.6f);
+    glBegin(GL_LINES);
+
+    for(KeyFrame::Ptr kf : kfs)
+    {
+        Vector3f O1 = kf->pose().translation().cast<float>();
+        const std::set<KeyFrame::Ptr> conect_kfs = kf->getConnectedKeyFrames();
+        for(KeyFrame::Ptr ckf : conect_kfs)
+        {
+            if(ckf->id_ < kf->id_)
+                continue;
+
+            Vector3f O2 = ckf->pose().translation().cast<float>();
+            glVertex3f(O1[0], O1[1], O1[2]);
+            glVertex3f(O2[0], O2[1], O2[2]);
+        }
+
+    }
+    glEnd();
+
 }
 
 void Viewer::drawCurFrame()
@@ -166,7 +189,7 @@ void Viewer::drawCamera(const Matrix4d &pose, cv::Scalar color)
     //! col major
     glMultMatrixd(pose.data());
 
-    glLineWidth(key_frame_line_size);
+    glLineWidth(key_frame_line_width);
     glColor3f((GLfloat)color[0], (GLfloat)color[1], (GLfloat)color[2]);
     glBegin(GL_LINES);
     glVertex3f(0,0,0);
