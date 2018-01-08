@@ -46,7 +46,7 @@ void System::process(const cv::Mat &image, const double timestamp)
         cv::cvtColor(gray, gray, cv::COLOR_RGB2GRAY);
 
     current_frame_ = Frame::create(gray, timestamp, camera_);
-    current_frame_->setRefKeyFrame(reference_keyframe_);
+    current_frame_->setRefKeyFrame(mapper_->getReferenceKeyFrame());
 
     if(STAGE_NORMAL_FRAME == stage_)
     {
@@ -88,9 +88,8 @@ System::Status System::initialize()
 
     LOG(WARNING) << "[System] End of two-view BA";
 
-    reference_keyframe_ = kf1;
-    current_frame_->setPose(reference_keyframe_->pose());
-    current_frame_->setRefKeyFrame(reference_keyframe_);
+    current_frame_->setPose(kf1->pose());
+    current_frame_->setRefKeyFrame(kf1);
 
     return STATUS_INITAL_SUCCEED;
 }
@@ -99,7 +98,7 @@ System::Status System::tracking()
 {
     //! track seeds
     double t0 = (double)cv::getTickCount();
-    mapper_->insertNewFrame(current_frame_);
+    mapper_->insertFrame(current_frame_);
     double t1 = (double)cv::getTickCount();
 
     // TODO 先验信息怎么设置？
@@ -143,7 +142,7 @@ void System::finishFrame()
     {
         if(STATUS_TRACKING_GOOD == status_)
         {
-            changeReferenceKeyFrame();
+
         }
     }
     else if(STAGE_INITALIZE == stage_)
@@ -157,68 +156,12 @@ void System::finishFrame()
     //! update
     last_frame_ = current_frame_;
 
-    LOG(WARNING) << "[System] Finsh Current Frame with Stage: " << stage_;
+    LOG(WARNING) << "[System] Finish Current Frame with Stage: " << stage_;
 
     //! display
     viewer_->showImage(rgb_);
     viewer_->setCurrentCameraPose(current_frame_->pose().matrix());
     showImage(last_stage);
-}
-
-bool System::changeReferenceKeyFrame()
-{
-    std::map<KeyFrame::Ptr, int> overlap_kfs = current_frame_->getOverLapKeyFrames();
-    const int overlap = overlap_kfs[reference_keyframe_];
-
-    double median_depth = std::numeric_limits<double>::max();
-    double min_depth = std::numeric_limits<double>::max();
-    current_frame_->getSceneDepth(median_depth, min_depth);
-
-    bool c1 = true;
-    for(const auto &op_kf : overlap_kfs)
-    {
-        SE3d T_cur_from_ref = current_frame_->Tcw() * op_kf.first->pose();
-        Vector3d tran = T_cur_from_ref.translation();
-        double dist1 = tran.dot(tran);
-        double dist2 = 0.2 * (T_cur_from_ref.rotationMatrix() - Matrix3d::Identity()).norm();
-        if(dist1 + dist2 < 0.12 * median_depth)
-        {
-            c1 = false;
-            break;
-        }
-    }
-
-    bool c2 = current_frame_->N() < reference_keyframe_->N() * 0.6;
-
-    //! create new keyFrame
-    if(c1 || c2)
-    {
-        KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
-        mapper_->insertNewKeyFrame(new_keyframe, median_depth, min_depth);
-
-        reference_keyframe_ = new_keyframe;
-    }
-    //! change reference keyframe
-    else
-    {
-        int max_overlap = -1;
-        KeyFrame::Ptr best_keyframe;
-        for(const auto &op_kf : overlap_kfs)
-        {
-            if(op_kf.second <= max_overlap)
-                continue;
-
-            max_overlap = op_kf.second;
-            best_keyframe = op_kf.first;
-        }
-
-        if(max_overlap < 1.2 * overlap)
-            return false;
-
-        reference_keyframe_ = best_keyframe;
-    }
-
-    return true;
 }
 
 void System::showImage(Stage stage)
@@ -230,7 +173,7 @@ void System::showImage(Stage stage)
     cv::Mat image;
     if(STAGE_NORMAL_FRAME == stage)
     {
-        mapper_->drowTrackedPoints(image);
+        mapper_->drowTrackedPoints(current_frame_, image);
     }
     else if(STAGE_INITALIZE == stage)
     {

@@ -46,8 +46,6 @@ private:
 
     void showImage(Stage stage);
 
-    bool changeReferenceKeyFrame();
-
 private:
 
     Stage stage_;
@@ -66,7 +64,6 @@ private:
     cv::Mat rgb_;
     Frame::Ptr current_frame_;
     Frame::Ptr last_frame_;
-    KeyFrame::Ptr reference_keyframe_;
 };
 
 }// namespce ssvo

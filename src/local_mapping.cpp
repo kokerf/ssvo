@@ -106,9 +106,10 @@ void showAffine(const cv::Mat &src, const Vector2d &px_ref, const Matrix2d &A_re
     cv::waitKey(0);
 }
 
+//! =================================================================================================
 //! LocalMapper
 LocalMapper::LocalMapper(const FastDetector::Ptr &fast_detector, double fps, bool report, bool verbose) :
-    fast_detector_(fast_detector), delay_(static_cast<int>(1000.0/fps)), report_(report), verbose_(report&&verbose)
+    fast_detector_(fast_detector), delay_(static_cast<int>(1000.0/fps)), report_(report), verbose_(report&&verbose), status_track_thread_(true)
 {
     map_ = Map::create();
     options_.max_kfs = 3;
@@ -117,17 +118,16 @@ LocalMapper::LocalMapper(const FastDetector::Ptr &fast_detector, double fps, boo
     options_.seed_converge_threshold = 1.0/200.0;
     options_.klt_epslion = 0.0001;
     options_.align_epslion = 0.0001;
-    options_.min_disparity = 30;
+    options_.min_disparity = 100;
+    options_.min_track_features = 50;
 }
 
-void LocalMapper::startThread()
+void LocalMapper::setThread(bool enable_main, bool enable_track)
 {
-    mapping_thread_ = std::make_shared<std::thread>(std::bind(&LocalMapper::run, this));
-}
-
-void LocalMapper::stopThread()
-{
-    if(mapping_thread_ != nullptr)
+    status_track_thread_ = enable_track;
+    if(enable_main && mapping_thread_ == nullptr)
+        mapping_thread_ = std::make_shared<std::thread>(std::bind(&LocalMapper::run, this));
+    else if(!enable_main && mapping_thread_ != nullptr)
     {
         setStop();
         mapping_thread_->join();
@@ -161,11 +161,11 @@ void LocalMapper::run()
     }
 }
 
-void LocalMapper::drowTrackedPoints(cv::Mat &dst)
+void LocalMapper::drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
 {
     //! draw features
-    const cv::Mat src = current_frame_->getImage(0);
-    std::vector<Feature::Ptr> fts = current_frame_->getFeatures();
+    const cv::Mat src = frame->getImage(0);
+    std::vector<Feature::Ptr> fts = frame->getFeatures();
     cv::cvtColor(src, dst, CV_GRAY2RGB);
     int font_face = 1;
     double font_scale = 0.5;
@@ -176,7 +176,7 @@ void LocalMapper::drowTrackedPoints(cv::Mat &dst)
         cv::Scalar color(0, 255, 0);
         cv::circle(dst, px, 2, color, -1);
 
-        string id_str = std::to_string((current_frame_->Tcw()*ft->mpt->pose()).norm());
+        string id_str = std::to_string((frame->Tcw()*ft->mpt->pose()).norm());
         cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
     }
 
@@ -193,71 +193,6 @@ void LocalMapper::drowTrackedPoints(cv::Mat &dst)
 //        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
     }
 
-}
-
-void LocalMapper::insertNewFrame(const Frame::Ptr &frame)
-{
-    LOG_ASSERT(frame != nullptr) << "[Mapping] Error input! Frame should not be null!";
-    if(mapping_thread_ != nullptr)
-    {
-        std::unique_lock<std::mutex> lock(mutex_kfs_);
-        last_frame_ = current_frame_;
-        current_frame_ = frame;
-        cond_process_.notify_one();
-    }
-    else
-    {
-        last_frame_ = current_frame_;
-        current_frame_ = frame;
-        const int num = trackSeeds();
-        LOG_IF(INFO, report_) << "[Mapping][1] Tracking seeds: " << num;
-    }
-}
-
-bool LocalMapper::finishFrame()
-{
-    int rest_num = updateSeeds();
-    int reproj_num = reprojectSeeds();
-    LOG_IF(INFO, report_) << "[Mapping][2] Seeds updated: " << rest_num << ", reprojected: " << reproj_num;
-    return true;
-}
-
-void LocalMapper::insertNewKeyFrame(const KeyFrame::Ptr &keyframe, double mean_depth, double min_depth, bool optimal, bool create_seeds)
-{
-    LOG_ASSERT(keyframe != nullptr) << "Error input! Frame should not be null!";
-
-    map_->insertKeyFrame(keyframe);
-    const Features &fts = keyframe->features();
-    for(const Feature::Ptr &ft : fts)
-    {
-        ft->mpt->addObservation(keyframe, ft);
-        ft->mpt->updateViewAndDepth();
-    }
-    keyframe->updateConnections();
-
-    if(mapping_thread_ != nullptr)
-    {
-        std::unique_lock<std::mutex> lock(mutex_kfs_);
-        current_keyframe_ = keyframe;
-        current_depth_ = std::make_pair(mean_depth, min_depth);
-        cond_process_.notify_one();
-    }
-    else
-    {
-        current_keyframe_ = keyframe;
-        current_depth_ = std::make_pair(mean_depth, min_depth);
-
-        int new_features = createNewFeatures();
-
-        if(optimal)
-            Optimizer::localBundleAdjustment(current_keyframe_, true, true);
-
-        int new_seeds = 0;
-        if(create_seeds)
-            new_seeds = createSeeds();
-
-        LOG_IF(INFO, report_) << "[Mapping] New created features:" << new_features << ", seeds: " << new_seeds;
-    }
 }
 
 void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, const std::vector<Vector3d> &points)
@@ -289,22 +224,191 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
         mpt->updateViewAndDepth();
     }
 
-    Vector2d mean_depth, min_depth;
-    keyframe_ref->getSceneDepth(mean_depth[0], min_depth[0]);
-    keyframe_cur->getSceneDepth(mean_depth[1], min_depth[1]);
-    this->insertNewKeyFrame(keyframe_ref, mean_depth[0], min_depth[0], false, false);
-    this->insertNewKeyFrame(keyframe_cur, mean_depth[1], min_depth[1], false);
-
-    //! set current frame and create inital seeds flow
     current_frame_ = frame_cur;
+    insertKeyFrame(keyframe_ref);
+    insertKeyFrame(keyframe_cur);
 
     LOG_IF(INFO, report_) << "[Mapping] Creating inital map with " << map_->MapPointsInMap() << " map points";
+}
+
+KeyFrame::Ptr LocalMapper::getReferenceKeyFrame()
+{
+    return current_keyframe_;
+}
+
+void LocalMapper::insertFrame(const Frame::Ptr &frame)
+{
+    LOG_ASSERT(frame != nullptr) << "[Mapping] Error input! Frame should not be null!";
+    last_frame_ = current_frame_;
+    current_frame_ = frame;
+    if(status_track_thread_)
+    {
+        frame_process_future_ = std::async(std::launch::async, &LocalMapper::trackSeeds, this);
+    }
+    else
+    {
+        trackSeeds();
+    }
+}
+
+bool LocalMapper::finishFrame()
+{
+    //! wait if trackSeeds() did not finish
+    if(status_track_thread_)
+    {
+        frame_process_future_.wait();
+        uint64_t id = frame_process_future_.get();
+        LOG_ASSERT( id == current_frame_->id_) << "[Mapping] Wrong frame input! " << id << " != " << current_frame_->id_;
+    }
+
+    if(mapping_thread_ != nullptr)
+    {
+        std::unique_lock<std::mutex> lock(mutex_frame_);
+        cond_process_.notify_one();
+    }
+    else
+    {
+        updateSeeds();
+        reprojectSeeds();
+        if(needCreateKeyFrame())
+            processNewKeyFrame();
+    }
+
+    return true;
+}
+
+bool LocalMapper::needCreateKeyFrame()
+{
+    std::map<KeyFrame::Ptr, int> overlap_kfs = current_frame_->getOverLapKeyFrames();
+    const int overlap = overlap_kfs[current_keyframe_];
+
+    std::vector<Feature::Ptr> fts = current_frame_->getFeatures();
+    std::map<MapPoint::Ptr, Feature::Ptr> mpt_ft;
+    for(const Feature::Ptr &ft : fts)
+    {
+        mpt_ft.emplace(ft->mpt, ft);
+    }
+
+    KeyFrame::Ptr max_overlap_keyframe;
+    int max_overlap = 0;
+    for(const auto &olp_kf : overlap_kfs)
+    {
+        if(olp_kf.second < max_overlap || (olp_kf.second == max_overlap && olp_kf.first->id_ < max_overlap_keyframe->id_))
+            continue;
+
+        max_overlap_keyframe = olp_kf.first;
+        max_overlap = olp_kf.second;
+    }
+
+    //! check distance
+    bool c1 = true;
+    double median_depth = std::numeric_limits<double>::max();
+    double min_depth = std::numeric_limits<double>::max();
+    current_frame_->getSceneDepth(median_depth, min_depth);
+    for(const auto &ovlp_kf : overlap_kfs)
+    {
+        SE3d T_cur_from_ref = current_frame_->Tcw() * ovlp_kf.first->pose();
+        Vector3d tran = T_cur_from_ref.translation();
+        double dist1 = tran.dot(tran);
+        double dist2 = 0.2 * (T_cur_from_ref.rotationMatrix() - Matrix3d::Identity()).norm();
+        if(dist1 + dist2 < 0.12 * median_depth)
+        {
+            c1 = false;
+            break;
+        }
+    }
+
+    //! check disparity
+    std::list<float> disparities;
+    const int threahold = max_overlap * 0.6;
+    for(const auto &ovlp_kf : overlap_kfs)
+    {
+        if(ovlp_kf.second < threahold)
+            continue;
+
+        std::vector<float> disparity;
+        disparity.reserve(ovlp_kf.second);
+        MapPoints mpts = ovlp_kf.first->getMapPoints();
+        for(const MapPoint::Ptr &mpt : mpts)
+        {
+            Feature::Ptr ft_ref = mpt->findObservation(ovlp_kf.first);
+            Feature::Ptr ft_cur = mpt_ft[mpt];
+            if(ft_ref != nullptr && ft_cur != nullptr)
+            {
+                const Vector2d px(ft_ref->px - ft_cur->px);
+                disparity.push_back(px.norm());
+            }
+        }
+
+        std::sort(disparity.begin(), disparity.end());
+        float disp = disparity.at(disparity.size()/2);
+        disparities.push_back(disp);
+    }
+    disparities.sort();
+
+    LOG_IF(INFO, report_) << "[Mapping] Max overlap: " << max_overlap << " min disaprity " << disparities.front() << ", average ";
+
+    bool c2 = disparities.front() > options_.min_disparity;
+    bool c3 = current_frame_->N() < current_keyframe_->N() * 0.5;
+
+    //! create new keyFrame
+    if(c1 || c2 || c3)
+    {
+        return true;
+    }
+    //! change reference keyframe
+    else
+    {
+        if(overlap_kfs[current_keyframe_] < max_overlap * 0.85)
+            current_keyframe_ = max_overlap_keyframe;
+    }
+
+    return false;
+}
+
+void LocalMapper::processNewKeyFrame()
+{
+    //! create new keyframe
+    KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
+    const std::vector<Feature::Ptr> &fts = new_keyframe->getFeatures();
+    for(const Feature::Ptr &ft : fts)
+    {
+        ft->mpt->addObservation(new_keyframe, ft);
+        ft->mpt->updateViewAndDepth();
+    }
+    new_keyframe->updateConnections();
+
+    //! insert to map
+    insertKeyFrame(new_keyframe);
+}
+
+void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
+{
+    map_->insertKeyFrame(keyframe);
+    if(mapping_thread_ != nullptr)
+    {
+        std::unique_lock<std::mutex> lock(mutex_keyframe_);
+        current_keyframe_ = keyframe;
+        cond_process_.notify_one();
+    }
+    else
+    {
+        current_keyframe_ = keyframe;
+        int new_features = createNewFeatures();
+
+        if(map_->kfs_.size() > 2)
+            Optimizer::localBundleAdjustment(current_keyframe_, report_, verbose_);
+
+        int new_seeds = createSeeds(map_->kfs_.size() > 1);//! start from the second kf
+
+        LOG_IF(INFO, report_) << "[Mapping] New created features:" << new_features << ", seeds: " << new_seeds;
+    }
 }
 
 bool LocalMapper::checkNewFrame()
 {
     {
-        std::unique_lock<std::mutex> lock(mutex_kfs_);
+        std::unique_lock<std::mutex> lock(mutex_keyframe_);
         cond_process_.wait_for(lock, std::chrono::milliseconds(delay_));
         if(frames_buffer_.empty())
             return false;
@@ -348,12 +452,15 @@ int LocalMapper::createSeeds(bool is_track)
     if(new_corners.empty())
         return 0;
 
+    double depth_mean;
+    double depth_min;
+    current_keyframe_->getSceneDepth(depth_mean, depth_min);
     Seeds new_seeds;
     for(const Corner &corner : new_corners)
     {
         const Vector2d px(corner.x, corner.y);
         const Vector3d fn(current_keyframe_->cam_->lift(px));
-        new_seeds.emplace_back(Seed::create(current_keyframe_, px, fn, corner.level, current_depth_.first, current_depth_.second));
+        new_seeds.emplace_back(Seed::create(current_keyframe_, px, fn, corner.level, depth_mean, depth_min));
     }
     seeds_buffer_.emplace_back(current_keyframe_, std::make_shared<Seeds>(new_seeds));
 
@@ -390,16 +497,16 @@ int LocalMapper::createNewFeatures()
     {
         KeyFrame::Ptr kf = seed_map.first;
         const std::deque<Seed::Ptr> &seeds_deque = seed_map.second;
-        const SE3d T_cur_from_ref = current_frame_->Tcw() * kf->pose();
+        const SE3d T_cur_from_ref = current_keyframe_->Tcw() * kf->pose();
         for(const Seed::Ptr &seed : seeds_deque)
         {
-            const Vector3d fn_cur = current_frame_->cam_->lift(seed->px_cur);
+            const Vector3d fn_cur = current_keyframe_->cam_->lift(seed->px_cur);
             double depth;
             bool succeed = utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->fn_ref, fn_cur, depth);
             if(succeed)
             {
-                Vector3d pose(seed->fn_ref*depth);
-                MapPoint::Ptr new_mpt = MapPoint::create(kf->Twc()*pose, current_keyframe_);
+                Vector3d pose = kf->Twc() * (seed->fn_ref*depth);
+                MapPoint::Ptr new_mpt = MapPoint::create(pose, current_keyframe_);
 
                 //! ft
                 Feature::Ptr ft_ref = Feature::create(seed->px_ref, seed->fn_ref, seed->level_ref, new_mpt);
@@ -426,7 +533,7 @@ int LocalMapper::createNewFeatures()
 }
 
 
-int LocalMapper::trackSeeds()
+uint64_t LocalMapper::trackSeeds()
 {
     if(current_frame_ == nullptr || last_frame_ == nullptr)
         return 0;
@@ -440,7 +547,7 @@ int LocalMapper::trackSeeds()
     }
 
     if(pts_to_track.empty())
-        return 0;
+        return current_frame_->id_;
 
     std::vector<cv::Point2f> pts_tracked = pts_to_track;
     std::vector<bool> status;
@@ -451,6 +558,8 @@ int LocalMapper::trackSeeds()
     //! erase untracked seeds
     size_t idx = 0;
     int count = 0;
+    std::vector<float> disparity;
+    disparity.reserve(pts_to_track.size());
     auto track_seeds_itr = tracked_seeds_.begin();
     for(;track_seeds_itr!=tracked_seeds_.end(); idx++)
     {
@@ -460,6 +569,8 @@ int LocalMapper::trackSeeds()
             Vector2d &px_cur = (*track_seeds_itr)->px_cur;
             px_cur[0] = px.x;
             px_cur[1] = px.y;
+            const cv::Point2f dis = pts_to_track[idx] - pts_tracked[idx];
+            disparity .push_back(dis.x*dis.x+dis.y+dis.y);
             track_seeds_itr++;
             count++;
         }
@@ -469,7 +580,9 @@ int LocalMapper::trackSeeds()
         }
     }
 
-    return count;
+    LOG_IF(INFO, report_) << "[Mapping][1] Tracking seeds: " << count;
+
+    return current_frame_->id_;
 }
 
 int LocalMapper::updateSeeds()
@@ -530,7 +643,7 @@ int LocalMapper::updateSeeds()
         }
     }
 
-    return (int)tracked_seeds_.size();
+    LOG_IF(INFO, report_) << "[Mapping][2] Seeds updated: " << tracked_seeds_.size();
 }
 
 int LocalMapper::reprojectSeeds()
@@ -622,7 +735,7 @@ int LocalMapper::reprojectSeeds()
             buffer_itr++;
     }
 
-    return count;
+    LOG_IF(INFO, report_) << "[Mapping][2] Seeds after reprojected: " << tracked_seeds_.size() << "(" << count << ")";
 }
 
 
@@ -666,102 +779,12 @@ bool LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
     map_->insertMapPoint(mpt);
     mpt->addObservation(seed->kf, ft);
     mpt->updateViewAndDepth();
-    std::cout << " Creat3 new seed as mpt: " << ft->mpt->id_ << ", " << 1.0/seed->mu << ", kf: " << seed->kf->id_ << " his: ";
+    std::cout << " Create new seed as mpt: " << ft->mpt->id_ << ", " << 1.0/seed->mu << ", kf: " << seed->kf->id_ << " his: ";
     for(const auto his : seed->history){ std::cout << "[" << his.first << "," << his.second << "]";}
     std::cout << std::endl;
 
     return true;
 }
-
-//bool LocalMapper::processNewKeyFrame()
-//{
-//    if(current_frame_.second == nullptr)
-//        return false;
-//
-//    const KeyFrame::Ptr &kf = current_frame_.second;
-//    const double mean_depth = current_depth_.first;
-//    const double min_depth = current_depth_.second;
-//
-//    //! check base line
-//    for(auto &seeds_pair : seeds_buffer_)
-//    {
-//        const KeyFrame::Ptr ref_kf = seeds_pair.first;
-//        Seeds &seeds = *seeds_pair.second;
-//
-//        SE3d T_ref_cur =  ref_kf->Tcw() * kf->pose();
-//
-//        double base_line = T_ref_cur.translation().norm();
-//        std::cout << "b: " << base_line << "d: " << mean_depth << " " << min_depth << std::endl;
-//    }
-//
-//
-//    std::vector<Feature::Ptr> fts = kf->getFeatures();
-//
-//    Corners old_corners;
-//    old_corners.reserve(fts.size());
-//    for(const Feature::Ptr &ft : fts)
-//    {
-//        old_corners.emplace_back(Corner(ft->px[0], ft->px[1], 0, ft->level));
-//    }
-//
-//    Corners new_corners;
-//    fast_detector_->detect(kf->image(), new_corners, old_corners, 150);
-//
-//    Seeds new_seeds;
-//    for(const Corner &corner : new_corners)
-//    {
-//        const Vector2d px(corner.x, corner.y);
-//        const Vector3d fn(kf->cam_->lift(px));
-//        Feature::Ptr ft = Feature::create(px, fn, corner.level, nullptr);
-//        new_seeds.emplace_back(Seed::create(ft, mean_depth, min_depth*0.5));
-//    }
-//    seeds_buffer_.emplace_back(kf, std::make_shared<Seeds>(new_seeds));
-//
-//    // TODO
-//    if(seeds_buffer_.size() > 5)
-//        seeds_buffer_.pop_front();
-//
-//    LOG_IF(WARNING, report_) << "[Mapping] Add new keyframe " << kf->id_ << " with " << new_seeds.size() << " seeds";
-//
-//    return true;
-//}
-//
-//bool LocalMapper::processNewFrame()
-//{
-//    if(current_frame_.first == nullptr)
-//        return false;
-//
-//    const Frame::Ptr &frame = current_frame_.first;
-//
-//    double t0 = (double)cv::getTickCount();
-//    double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
-//    for(auto &seeds_pair : seeds_buffer_)
-//    {
-//        const KeyFrame::Ptr keyframe = seeds_pair.first;
-//        Seeds &seeds = *seeds_pair.second;
-//
-//        // TODO old seeds_pair remove
-//
-//        SE3d T_cur_from_ref = frame->Tcw() * keyframe->pose();
-//        SE3d T_ref_from_cur = T_cur_from_ref.inverse();
-//        for(auto it = seeds.begin(); it!=seeds.end(); it++)
-//        {
-//            const Seed::Ptr &seed = *it;
-//            double depth = 1.0/seed->mu;
-//            if(!findEpipolarMatch(seed->ft, keyframe, frame, T_cur_from_ref, seed->sigma2, depth))
-//                continue;
-//
-//            double tau = seed->computeTau(T_ref_from_cur, seed->ft->fn, depth, px_error_angle);
-//            seed->update(1.0/depth, tau*tau);
-//        }
-//    }
-//
-//    double t1 = (double)cv::getTickCount();
-//    if(!seeds_buffer_.empty())
-//        LOG_IF(INFO, report_) << "Seeds update time: " << (t1-t0)/cv::getTickFrequency()/seeds_buffer_.size() << " * " << seeds_buffer_.size();
-//
-//    return true;
-//}
 
 bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
                                     const KeyFrame::Ptr &keyframe,

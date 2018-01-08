@@ -212,7 +212,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report
     //! Report
     LOG_IF(INFO, report) << "[Optimizer] KFs: " << local_keyframes.size()
                          << "  Mpts: " << local_mapoints.size()
-                         << " Remove " << n << " outlier in loacl ba.";
+                         << ", remove " << n << " outliers in loacl ba.";
     reportInfo(problem, summary, report, verbose);
 }
 
