@@ -5,7 +5,6 @@
 #include "global.hpp"
 #include "map.hpp"
 #include "feature_detector.hpp"
-#include "alignment.hpp"
 
 namespace ssvo{
 
@@ -62,6 +61,8 @@ private:
     void processNewKeyFrame();
 
     void insertKeyFrame(const KeyFrame::Ptr &keyframe);
+
+    void checkCulling();
 
     bool findEpipolarMatch(const Seed::Ptr &seed, const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame,
                            const SE3d &T_cur_from_ref, Vector2d &px_matched, int &level_matched);

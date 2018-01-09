@@ -107,9 +107,10 @@ LIST(APPEND SOURCEFILES
     src/utils.cpp
     src/feature_detector.cpp
     src/feature_tracker.cpp
+    src/feature_alignment.cpp
+    src/image_alignment.cpp
     src/initializer.cpp
     src/optimizer.cpp
-    src/alignment.cpp
     src/local_mapping.cpp
     src/system.cpp
     src/viewer.cpp
@@ -136,7 +137,7 @@ target_link_libraries(test_utils  ${LINK_LIBS})
 add_executable(test_alignment test/test_alignment.cpp ${SOURCEFILES})
 target_link_libraries(test_alignment  ${LINK_LIBS})
 
-add_executable(test_alignment_2d test/test_alignment_2d.cpp ${SOURCEFILES})
+add_executable(test_alignment_2d test/test_alignment_2d.cpp src/feature_alignment.cpp)
 target_link_libraries(test_alignment_2d  ${LINK_LIBS})
 
 add_executable(test_triangulation test/test_triangulation.cpp)

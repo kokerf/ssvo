@@ -1,5 +1,5 @@
 #include <opencv2/opencv.hpp>
-#include "alignment.hpp"
+#include "feature_alignment.hpp"
 #include "utils.hpp"
 
 using namespace ssvo;
@@ -27,9 +27,9 @@ int main(int argc, char *argv[])
     const int num = AlignP2DI::pattern_.Num;
     const int size = AlignP2DI::pattern_.Size;
     const int size1 = AlignP2DI::pattern_.Size1;
-    Matrix<double, size1, size1, RowMajor> img;
-    Matrix<double, size1, size1, RowMajor> img2;
-    Matrix<double, num, 3, RowMajor> patch;
+    Matrix<float, size1, size1, RowMajor> img;
+    Matrix<float, size1, size1, RowMajor> img2;
+    Matrix<float, num, 3, RowMajor> patch;
 
     std::vector<cv::Point2f> corners;
     cv::goodFeaturesToTrack(cv_mat, corners, 30, 0.1, 5);
@@ -42,9 +42,9 @@ int main(int argc, char *argv[])
     const double y = px.y;
     const int N = 1000;
 
-    Matrix<double, size, size, RowMajor> img1;
-    Matrix<double, size, size, RowMajor> dx1;
-    Matrix<double, size, size, RowMajor> dy1;
+    Matrix<float, size, size, RowMajor> img1;
+    Matrix<float, size, size, RowMajor> dx1;
+    Matrix<float, size, size, RowMajor> dy1;
     utils::interpolateMat(eigen_mat, img1, dx1, dy1, x, y);
     std::cout << "eigen Mat:\n" << img1 << std::endl;
     std::cout << "eigen Mat dx:\n" << dx1 << std::endl;
@@ -60,32 +60,32 @@ int main(int argc, char *argv[])
     AlignP2DI align1(false);
 
     double t0 = cv::getTickCount();
-    const int patch_size = Align2DI::PatchSize;
-    Matrix<double, patch_size*patch_size, 1> img0, dx, dy;
+    const int patch_size_with_border = Align2DI::PatchSize+2;
+    Matrix<float, patch_size_with_border, patch_size_with_border, RowMajor> img0, dx, dy;
     for(int i = 0; i < N; ++i)
     {
-        utils::interpolateMat<uchar, double, patch_size>(eigen_mat, img0, dx, dy, x, y);
+        utils::interpolateMat<uchar, float, patch_size_with_border>(eigen_mat, img0, dx, dy, x, y);
         estimate0 = estimate;
-        align0.run(eigen_mat, img0, dx, dy, estimate0);
+        align0.run(cv_mat, img0, estimate0);
     }
     double t1 = cv::getTickCount();
     for(int i = 0; i < N; ++i)
     {
-        utils::interpolateMat<uchar, double, size1>(eigen_mat, img, x, y);
-        AlignP2DI::pattern_.getPattern(img, patch);
-        estimate1 = estimate;
-        align1.run(eigen_mat, patch, estimate1);
+//        utils::interpolateMat<uchar, float, size1>(eigen_mat, img, x, y);
+//        AlignP2DI::pattern_.getPattern(img, patch);
+//        estimate1 = estimate;
+//        align1.run(eigen_mat, patch, estimate1);
     }
     double t2 = cv::getTickCount();
 
     for(int i = 0; i < N; ++i)
     {
-        utils::interpolateMat<uchar, double, patch_size>(eigen_mat, img0, dx, dy, x, y);
+        utils::interpolateMat<uchar, float, patch_size_with_border>(eigen_mat, img0, dx, dy, x, y);
     }
     double t3 = cv::getTickCount();
     for(int i = 0; i < N; ++i)
     {
-        utils::interpolateMat<uchar, double, size1>(eigen_mat, img, x, y);
+        utils::interpolateMat<uchar, float, size1>(eigen_mat, img, x, y);
         AlignP2DI::pattern_.getPattern(img, patch);
     }
 

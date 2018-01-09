@@ -1,5 +1,5 @@
-#ifndef _SSVO_ALIGNMENT_HPP_
-#define _SSVO_ALIGNMENT_HPP_
+#ifndef _SSVO_IMAGEALIGNMENT_HPP_
+#define _SSVO_IMAGE_ALIGNMENT_HPP_
 
 #include "global.hpp"
 #include "config.hpp"
@@ -61,96 +61,6 @@ private:
 };
 
 
-class Align2DI : public Align<8, 3>
-{
-public:
-
-    Align2DI(bool verbose=false):verbose_(verbose){}
-
-    bool run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
-             const Matrix<double, PatchArea, 1> &patch,
-             const Matrix<double, PatchArea, 1> &patch_gx,
-             const Matrix<double, PatchArea, 1> &patch_gy,
-             Vector3d &estimate, const int max_iterations = 30, const double epslion = 1E-2f);
-
-private:
-
-    const bool verbose_;
-
-    const int border_ = HalfPatchSize+1;
-
-    Matrix<double, Parameters, Parameters, RowMajor> invHessian_;
-    Vector3d estimate_;
-};
-
-//! ====================== Pattern align
-template <int Size, int NumPn, int NumPr>
-class AlignPattern
-{
-public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    enum {
-        PatternNum = NumPn,
-        PatchSize = Size+2, //! patch size with border
-        HalfPatchSize = PatchSize/2,
-        ParaNum = NumPr,
-    };
-
-    static const Pattern<NumPn, Size> pattern_;
-    std::list<std::string> logs_;
-
-protected:
-    Matrix<double, NumPn, NumPr, RowMajor> jacbian_cache_;
-    Matrix<double, NumPr, NumPr, RowMajor> Hessian_;
-    Matrix<double, NumPr, NumPr, RowMajor> invHessian_;
-    Matrix<double, NumPr, 1> Jres_;
-    Matrix<double, NumPr, 1> estimate_;
-};
-
-
-class AlignP2DI : public AlignPattern<13, 49, 3>
-{
-public:
-
-    AlignP2DI(bool verbose=false) : verbose_(verbose) {}
-
-    bool run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
-             const Matrix<double, PatternNum, 3> &patch_idxy,
-             Matrix<double, ParaNum, 1> &estimate, const int max_iterations = 30, const double epslion = 1E-2f);
-
-private:
-
-    const bool verbose_;
-    const int border_ = HalfPatchSize;
-
-};
-
-
-template <typename T, int Size>
-class ZSSD{
-public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-    ZSSD(const Matrix<T, Size, 1> &patch_ref):
-        A(patch_ref)
-    {
-        A.array() -= A.mean();
-    }
-
-    T compute_score(const Matrix<T, Size, 1> &patch_cur)
-    {
-        Matrix<T, Size, 1> B = patch_cur.array() - patch_cur.mean();
-
-        return (A-B).norm();
-    }
-
-    T threshold() const {return threshold_;}
-
-private:
-    Matrix<T, Size, 1> A;
-    const T threshold_ = Size * 500;
-};
-
-
 //! ========================== Utils =========================================
 namespace utils{
 
@@ -176,24 +86,24 @@ void warpAffine(const cv::Mat &img_ref,
 {
     assert(img_ref.type() == CV_8UC1);
 
-    const Matrix2d A_ref_from_cur = A_cur_from_ref.inverse();
+    const Matrix2f A_ref_from_cur = A_cur_from_ref.inverse().cast<float>();
     if(isnan(A_ref_from_cur(0,0)))
     {
         LOG(ERROR) << "Affine warp is Nan";
         return;
     }
 
-    const Vector2d px_ref_pyr = px_ref / (1 << level_ref);
-    const double half_patch_size = size * 0.5;
+    const Vector2f px_ref_pyr = px_ref.cast<float>() / (1 << level_ref);
+    const float half_patch_size = size * 0.5;
     const int px_pyr_scale = 1 << level_cur;
     for(int y = 0; y < size; ++y)
     {
-        for (int x = 0; x < size; ++x)
+        for(int x = 0; x < size; ++x)
         {
-            Vector2d px_patch(x-half_patch_size, y-half_patch_size);
+            Vector2f px_patch(x-half_patch_size, y-half_patch_size);
             px_patch *= px_pyr_scale;//! A_ref_from_cur is for level-0, so transform to it
-            Vector2d affine = A_ref_from_cur*px_patch;
-            const Vector2d px(affine + px_ref_pyr);
+            Vector2f affine = A_ref_from_cur*px_patch;
+            const Vector2f px(affine + px_ref_pyr);
 
             if(px[0]<0 || px[1]<0 || px[0]>=img_ref.cols-1 || px[1]>=img_ref.rows-1)
                 patch(y, x) = 0;
@@ -207,4 +117,5 @@ void warpAffine(const cv::Mat &img_ref,
 
 }
 
-#endif //_SSVO_ALIGNMENT_HPP_
+
+#endif //SSVO_IMAGE_ALIGNMENT_H

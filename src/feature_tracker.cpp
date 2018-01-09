@@ -1,6 +1,6 @@
 #include "feature_tracker.hpp"
-#include "alignment.hpp"
-#include "utils.hpp"
+#include "feature_alignment.hpp"
+#include "image_alignment.hpp"
 
 namespace ssvo{
 
@@ -27,12 +27,12 @@ FeatureTracker::~FeatureTracker()
 
 int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
 {
-    LOG_IF(INFO, report_) << "[FtTrack][*] -- Reproject Local Map --";
+    LOG_IF(INFO, verbose_) << "[FtTrack][*] -- Reproject Local Map --";
     double t0 = (double)cv::getTickCount();
 
     resetGrid();
 
-    LOG_IF(INFO, report_) << "[FtTrack][1] -- Get Candidate KeyFrame --";
+    LOG_IF(INFO, verbose_) << "[FtTrack][1] -- Get Candidate KeyFrame --";
     std::set<KeyFrame::Ptr> candidate_keyframes;
     std::set<KeyFrame::Ptr> connected_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_kfs);
     connected_keyframes.insert(frame->getRefKeyFrame());
@@ -47,7 +47,7 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
         }
     }
 
-    LOG_IF(INFO, report_) << "[FtTrack][2] -- Reproject Map Points --";
+    LOG_IF(INFO, verbose_) << "[FtTrack][2] -- Reproject Map Points --";
     double t1 = (double)cv::getTickCount();
     for(const KeyFrame::Ptr &kf : candidate_keyframes)
     {
@@ -62,26 +62,24 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
         }
     }
 
-    LOG_IF(INFO, report_) << "[FtTrack][3] -- Tracking Map Points --";
+    LOG_IF(INFO, verbose_) << "[FtTrack][3] -- Tracking Map Points --";
     double t2 = (double)cv::getTickCount();
     int matches = 0;
+    total_project_ = 0;
     for(int index : grid_.grid_order)
     {
-        if(trackMapPoints(frame, *grid_.cells[index])) {
+        if(trackMapPoints(frame, *grid_.cells[index]))
             matches++;
-        }
-
-        if(matches > 120) {
+        if(matches > 120)
             break;
         }
-    }
 
     double t3 = (double)cv::getTickCount();
     LOG_IF(WARNING, report_) << "[FtTrack][*] Time: "
                            << (t1-t0)/cv::getTickFrequency() << " "
                            << (t2-t1)/cv::getTickFrequency() << " "
                            << (t3-t2)/cv::getTickFrequency() << " "
-                           << ", match points " << matches;
+                           << ", match points " << matches << "(" << total_project_ << ")";
 
     // TODO 最后可以做一个对极线外点检测？
 
@@ -132,23 +130,12 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
 
         // TODO 如果Affine很小的话，则不用warp
         const int patch_border_size = patch_size+2;
-        Matrix<double, patch_border_size, patch_border_size, RowMajor> patch_with_border;
-        utils::warpAffine<double, patch_border_size>(kf_ref->getImage(ft_ref->level), patch_with_border, A_cur_from_ref,
+        Matrix<float, patch_border_size, patch_border_size, RowMajor> patch_with_border;
+        utils::warpAffine<float, patch_border_size>(kf_ref->getImage(ft_ref->level), patch_with_border, A_cur_from_ref,
                                                      ft_ref->px, ft_ref->level, track_level);
-
-        Matrix<double, patch_size, patch_size, RowMajor> patch, dx, dy;
-        patch = patch_with_border.block(1, 1, patch_size, patch_size);
-        dx = 0.5*(patch_with_border.block(1, 2, patch_size, patch_size)
-            - patch_with_border.block(1, 0, patch_size, patch_size));
-        dy = 0.5*(patch_with_border.block(2, 1, patch_size, patch_size)
-            - patch_with_border.block(0, 1, patch_size, patch_size));
 
         double t2 = (double)cv::getTickCount();
         const cv::Mat image_cur = frame->getImage(track_level);
-        Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> > image_cur_eigen((uchar*)image_cur.data, image_cur.rows, image_cur.cols);
-        Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > patch_eigen(patch.data(), patch_size*patch_size, 1);
-        Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > dx_eigen(dx.data(), patch_size*patch_size, 1);
-        Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > dy_eigen(dy.data(), patch_size*patch_size, 1);
 
         Align2DI matcher(verbose_);
         const double factor = static_cast<double>(1 << track_level);
@@ -168,8 +155,8 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
             cv::waitKey(0);
         }
 
-
-        if(matcher.run(image_cur_eigen, patch_eigen, dx_eigen, dy_eigen, estimate))
+        total_project_++;
+        if(matcher.run(image_cur, patch_with_border, estimate, 30))
         {
             Vector2d new_px = estimate.head<2>() * factor;
             Vector3d new_ft = frame->cam_->lift(new_px);

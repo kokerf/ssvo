@@ -64,6 +64,8 @@ private:
     cv::Mat rgb_;
     Frame::Ptr current_frame_;
     Frame::Ptr last_frame_;
+
+    double time_;
 };
 
 }// namespce ssvo

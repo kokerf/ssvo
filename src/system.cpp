@@ -1,7 +1,8 @@
 #include "config.hpp"
 #include "system.hpp"
 #include "optimizer.hpp"
-#include "alignment.hpp"
+#include "image_alignment.hpp"
+#include "feature_alignment.hpp"
 
 namespace ssvo{
 
@@ -13,7 +14,8 @@ System::System(std::string config_file) :
     LOG_ASSERT(!config_file.empty()) << "Empty Config file input!!!";
     Config::FileName = config_file;
 
-    const double fps = Config::cameraFps();
+    double fps = Config::cameraFps();
+    if(fps < 1.0) fps = 1.0;
     //! image
     const int width = Config::imageWidth();
     const int height = Config::imageHeight();
@@ -34,6 +36,8 @@ System::System(std::string config_file) :
     initializer_ = Initializer::create(fast_detector_, true);
     mapper_ = LocalMapper::create(fast_detector_, fps, true, false);
     viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));
+
+    time_ = 1000.0/fps;
 
 }
 
@@ -181,7 +185,7 @@ void System::showImage(Stage stage)
     }
 
     cv::imshow("SSVO Current Image", image);
-    cv::waitKey(1);
+    cv::waitKey(time_);
 }
 
 }

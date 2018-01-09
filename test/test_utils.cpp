@@ -10,8 +10,6 @@ inline void interpolateMat2(cv::Mat &ref_img, cv::Mat& ref_patch,
            cv::Mat& dx, cv::Mat& dy, const double u, const double v)
 {
     const int stride = ref_img.cols;
-    const int feature_counter = 0;
-    const int  patch_area_ = size*size;
     const int  half_size = size/2;
 
     const int iu = floor(u);
@@ -158,11 +156,6 @@ int main(int argc, char const *argv[])
     std::cout << "eigen Mat dx:\n" << dx << std::endl;
     std::cout << "eigen Mat dy:\n" << dy << std::endl;
 
-    utils::interpolateMat<uchar, double, size>(eigen_mat, img_v, dx_v, dy_v, x, y);
-    std::cout << "eigen Vec:\n" << img_v.transpose() << std::endl;
-    std::cout << "eigen Vec dx:\n" << dx_v.transpose() << std::endl;
-    std::cout << "eigen Vec dy:\n" << dy_v.transpose() << std::endl;
-
     interpolateMat2<uchar, size>(cv_mat, cv_img, cv_dx, cv_dy, x, y);
     std::cout << "cv Mat:\n" << cv_img << std::endl;
     std::cout << "cv Mat dx:\n" << cv_dx << std::endl;
@@ -183,7 +176,6 @@ int main(int argc, char const *argv[])
     std::cout << "eigen Mat dx:\n" << dx << std::endl;
     std::cout << "eigen Mat dy:\n" << dy << std::endl;
 
-
     //! ==============================
     const size_t N = 1000000;
     double t0 = (double)cv::getTickCount();
@@ -193,7 +185,7 @@ int main(int argc, char const *argv[])
 
     double t1 = (double)cv::getTickCount();
     for(size_t i = 0; i < N; i++) {
-        utils::interpolateMat<uchar, double, size>(eigen_mat, img_v, dx_v, dy_v, x, y);
+        utils::interpolateMat<uchar, double, size>(cv_mat, img, dx, dy, x, y);
     }
 
     double t2 = (double)cv::getTickCount();
@@ -213,10 +205,15 @@ int main(int argc, char const *argv[])
 
     double t5 = (double)cv::getTickCount();
     for(size_t i = 0; i < N; i++) {
-        interpolateMat_array<uchar, double, size>(cv_mat, img, dx, dy, x, y);
+        utils::interpolateMat<uchar, double, size>(cv_mat, img, x, y);
     }
 
     double t6 = (double)cv::getTickCount();
+    for(size_t i = 0; i < N; i++) {
+        interpolateMat_array<uchar, double, size>(cv_mat, img, dx, dy, x, y);
+    }
+
+    double t7 = (double)cv::getTickCount();
 
     size_t scale = N / 1000;
     std::cout << "time0(ms): " << (t1-t0)/cv::getTickFrequency()/scale << std::endl;
@@ -225,6 +222,7 @@ int main(int argc, char const *argv[])
     std::cout << "time3(ms): " << (t4-t3)/cv::getTickFrequency()/scale << std::endl;
     std::cout << "time4(ms): " << (t5-t4)/cv::getTickFrequency()/scale << std::endl;
     std::cout << "time5(ms): " << (t6-t5)/cv::getTickFrequency()/scale << std::endl;
+    std::cout << "time5(ms): " << (t7-t6)/cv::getTickFrequency()/scale << std::endl;
     cv::waitKey(0);
     return 0;
 }

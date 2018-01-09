@@ -1,6 +1,6 @@
 #include <iomanip>
 #include "feature_detector.hpp"
-#include "alignment.hpp"
+#include "image_alignment.hpp"
 #include "utils.hpp"
 #include "dataset.hpp"
 #include "optimizer.hpp"
@@ -61,9 +61,8 @@ class ResidualErrorSE3 : public ceres::SizedCostFunction<16, 7>
 public:
 
     ResidualErrorSE3(const cv::Mat &image, const Matrix<double, 16, 1> &measured, const Vector3d &xyz, const Camera::Ptr &cam):
-        measured_(measured), xyz_(xyz), cam_(cam), cols_(image.cols), rows_(image.rows)
+        image_(image), measured_(measured), xyz_(xyz), cam_(cam), cols_(image.cols), rows_(image.rows)
     {
-        image_ = Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> >((uchar*)image.data, rows_, cols_);
         border_x_[0] = 8;
         border_x_[1] = cols_ -1 - 8;
         border_y_[0] = 8;
@@ -140,14 +139,14 @@ public:
 
 private:
 
+    cv::Mat image_;
+
     const Matrix<double, 16, 1> measured_;
     const Vector3d xyz_;
     const Camera::Ptr cam_;
     const int cols_, rows_;
     Vector2d border_x_;
     Vector2d border_y_;
-
-    Matrix<uchar , Dynamic, Dynamic, RowMajor> image_;
 
 }; // class ResidualErrorSE3
 
@@ -200,7 +199,7 @@ void align_by_ceres(Frame::Ptr reference_frame, Frame::Ptr current_frame, int le
         ref_xyz *= depth;
 
         Matrix<double, 16, 1> patch, dx, dy;
-        utils::interpolateMat<uchar, double, 4>(ref_eigen_img, patch, ref_px[0], ref_px[1]);
+        utils::interpolateMat<uchar, double, 4>(ref_img, patch, ref_px[0], ref_px[1]);
 
         ceres::CostFunction* cost_function = ResidualErrorSE3::Create(current_frame->getImage(level), patch, mpt->pose(), current_frame->cam_);
         problem.AddResidualBlock(cost_function, NULL, current_frame->optimal_Tcw_.data());

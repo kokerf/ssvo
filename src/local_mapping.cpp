@@ -1,6 +1,7 @@
 #include <include/config.hpp>
 #include "local_mapping.hpp"
-#include "config.hpp"
+#include "feature_alignment.hpp"
+#include "image_alignment.hpp"
 #include "utils.hpp"
 #include "optimizer.hpp"
 
@@ -735,7 +736,7 @@ int LocalMapper::reprojectSeeds()
             buffer_itr++;
     }
 
-    LOG_IF(INFO, report_) << "[Mapping][2] Seeds after reprojected: " << tracked_seeds_.size() << "(" << count << ")";
+    LOG_IF(INFO, report_) << "[Mapping][3] Seeds after reprojected: " << tracked_seeds_.size() << "(" << count << ")";
 }
 
 
@@ -784,6 +785,11 @@ bool LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
     std::cout << std::endl;
 
     return true;
+}
+
+void LocalMapper::checkCulling()
+{
+
 }
 
 bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
@@ -852,16 +858,14 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
 
     static const int patch_border_size = patch_size+2;
     cv::Mat image_ref = keyframe->getImage(level_ref);
-    Matrix<double, patch_border_size, patch_border_size, RowMajor> patch_with_border;
-    utils::warpAffine<double, patch_border_size>(image_ref, patch_with_border, A_cur_from_ref,
+    Matrix<float, patch_border_size, patch_border_size, RowMajor> patch_with_border;
+    utils::warpAffine<float, patch_border_size>(image_ref, patch_with_border, A_cur_from_ref,
                                                  seed->px_ref, level_ref, level_cur);
 
-    Matrix<double, patch_size, patch_size, RowMajor> patch;
+    Matrix<float, patch_size, patch_size, RowMajor> patch;
     patch = patch_with_border.block(1, 1, patch_size, patch_size);
 
     const cv::Mat image_cur = frame->getImage(level_cur);
-    Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> > image_cur_eigen((uchar*)image_cur.data, image_cur.rows, image_cur.cols);
-    Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > patch_eigen(patch.data(), patch_area, 1);
 
     Vector2d px_best(-1,-1);
     if(epl_length > 2.0)
@@ -872,7 +876,7 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
         // TODO 使用模板来加速！！！
         //! SSD
         double t0 = (double)cv::getTickCount();
-        ZSSD<double, patch_area> zssd(patch_eigen);
+        ZSSD<float, patch_size> zssd(patch);
         double score_best = std::numeric_limits<double>::max();
         double score_second = score_best;
         int index_best = -1;
@@ -889,10 +893,10 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
             if(!frame->cam_->isInFrame(px.cast<int>(), half_patch_size, level_cur))
                 continue;
 
-            Matrix<double, patch_area, 1> patch_cur;
-            utils::interpolateMat<uchar, double, patch_size>(image_cur_eigen, patch_cur, px[0], px[1]);
+            Matrix<float, patch_size, patch_size, RowMajor> patch_cur;
+            utils::interpolateMat<uchar, float, patch_size>(image_cur, patch_cur, px[0], px[1]);
 
-            double score = zssd.compute_score(patch_cur);
+            float score = zssd.compute_score(patch_cur);
 
             if(score < score_best)
             {
@@ -926,18 +930,9 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
         px_best = (px_near + px_far) * 0.5;
     }
 
-    Matrix<double, patch_size, patch_size, RowMajor> dx, dy;
-    dx = 0.5*(patch_with_border.block(1, 2, patch_size, patch_size)
-        - patch_with_border.block(1, 0, patch_size, patch_size));
-    dy = 0.5*(patch_with_border.block(2, 1, patch_size, patch_size)
-        - patch_with_border.block(0, 1, patch_size, patch_size));
-
-    Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > dx_eigen(dx.data(), patch_area, 1);
-    Eigen::Map<Matrix<double, Dynamic, Dynamic, RowMajor> > dy_eigen(dy.data(), patch_area, 1);
-
     Align2DI matcher(verbose_);
     Vector3d estimate(0,0,0); estimate.head<2>() = px_best;
-    if(!matcher.run(image_cur_eigen, patch_eigen, dx_eigen, dy_eigen, estimate, 30, options_.align_epslion))
+    if(!matcher.run(image_cur, patch_with_border, estimate, 30, options_.align_epslion))
     {
 //        std::cout << "dx:\n " << dx << std::endl;
 //        std::cout << "dy:\n " << dy << std::endl;

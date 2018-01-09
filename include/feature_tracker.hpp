@@ -59,6 +59,7 @@ private:
 
     bool report_;
     bool verbose_;
+    int total_project_;
 };
 
 }//! end of ssvo
