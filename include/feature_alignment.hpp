@@ -10,69 +10,56 @@
 
 namespace ssvo {
 
-class Align2DI
-{
+//! ====================== Patch align
+class AlignPatch{
 public:
-    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     enum {
-        PatchSize = 8,
-        PatchArea = PatchSize*PatchSize,
-        HalfPatchSize = PatchSize/2,
+        Size = 8,
+        Area = Size*Size,
+        HalfSize = Size/2,
+        SizeWithBorder = Size+2,
     };
 
-    Align2DI(bool verbose=false):verbose_(verbose){}
+    static bool align2DI(const cv::Mat &image_cur,
+                         const Matrix<float, SizeWithBorder, SizeWithBorder, RowMajor> &patch_ref_with_border,
+                         Vector3d &estimate,
+                         const int max_iterations = 30,
+                         const double epslion = 1E-2f,
+                         const bool verbose = false);
 
-    bool run(const cv::Mat &image_cur,
-             const Matrix<float, PatchSize+2, PatchSize+2, RowMajor> &patch_ref_with_border,
-             Vector3d &estimate, const int max_iterations = 30, const double epslion = 1E-2f);
-
-    std::list<std::string> logs_;
-
-private:
-
-    const bool verbose_;
+    static bool align2DI(const cv::Mat &image_cur,
+                         const Matrix<float, Area, 1> &patch_ref,
+                         const Matrix<float, Area, 1> &patch_ref_gx,
+                         const Matrix<float, Area, 1> &patch_ref_gy,
+                         Vector3d &estimate,
+                         const int max_iterations = 30,
+                         const double epslion = 1E-2f,
+                         const bool verbose = false);
 };
 
+
 //! ====================== Pattern align
-template <int Size, int NumPn, int NumPr>
 class AlignPattern
 {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     enum {
-        PatternNum = NumPn,
-        PatchSize = Size+2, //! patch size with border
-        HalfPatchSize = PatchSize/2,
-        ParaNum = NumPr,
+        Num = 32,
+        Size = 8,
+        HalfSize = Size/2,
+        SizeWithBorder = Size+2,
     };
 
-    static const Pattern<float, NumPn, Size> pattern_;
-    std::list<std::string> logs_;
+    static const Pattern<float, Num, Size> pattern_;
 
-protected:
-    Matrix<float, NumPn, NumPr, RowMajor> jacbian_cache_;
-    Matrix<float, NumPr, NumPr, RowMajor> Hessian_;
-    Matrix<float, NumPr, NumPr, RowMajor> invHessian_;
-    Matrix<float, NumPr, 1> Jres_;
-    Matrix<float, NumPr, 1> estimate_;
-};
-
-
-class AlignP2DI : public AlignPattern<13, 49, 3>
-{
-public:
-
-    AlignP2DI(bool verbose=false) : verbose_(verbose) {}
-
-    bool run(const Matrix<uchar, Dynamic, Dynamic, RowMajor> &image,
-             const Matrix<float, PatternNum, 3> &patch_idxy,
-             Matrix<double, ParaNum, 1> &estimate, const int max_iterations = 30, const double epslion = 1E-2f);
-
-private:
-
-    const bool verbose_;
-    const int border_ = HalfPatchSize;
-
+    static bool align2DI(const cv::Mat &image_cur,
+                         const Matrix<float, Num, 1> &patch_ref,
+                         const Matrix<float, Num, 1> &patch_ref_gx,
+                         const Matrix<float, Num, 1> &patch_ref_gy,
+                         Vector3d &estimate,
+                         const int max_iterations = 30,
+                         const double epslion = 1E-2f,
+                         const bool verbose = false);
 };
 
 

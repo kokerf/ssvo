@@ -20,7 +20,7 @@ System::System(std::string config_file) :
     const int width = Config::imageWidth();
     const int height = Config::imageHeight();
     const int level = Config::imageTopLevel();
-    const int image_border = Align2DI::PatchSize;
+    const int image_border = AlignPatch::Size;
     //! camera
     const cv::Mat K = Config::cameraIntrinsic();
     const cv::Mat DistCoef = Config::cameraDistCoef();
@@ -32,7 +32,7 @@ System::System(std::string config_file) :
 
     camera_ = Camera::create(width, height, K, DistCoef);
     fast_detector_ = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
-    feature_tracker_ = FeatureTracker::create(width, height, grid_size, true);
+    feature_tracker_ = FeatureTracker::create(width, height, grid_size, image_border, true);
     initializer_ = Initializer::create(fast_detector_, true);
     mapper_ = LocalMapper::create(fast_detector_, fps, true, false);
     viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));

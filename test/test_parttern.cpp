@@ -8,7 +8,7 @@ using namespace Eigen;
 
 int main(int argc, char *argv[])
 {
-    FLAGS_alsologtostderr = false;
+    FLAGS_alsologtostderr = true;
     FLAGS_colorlogtostderr = true;
     FLAGS_log_prefix = true;
     FLAGS_log_dir = std::string(getcwd(NULL,0))+"/../log";
@@ -23,70 +23,72 @@ int main(int argc, char *argv[])
 //    cv::RNG rnger(cv::getTickCount());
 //    rnger.fill(cv_mat, cv::RNG::UNIFORM, cv::Scalar::all(0), cv::Scalar::all(256));
 
-    Matrix<uchar, Dynamic, Dynamic, RowMajor> eigen_mat = Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> >((uchar*)cv_mat.data, cv_mat.rows, cv_mat.cols);
-    const int num = AlignP2DI::pattern_.Num;
-    const int size = AlignP2DI::pattern_.Size;
-    const int size1 = AlignP2DI::pattern_.Size1;
-    Matrix<float, size1, size1, RowMajor> img;
-    Matrix<float, size1, size1, RowMajor> img2;
-    Matrix<float, num, 3, RowMajor> patch;
+    const int num = AlignPattern::pattern_.Num;
+    const int pattern_size_with_border = AlignPattern::SizeWithBorder;
+    Matrix<float, pattern_size_with_border, pattern_size_with_border, RowMajor> pattern;
+    Matrix<float, num, 1> pattern_patch;
+    Matrix<float, num, 1> pattern_gx;
+    Matrix<float, num, 1> pattern_gy;
+
+    const int patch_size_with_border = AlignPatch::SizeWithBorder;
+    Matrix<float, patch_size_with_border, patch_size_with_border, RowMajor> patch;
 
     std::vector<cv::Point2f> corners;
     cv::goodFeaturesToTrack(cv_mat, corners, 30, 0.1, 5);
     LOG_ASSERT(!corners.empty()) << "No corners detected!";
-    srand(cv::getTickCount());
-    int id = rand()%corners.size();
-    const cv::Point2f px = corners[id];
+    cv::Point2f px;
+    do
+    {
+        srand(cv::getTickCount());
+        int id = rand() % corners.size();
+        px = corners[id];
+    }while(px.x <= pattern_size_with_border/2 || px.y <= pattern_size_with_border/2 ||
+        px.x > cv_mat.cols - pattern_size_with_border/2 || px.y > cv_mat.rows - pattern_size_with_border/2);
 
     const double x = px.x;
     const double y = px.y;
     const int N = 1000;
 
-    Matrix<float, size, size, RowMajor> img1;
-    Matrix<float, size, size, RowMajor> dx1;
-    Matrix<float, size, size, RowMajor> dy1;
-    utils::interpolateMat(eigen_mat, img1, dx1, dy1, x, y);
-    std::cout << "eigen Mat:\n" << img1 << std::endl;
-    std::cout << "eigen Mat dx:\n" << dx1 << std::endl;
-    std::cout << "eigen Mat dy:\n" << dy1 << std::endl;
 //    cv::imshow("img", cv_mat);
 //    cv::waitKey(0);
 
     Vector3d estimate = Vector3d(x,y,0) + Vector3d(4,2,0);
     Vector3d estimate0 = estimate;
-    Align2DI align0(false);
-
     Vector3d estimate1 = estimate;
-    AlignP2DI align1(false);
+
+    utils::interpolateMat<uchar, float, patch_size_with_border>(cv_mat, patch, x, y);
+    utils::interpolateMat<uchar, float, pattern_size_with_border>(cv_mat, pattern, x, y);
+    AlignPattern::pattern_.getPattern(pattern, pattern_patch, pattern_gx, pattern_gy);
+
+    const int iter = 1;
 
     double t0 = cv::getTickCount();
-    const int patch_size_with_border = Align2DI::PatchSize+2;
-    Matrix<float, patch_size_with_border, patch_size_with_border, RowMajor> img0, dx, dy;
     for(int i = 0; i < N; ++i)
     {
-        utils::interpolateMat<uchar, float, patch_size_with_border>(eigen_mat, img0, dx, dy, x, y);
+        utils::interpolateMat<uchar, float, patch_size_with_border>(cv_mat, patch, x, y);
         estimate0 = estimate;
-        align0.run(cv_mat, img0, estimate0);
+        AlignPatch::align2DI(cv_mat, patch, estimate0, iter);
     }
     double t1 = cv::getTickCount();
     for(int i = 0; i < N; ++i)
     {
-//        utils::interpolateMat<uchar, float, size1>(eigen_mat, img, x, y);
-//        AlignP2DI::pattern_.getPattern(img, patch);
-//        estimate1 = estimate;
-//        align1.run(eigen_mat, patch, estimate1);
+        utils::interpolateMat<uchar, float, pattern_size_with_border>(cv_mat, pattern, x, y);
+        AlignPattern::pattern_.getPattern(pattern, pattern_patch, pattern_gx, pattern_gy);
+        estimate1 = estimate;
+        AlignPattern::align2DI(cv_mat, pattern_patch, pattern_gx, pattern_gy, estimate1, iter);
     }
     double t2 = cv::getTickCount();
 
     for(int i = 0; i < N; ++i)
     {
-        utils::interpolateMat<uchar, float, patch_size_with_border>(eigen_mat, img0, dx, dy, x, y);
+        utils::interpolateMat<uchar, float, patch_size_with_border>(cv_mat, patch, x, y);
     }
     double t3 = cv::getTickCount();
     for(int i = 0; i < N; ++i)
     {
-        utils::interpolateMat<uchar, float, size1>(eigen_mat, img, x, y);
-        AlignP2DI::pattern_.getPattern(img, patch);
+        utils::interpolateMat<uchar, float, pattern_size_with_border>(cv_mat, pattern, x, y);
+        AlignPattern::pattern_.getPattern(pattern, pattern_patch);
+//        AlignPattern::pattern_.getPattern(pattern, pattern_patch, pattern_gx, pattern_gy);
     }
 
     double t4 = cv::getTickCount();
@@ -99,15 +101,13 @@ int main(int argc, char *argv[])
 
     cout << x << " " << y << endl;
 
-    std::string output;
-    std::for_each(align0.logs_.begin(), align0.logs_.end(), [&](const std::string &s){output += s;});
-    cout << estimate0.transpose() << endl;
-    cout << output << endl;
+    estimate0 = estimate;
+    AlignPatch::align2DI(cv_mat, patch, estimate0, 30, 0.01, true);
+    cout << " Est: " <<  estimate0.transpose() << endl;
 
-    output.clear();
-    std::for_each(align1.logs_.begin(), align1.logs_.end(), [&](const std::string &s){output += s;});
-    cout << estimate1.transpose() << endl;
-    cout << output << endl;
+    estimate1 = estimate;
+    AlignPattern::align2DI(cv_mat, pattern_patch, pattern_gx, pattern_gy, estimate1, 30, 0.01, true);
+    cout << " Est: " << estimate1.transpose() << endl;
 
     return 0;
 }

@@ -6,31 +6,36 @@ namespace ssvo{
 template <typename T, int N, int S>
 struct Pattern
 {
-    enum{Num = N, Size = S, Size1 = S+2};
+    enum{
+        Num = N,
+        Size = S,
+        SizeWithBorder = S+2
+    };
+
     const std::array<std::array<int, 2>, N> data;
     std::array<std::array<int, 5>, N> offset;
-//    std::array<std::array<bool, Size1>, Size1> mask;
 
-    inline void getPattern(Matrix<T, Size1, Size1, RowMajor> &mat, Matrix<T, N, 3, RowMajor> &pattern) const
+    inline void getPattern(Matrix<T, SizeWithBorder, SizeWithBorder, RowMajor> &mat,
+                           Matrix<T, N, 1> &pattern,
+                           Matrix<T, N, 1> &gx,
+                           Matrix<T, N, 1> &gy) const
     {
-        Matrix<T, 1, 3, RowMajor> *idxy = (Matrix<T, 1, 3, RowMajor>*) pattern.data();
         const T* mat_ptr = mat.data();
-        for(int i = 0; i < N; i++, idxy++)
+        for(int i = 0; i < N; i++)
         {
             const std::array<int, 5> &ofs = offset[i];
-            (*idxy)[0] = mat_ptr[ofs[0]];
-            (*idxy)[1] = (mat_ptr[ofs[1]]-mat_ptr[ofs[2]])*0.5;
-            (*idxy)[2] = (mat_ptr[ofs[3]]-mat_ptr[ofs[4]])*0.5;
+            pattern[i] = mat_ptr[ofs[0]];
+            gx[i] = (mat_ptr[ofs[1]]-mat_ptr[ofs[2]])*0.5;
+            gy[i] = (mat_ptr[ofs[3]]-mat_ptr[ofs[4]])*0.5;
         }
     }
 
-    inline void getPattern(Matrix<T, Size1, Size1, RowMajor> &mat, Matrix<T, N, 1> &pattern) const
+    inline void getPattern(Matrix<T, SizeWithBorder, SizeWithBorder, RowMajor> &mat, Matrix<T, N, 1> &pattern) const
     {
-        T *p = pattern.data();
         const T* mat_ptr = mat.data();
-        for(int i = 0; i < N; i++, p++)
+        for(int i = 0; i < N; i++)
         {
-            *p = mat_ptr[offset[i][0]];
+            pattern[i] = mat_ptr[offset[i][0]];
         }
     }
 
@@ -40,11 +45,8 @@ struct Pattern
         for(int i = 0; i < N; ++i)
         {
             assert(abs(data[i][0]) <= S && abs(data[i][1]) <= S);
-            int index = (data[i][0]+Size1/2) + (data[i][1]+Size1/2) * Size1;
-            offset[i] = {index, index+1, index-1, index+Size1, index-Size1};
-//            bool* mask_ptr = mask.data()->data();
-//            for(int p : offset[i])
-//                mask_ptr[p] = true;
+            int index = (data[i][0]+SizeWithBorder/2) + (data[i][1]+SizeWithBorder/2) * SizeWithBorder;
+            offset[i] = {index, index+1, index-1, index+SizeWithBorder, index-SizeWithBorder};
         }
     }
 };

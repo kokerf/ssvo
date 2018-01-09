@@ -799,9 +799,9 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
                                     Vector2d &px_matched,
                                     int &level_matched)
 {
-    static const int patch_size = Align2DI::PatchSize;
-    static const int patch_area = Align2DI::PatchArea;
-    static const int half_patch_size = Align2DI::HalfPatchSize;
+    static const int patch_size = AlignPatch::Size;
+    static const int patch_area = AlignPatch::Area;
+    static const int half_patch_size = AlignPatch::HalfSize;
 
     //! check if in the view of current frame
     const double z_ref = 1.0/seed->mu;
@@ -930,9 +930,8 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
         px_best = (px_near + px_far) * 0.5;
     }
 
-    Align2DI matcher(verbose_);
     Vector3d estimate(0,0,0); estimate.head<2>() = px_best;
-    if(!matcher.run(image_cur, patch_with_border, estimate, 30, options_.align_epslion))
+    if(!AlignPatch::align2DI(image_cur, patch_with_border, estimate, 30, options_.align_epslion, verbose_))
     {
 //        std::cout << "dx:\n " << dx << std::endl;
 //        std::cout << "dy:\n " << dy << std::endl;

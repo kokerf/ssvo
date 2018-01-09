@@ -4,10 +4,10 @@
 
 namespace ssvo{
 
-FeatureTracker::FeatureTracker(int width, int height, int grid_size, bool report, bool verbose) :
+FeatureTracker::FeatureTracker(int width, int height, int grid_size, int border, bool report, bool verbose) :
     report_(report), verbose_(report&&verbose)
 {
-    options_.border = Align2DI::HalfPatchSize;
+    options_.border = border;
     options_.max_kfs = 10;
     //! initialize grid
     grid_.grid_size = grid_size;
@@ -123,13 +123,13 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
         const Feature::Ptr ft_ref = mpt->findObservation(kf_ref);
         const Vector3d obs_ref_dir(kf_ref->pose().translation() - mpt->pose());
         const SE3d T_cur_from_ref = frame->Tcw() * kf_ref->pose();
-        const int patch_size = Align2DI::PatchSize;
+        const int patch_size = AlignPatch::Size;
         Matrix2d A_cur_from_ref;
         utils::getWarpMatrixAffine(kf_ref->cam_, frame->cam_, ft_ref->px, ft_ref->fn, ft_ref->level,
                                    obs_ref_dir.norm(), T_cur_from_ref, patch_size, A_cur_from_ref);
 
         // TODO 如果Affine很小的话，则不用warp
-        const int patch_border_size = patch_size+2;
+        const int patch_border_size = AlignPatch::SizeWithBorder;
         Matrix<float, patch_border_size, patch_border_size, RowMajor> patch_with_border;
         utils::warpAffine<float, patch_border_size>(kf_ref->getImage(ft_ref->level), patch_with_border, A_cur_from_ref,
                                                      ft_ref->px, ft_ref->level, track_level);
@@ -137,10 +137,8 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
         double t2 = (double)cv::getTickCount();
         const cv::Mat image_cur = frame->getImage(track_level);
 
-        Align2DI matcher(verbose_);
         const double factor = static_cast<double>(1 << track_level);
         Vector3d estimate(0,0,0); estimate.head<2>() = candidate.px / factor;
-
 
         static bool show = false;
         if(show)
@@ -156,7 +154,7 @@ bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
         }
 
         total_project_++;
-        if(matcher.run(image_cur, patch_with_border, estimate, 30))
+        if(AlignPatch::align2DI(image_cur, patch_with_border, estimate, 30, 0.01, verbose_))
         {
             Vector2d new_px = estimate.head<2>() * factor;
             Vector3d new_ft = frame->cam_->lift(new_px);

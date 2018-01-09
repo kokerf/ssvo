@@ -176,10 +176,9 @@ int main(int argc, char *argv[])
     cv::waitKey(0);
 
     cv::Point2f p = corners[0];
-    Align2DI aligner(false);
 
-    const int patch_size = Align2DI::PatchSize;
-    const int patch_size_with_border = Align2DI::PatchSize+2;
+    const int patch_size = AlignPatch::Size;
+    const int patch_size_with_border = AlignPatch::SizeWithBorder;
     Matrix<float, patch_size_with_border, patch_size_with_border, RowMajor> patch_ref_with_border;
     Matrix<uchar, Dynamic, Dynamic, RowMajor> gray_eigen = Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> >(gray.data, gray.rows, gray.cols);
     utils::interpolateMat<uchar, float, patch_size_with_border>(gray_eigen, patch_ref_with_border, p.x, p.y);
@@ -191,65 +190,120 @@ int main(int argc, char *argv[])
 
     const int N = 1000;
     const float scale = N/1000.0;
-    double t0 = (double)cv::getTickCount();
     Eigen::Vector3d px_error(-4.1, -3.3, 0);
-    bool converged0 = false;
-    Eigen::Vector3d estimate0;
-    for(int i = 0; i < N; i++)
     {
-        estimate0 = Eigen::Vector3d(p.x, p.y, 0) + px_error;
-        converged0 = aligner.run(gray, patch_ref_with_border, estimate0, 1);
+        double t0 = (double) cv::getTickCount();
+        bool converged0 = false;
+        Eigen::Vector3d estimate0;
+        for(int i = 0; i < N; i++)
+        {
+            estimate0 = Eigen::Vector3d(p.x, p.y, 0) + px_error;
+            converged0 = AlignPatch::align2DI(gray, patch_ref_with_border, estimate0, 1);
+        }
+
+        double t1 = (double) cv::getTickCount();
+
+        Eigen::Vector3d estimate1;
+        bool converged1 = false;
+        for(int i = 0; i < N; i++)
+        {
+            estimate1 = Eigen::Vector3d(p.x, p.y, 0) + px_error;
+            converged1 = AlignPatch::align2DI(noise, patch_ref_with_border, estimate1, 1);
+        }
+        double t2 = (double) cv::getTickCount();
+
+        Eigen::Vector2d estimate2;
+        bool converged2 = false;
+        for(int i = 0; i < N; i++)
+        {
+            estimate2 = Eigen::Vector2d(p.x, p.y) + px_error.head<2>();
+            converged2 = align2D(gray, patch_ref_with_border_u8.data(), patch_ref_u8.data(), 1, estimate2);
+        }
+        double t3 = (double) cv::getTickCount();
+
+        Eigen::Vector2d estimate3;
+        bool converged3 = false;
+        for(int i = 0; i < N; i++)
+        {
+            estimate3 = Eigen::Vector2d(p.x, p.y) + px_error.head<2>();
+            converged3 = align2D(noise, patch_ref_with_border_u8.data(), patch_ref_u8.data(), 1, estimate3);
+        }
+        double t4 = (double) cv::getTickCount();
+
+        std::cout << "\nTruePose: [" << p.x << ", " << p.y << "]" << std::endl;
+        std::cout << "================\n"
+                  << "Estiamte: [" << estimate0.transpose() << "]\n"
+                  << "Converged: " << converged0 << " "
+                  << "Time(ms): " << (t1 - t0) / cv::getTickFrequency() / scale << std::endl;
+
+        std::cout << "================\n"
+                  << "Estiamte: [" << estimate1.transpose() << "]\n"
+                  << "Converged: " << converged1 << " "
+                  << "Time(ms): " << (t2 - t1) / cv::getTickFrequency() / scale << std::endl;
+
+        std::cout << "================\n"
+                  << "Estiamte: [" << estimate2.transpose() << "]\n"
+                  << "Converged: " << converged2 << " "
+                  << "Time(ms): " << (t3 - t2) / cv::getTickFrequency() / scale << std::endl;
+
+        std::cout << "================\n"
+                  << "Estiamte: [" << estimate3.transpose() << "]\n"
+                  << "Converged: " << converged3 << " "
+                  << "Time(ms): " << (t4 - t3) / cv::getTickFrequency() / scale << std::endl;
     }
 
-    double t1 = (double)cv::getTickCount();
-
-    Eigen::Vector3d estimate1;
-    bool converged1 = false;
-    for(int i = 0; i < N; i++)
+    std::cout << std::endl;
     {
-        estimate1 = Eigen::Vector3d(p.x, p.y, 0) + px_error;
-        converged1 = aligner.run(noise, patch_ref_with_border, estimate1, 1);
+        Matrix<float, AlignPatch::Area, 1> patch_ref, patch_ref_gx, patch_ref_gy;
+        double t0 = (double) cv::getTickCount();
+        bool converged0 = false;
+        Eigen::Vector3d estimate0;
+        for(int i = 0; i < N; i++)
+        {
+            estimate0 = Eigen::Vector3d(p.x, p.y, 0) + px_error;
+            utils::interpolateMat<uchar, float, patch_size_with_border>(gray, patch_ref_with_border, p.x, p.y);
+            converged0 = AlignPatch::align2DI(gray, patch_ref_with_border, estimate0, 1);
+        }
+        double t1 = (double) cv::getTickCount();
+
+        bool converged1 = false;
+        Eigen::Vector3d estimate1;
+        for(int i = 0; i < N; i++)
+        {
+            estimate1 = Eigen::Vector3d(p.x, p.y, 0) + px_error;
+            utils::interpolateMat<uchar, float, patch_size>(gray, patch_ref, patch_ref_gx, patch_ref_gy, p.x, p.y);
+            converged1 = AlignPatch::align2DI(gray, patch_ref, patch_ref_gx, patch_ref_gy, estimate1, 1);
+        }
+        double t2 = (double) cv::getTickCount();
+
+        for(int i = 0; i < N; i++)
+        {
+            estimate0 = Eigen::Vector3d(p.x, p.y, 0) + px_error;
+            converged0 = AlignPatch::align2DI(gray, patch_ref_with_border, estimate0, 1);
+        }
+        double t3 = (double) cv::getTickCount();
+
+        for(int i = 0; i < N; i++)
+        {
+            estimate1 = Eigen::Vector3d(p.x, p.y, 0) + px_error;
+            converged1 = AlignPatch::align2DI(gray, patch_ref, patch_ref_gx, patch_ref_gy, estimate1, 1);
+        }
+        double t4 = (double) cv::getTickCount();
+
+        std::cout << "================\n"
+                  << "Estiamte: [" << estimate0.transpose() << "]\n"
+                  << "Converged: " << converged0 << " "
+                  << "Time(ms): " << (t1 - t0) / cv::getTickFrequency() / scale
+                  << ", " << (t3 - t2) / cv::getTickFrequency() / scale << std::endl;
+
+        std::cout << "================\n"
+                  << "Estiamte: [" << estimate1.transpose() << "]\n"
+                  << "Converged: " << converged1 << " "
+                  << "Time(ms): " << (t2 - t1) / cv::getTickFrequency() / scale
+                  << ", " << (t4 - t3) / cv::getTickFrequency() / scale << std::endl;
     }
-    double t2 = (double)cv::getTickCount();
 
-    Eigen::Vector2d estimate2;
-    bool converged2 = false;
-    for(int i = 0; i < N; i++)
-    {
-        estimate2 = Eigen::Vector2d(p.x, p.y) + px_error.head<2>();
-        converged2 = align2D(gray, patch_ref_with_border_u8.data(), patch_ref_u8.data(), 1, estimate2);
-    }
-    double t3 = (double)cv::getTickCount();
 
-    Eigen::Vector2d estimate3;
-    bool converged3 = false;
-    for(int i = 0; i < N; i++)
-    {
-        estimate3 = Eigen::Vector2d(p.x, p.y) + px_error.head<2>();
-        converged3 = align2D(noise, patch_ref_with_border_u8.data(), patch_ref_u8.data(), 1, estimate3);
-    }
-    double t4 = (double)cv::getTickCount();
-
-    std::cout << "\nTruePose: [" << p.x << ", " << p.y << "]" << std::endl;
-    std::cout << "================\n"
-              << "Estiamte: [" << estimate0.transpose() << "]\n"
-              << "Converged: " << converged0 << " "
-              << "Time(ms): " << (t1-t0)/cv::getTickFrequency()/scale << std::endl;
-
-    std::cout << "================\n"
-              << "Estiamte: [" << estimate1.transpose() << "]\n"
-              << "Converged: " << converged1 << " "
-              << "Time(ms): " << (t2-t1)/cv::getTickFrequency()/scale << std::endl;
-
-    std::cout << "================\n"
-              << "Estiamte: [" << estimate2.transpose() << "]\n"
-              << "Converged: " << converged2 << " "
-              << "Time(ms): " << (t3-t2)/cv::getTickFrequency()/scale << std::endl;
-
-    std::cout << "================\n"
-              << "Estiamte: [" << estimate3.transpose() << "]\n"
-              << "Converged: " << converged3 << " "
-              << "Time(ms): " << (t4-t3)/cv::getTickFrequency()/scale << std::endl;
 
     return 0;
 }

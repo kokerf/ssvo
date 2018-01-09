@@ -35,12 +35,12 @@ public:
 
     int reprojectLoaclMap(const Frame::Ptr &frame);
 
-    inline static FeatureTracker::Ptr create(int width, int height, int grid_size, bool report = false, bool verbose = false)
-    {return FeatureTracker::Ptr(new FeatureTracker(width, height, grid_size, report, verbose));}
+    inline static FeatureTracker::Ptr create(int width, int height, int grid_size, int border, bool report = false, bool verbose = false)
+    {return FeatureTracker::Ptr(new FeatureTracker(width, height, grid_size, border, report, verbose));}
 
 private:
 
-    FeatureTracker(int width, int height, int grid_size, bool report = false, bool verbose = false);
+    FeatureTracker(int width, int height, int grid_size, int border, bool report = false, bool verbose = false);
 
     void resetGrid();
 
