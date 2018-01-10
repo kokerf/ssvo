@@ -38,6 +38,8 @@ private:
 
     void removeMapPoint(const MapPoint::Ptr &mpt);
 
+    void insertNewMapPoint(const MapPoint::Ptr &mpt);
+
     inline static Map::Ptr create() {return Map::Ptr(new Map());}
 
 private:
@@ -46,8 +48,11 @@ private:
 
     std::unordered_map<uint64_t, MapPoint::Ptr> mpts_;
 
+    std::unordered_map<uint64_t, MapPoint::Ptr> new_mpts_;
+
     std::mutex mutex_kf_;
     std::mutex mutex_mpt_;
+    std::mutex mutex_new_mpt_;
 };
 
 }

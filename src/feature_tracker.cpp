@@ -75,11 +75,11 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     total_project_ = 0;
     for(int index : grid_.grid_order)
     {
-        if(trackMapPoints(frame, *grid_.cells[index]))
+        if(matchMapPoints(frame, *grid_.cells[index]))
             matches++;
         if(matches > options_.max_matches)
             break;
-        }
+    }
 
     double t3 = (double)cv::getTickCount();
     LOG_IF(WARNING, report_) << "[FtTrack][*] Time: "
@@ -112,7 +112,7 @@ bool FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame, const MapPoint::
     return true;
 }
 
-bool FeatureTracker::trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
+bool FeatureTracker::matchMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
 {
     // TODO sort? 选择质量较好的点优先投影
     cell.sort([](Candidate &c1, Candidate &c2){return c1.pt->getFoundRatio() > c2.pt->getFoundRatio();});

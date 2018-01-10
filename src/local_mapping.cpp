@@ -114,7 +114,7 @@ LocalMapper::LocalMapper(const FastDetector::Ptr &fast_detector, double fps, boo
 {
     map_ = Map::create();
     options_.max_kfs = 3;
-    options_.max_epl_length = 10;
+    options_.max_epl_length = 1000;
     options_.epl_dist2_threshold = 16 * Config::pixelUnSigma2();
     options_.seed_converge_threshold = 1.0/200.0;
     options_.klt_epslion = 0.0001;
@@ -379,7 +379,7 @@ void LocalMapper::processNewKeyFrame()
     }
     new_keyframe->updateConnections();
 
-    //! insert to map
+    //! insert to mapper
     insertKeyFrame(new_keyframe);
 }
 
@@ -395,7 +395,7 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
     else
     {
         current_keyframe_ = keyframe;
-        int new_features = createNewFeatures();
+        int new_features = 0;//createNewFeatures();
 
         if(map_->kfs_.size() > 2)
             Optimizer::localBundleAdjustment(current_keyframe_, report_, verbose_);
@@ -461,7 +461,7 @@ int LocalMapper::createSeeds(bool is_track)
     {
         const Vector2d px(corner.x, corner.y);
         const Vector3d fn(current_keyframe_->cam_->lift(px));
-        new_seeds.emplace_back(Seed::create(current_keyframe_, px, fn, corner.level, depth_mean, depth_min));
+        new_seeds.emplace_back(Seed::create(current_keyframe_, px, fn, 0, depth_mean, depth_min));
     }
     seeds_buffer_.emplace_back(current_keyframe_, std::make_shared<Seeds>(new_seeds));
 
@@ -517,7 +517,7 @@ int LocalMapper::createNewFeatures()
                 current_keyframe_->addFeature(ft_cur);
 
                 //! mpt
-                map_->insertMapPoint(new_mpt);
+                map_->insertNewMapPoint(new_mpt);
                 new_mpt->addObservation(kf, ft_ref);
                 new_mpt->addObservation(current_keyframe_, ft_cur);
                 new_mpt->updateViewAndDepth();
@@ -570,8 +570,9 @@ uint64_t LocalMapper::trackSeeds()
             Vector2d &px_cur = (*track_seeds_itr)->px_cur;
             px_cur[0] = px.x;
             px_cur[1] = px.y;
-            const cv::Point2f dis = pts_to_track[idx] - pts_tracked[idx];
-            disparity .push_back(dis.x*dis.x+dis.y+dis.y);
+            const cv::Point2f disp = pts_to_track[idx] - pts_tracked[idx];
+            const float dist = disp.x*disp.x+disp.y+disp.y;
+            disparity .push_back(dist);
             track_seeds_itr++;
             count++;
         }
@@ -627,8 +628,8 @@ int LocalMapper::updateSeeds()
             if(utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->fn_ref, fn_cur, depth))
             {
                 double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
-//                double tau = track_seed->seed->computeVar(T_cur_from_ref, depth, options_.klt_epslion);
-                tau = tau + Config::pixelUnSigma();
+//                tau = seed->computeVar(T_cur_from_ref, depth, options_.klt_epslion);
+//                tau = tau + Config::pixelUnSigma();
                 seed->update(1.0/depth, tau*tau);
 
                 //! check converge
@@ -711,8 +712,8 @@ int LocalMapper::reprojectSeeds()
             }
 
             double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
-//            double tau = seed->computeVar(T_cur_from_ref, depth, options_.align_epslion);
-            tau = tau + Config::pixelUnSigma();
+//            tau = seed->computeVar(T_cur_from_ref, depth, options_.align_epslion);
+//            tau = tau + Config::pixelUnSigma();
             seed->update(1.0/depth, tau*tau);
 
             //! check converge
@@ -773,9 +774,7 @@ bool LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
     // TODO add_observation 不用，需不需要找一下其他关键帧是否观测改点，增加约束
     // TODO 把这部分放入一个队列，在单独线程进行处理
     MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->mu), seed->kf);
-
-    const Vector2d px_ref(seed->kf->cam_->project(seed->fn_ref[0], seed->fn_ref[0]));
-    Feature::Ptr ft = Feature::create(px_ref, seed->fn_ref, seed->level_ref, mpt);
+    Feature::Ptr ft = Feature::create(seed->px_ref, seed->fn_ref, seed->level_ref, mpt);
     seed->kf->addFeature(ft);
     map_->insertMapPoint(mpt);
     mpt->addObservation(seed->kf, ft);

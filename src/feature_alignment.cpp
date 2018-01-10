@@ -40,7 +40,7 @@ bool AlignPatch::align2DI(const cv::Mat &image_cur,
     }
 
     Matrix3f Hinv = H.inverse();
-    if(isnan(Hinv(0,0)))
+    if(isinf(Hinv(0,0)) || isnan(Hinv(0,0)))
         return false;
 
     Vector3f update(0, 0, 0);
@@ -136,7 +136,7 @@ bool AlignPatch::align2DI(const cv::Mat &image_cur,
     }
 
     Matrix3f Hinv = H.inverse();
-    if(isnan(Hinv(0,0)))
+    if(isinf(Hinv(0,0)) || isnan(Hinv(0,0)))
         return false;
 
     Vector3f update(0, 0, 0);
@@ -227,7 +227,7 @@ bool AlignPattern::align2DI(const cv::Mat &image_cur,
     }
 
     Matrix3f Hinv = H.inverse();
-    if(isnan(Hinv(0,0)))
+    if(isinf(Hinv(0,0)) || isnan(Hinv(0,0)))
         return false;
 
     Vector3f update(0, 0, 0);

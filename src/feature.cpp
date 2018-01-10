@@ -33,14 +33,40 @@ double Seed::computeTau(
     Vector3d a = f*z-t;
     double t_norm = t.norm();
     double a_norm = a.norm();
-    double alpha = acos(f.dot(t)/t_norm); // dot product
+    double f_norm = f.norm();
+    double alpha = acos(f.dot(t)/(t_norm*f_norm)); // dot product
     double beta = acos(-a.dot(t)/(t_norm*a_norm)); // dot product
     double beta_plus = beta + px_error_angle;
     double gamma_plus = M_PI-alpha-beta_plus; // triangle angles sum to PI
     double z_plus = t_norm*sin(beta_plus)/sin(gamma_plus); // law of sines
+    z_plus /= f_norm;
 
     double tau = z_plus - z;
     return 0.5 * (1.0/MAX(0.0000001, z-tau) - 1.0/(z+tau));
+}
+
+double Seed::computeVar(const SE3d &T_cur_ref, const double z, const double delta)
+{
+    const Vector3d &t(T_cur_ref.translation()); // from cur->ref in cur's frame
+    Vector3d xyz_r(fn_ref*z);
+    Vector3d f_c(T_cur_ref * xyz_r);
+    Vector3d f_r(f_c-t);
+
+    double t_norm = t.norm();
+    double f_c_norm = f_c.norm();
+    double f_r_norm = f_r.norm();
+
+    double alpha = acos(f_r.dot(-t)/f_r_norm/t_norm);
+
+    double epslion = atan(0.5*delta/f_c_norm/f_c[2])*2.0;
+//    epslion  = 0.0021867665614925609;
+    double beta = acos(f_c.dot(t)/(f_c_norm*t_norm));
+    double gamma = acos(f_c.dot(f_r)/(f_c_norm*f_r_norm));
+
+    double z1 = t_norm * sin(beta+epslion) / sin(gamma-epslion);
+    z1 /= f_r_norm;
+
+    return 0.5 * (1.0/MAX(0.0000001, 2*z-z1) - 1.0/(z1));
 }
 
 void Seed::update(const double x, const double tau2)
@@ -66,6 +92,8 @@ void Seed::update(const double x, const double tau2)
     mu = mu_new;
     a = (e-f)/(f-e/f);
     b = a*(1.0f-f)/f;
+
+    history.emplace_back(x, 1.0/mu);
 }
 
 }

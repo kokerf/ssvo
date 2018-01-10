@@ -46,7 +46,7 @@ private:
 
     bool reprojectMapPoint(const Frame::Ptr &frame, const MapPoint::Ptr &point);
 
-    bool trackMapPoints(const Frame::Ptr &frame, Grid::Cell &cell);
+    bool matchMapPoints(const Frame::Ptr &frame, Grid::Cell &cell);
 
 private:
 
