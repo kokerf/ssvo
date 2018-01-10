@@ -52,7 +52,7 @@ private:
 
     struct Option{
         int border;
-        int max_kfs;
+        int max_matches;
     } options_;
 
     Grid grid_;

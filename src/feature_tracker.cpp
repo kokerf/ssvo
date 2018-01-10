@@ -8,7 +8,7 @@ FeatureTracker::FeatureTracker(int width, int height, int grid_size, int border,
     report_(report), verbose_(report&&verbose)
 {
     options_.border = border;
-    options_.max_kfs = 10;
+    options_.max_matches = 200;
     //! initialize grid
     grid_.grid_size = grid_size;
     grid_.grid_n_cols = ceil(static_cast<double>(width)/grid_.grid_size);
@@ -34,13 +34,13 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
 
     LOG_IF(INFO, verbose_) << "[FtTrack][1] -- Get Candidate KeyFrame --";
     std::set<KeyFrame::Ptr> candidate_keyframes;
-    std::set<KeyFrame::Ptr> connected_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_kfs);
+    std::set<KeyFrame::Ptr> connected_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames();
     connected_keyframes.insert(frame->getRefKeyFrame());
     candidate_keyframes = connected_keyframes;
 
     for(const KeyFrame::Ptr &kf : connected_keyframes)
     {
-        std::set<KeyFrame::Ptr> sub_connected_keyframe = kf->getConnectedKeyFrames(options_.max_kfs);
+        std::set<KeyFrame::Ptr> sub_connected_keyframe = kf->getConnectedKeyFrames();
         for(const KeyFrame::Ptr &sub_kf : sub_connected_keyframe)
         {
             candidate_keyframes.insert(sub_kf);
@@ -49,16 +49,23 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
 
     LOG_IF(INFO, verbose_) << "[FtTrack][2] -- Reproject Map Points --";
     double t1 = (double)cv::getTickCount();
+    std::unordered_set<MapPoint::Ptr> local_mpts;
     for(const KeyFrame::Ptr &kf : candidate_keyframes)
     {
         const std::vector<Feature::Ptr> &fts = kf->getFeatures();
         for(const Feature::Ptr &ft : fts)
         {
-            if(ft->mpt == nullptr)
+            const MapPoint::Ptr &mpt = ft->mpt;
+            if(mpt == nullptr)
                 continue;
 
-            if(frame->isVisiable(ft->mpt->pose()))
-                reprojectMapPoint(frame, ft->mpt);
+            if(local_mpts.count(mpt))
+                continue;
+
+            local_mpts.insert(mpt);
+
+            if(frame->isVisiable(mpt->pose()))
+                reprojectMapPoint(frame, mpt);
         }
     }
 
@@ -70,7 +77,7 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     {
         if(trackMapPoints(frame, *grid_.cells[index]))
             matches++;
-        if(matches > 120)
+        if(matches > options_.max_matches)
             break;
         }
 
@@ -79,7 +86,7 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
                            << (t1-t0)/cv::getTickFrequency() << " "
                            << (t2-t1)/cv::getTickFrequency() << " "
                            << (t3-t2)/cv::getTickFrequency() << " "
-                           << ", match points " << matches << "(" << total_project_ << ")";
+                           << ", match points " << matches << "(" << total_project_ << ", " << local_mpts.size() << ")";
 
     // TODO 最后可以做一个对极线外点检测？
 

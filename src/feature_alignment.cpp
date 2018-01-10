@@ -39,10 +39,9 @@ bool AlignPatch::align2DI(const cv::Mat &image_cur,
         }
     }
 
-    if(H.determinant() < 1e-10)
-        return false;
-
     Matrix3f Hinv = H.inverse();
+    if(isnan(Hinv(0,0)))
+        return false;
 
     Vector3f update(0, 0, 0);
 
@@ -136,10 +135,9 @@ bool AlignPatch::align2DI(const cv::Mat &image_cur,
         H += J * J.transpose();
     }
 
-    if(H.determinant() < 1e-10)
-        return false;
-
     Matrix3f Hinv = H.inverse();
+    if(isnan(Hinv(0,0)))
+        return false;
 
     Vector3f update(0, 0, 0);
 
@@ -228,10 +226,9 @@ bool AlignPattern::align2DI(const cv::Mat &image_cur,
         H += J * J.transpose();
     }
 
-    if(H.determinant() < 1e-10)
-        return false;
-
     Matrix3f Hinv = H.inverse();
+    if(isnan(Hinv(0,0)))
+        return false;
 
     Vector3f update(0, 0, 0);
 
