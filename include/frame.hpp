@@ -44,7 +44,7 @@ public:
     //! Set Extrinsic Matrix
     void setTcw(const SE3d& Tcw);
 
-    bool isVisiable(const Vector3d &xyz_w);
+    bool isVisiable(const Vector3d &xyz_w, const int border = 0);
 
     size_t N();
 

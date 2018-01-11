@@ -30,7 +30,7 @@ Frame::Frame(const cv::Mat &img, const double timestamp, const Camera::Ptr &cam)
 }
 
 Frame::Frame(const ImgPyr &img_pyr, const uint64_t id, const double timestamp, const Camera::Ptr &cam) :
-    id_(id), timestamp_(timestamp), cam_(cam), max_level_(img_pyr.size()), img_pyr_(img_pyr),
+    id_(id), timestamp_(timestamp), cam_(cam), max_level_(Config::imageTopLevel()), img_pyr_(img_pyr),
     Tcw_(SE3d(Matrix3d::Identity(), Vector3d::Zero())), Twc_(Tcw_.inverse())
 {}
 
@@ -99,7 +99,7 @@ void Frame::setTcw(const SE3d &Tcw)
 
 }
 
-bool Frame::isVisiable(const Vector3d &xyz_w)
+bool Frame::isVisiable(const Vector3d &xyz_w, const int border)
 {
     SE3d Tcw;
     {
@@ -110,8 +110,8 @@ bool Frame::isVisiable(const Vector3d &xyz_w)
     if(xyz_f[2] < 0.0f)
         return false;
 
-    Vector2d ft = cam_->project(xyz_f);
-    return cam_->isInFrame(ft.cast<int>());
+    Vector2d px = cam_->project(xyz_f);
+    return cam_->isInFrame(px.cast<int>(), border);
 }
 
 Features Frame::features()
