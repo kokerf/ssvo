@@ -82,6 +82,7 @@ private:
         double align_epslion;
         double min_disparity;
         double min_track_features;
+        int min_redundant_observations;
     } options_;
 
     std::shared_ptr<std::thread> mapping_thread_;

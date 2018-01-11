@@ -19,6 +19,8 @@ public:
 
     MapPoints getMapPoints();
 
+    void setBad();
+
     std::set<KeyFrame::Ptr> getConnectedKeyFrames(int num=-1);
 
     const ImgPyr opticalImages() const = delete;    //! disable this function
@@ -27,11 +29,14 @@ public:
     { return Ptr(new KeyFrame(frame)); }
 
 private:
+
     KeyFrame(const Frame::Ptr frame);
 
-    void addConnection(KeyFrame::Ptr kf, const int& weight);
+    void addConnection(const KeyFrame::Ptr &kf, const int weight);
 
     void updateOrderedConnections();
+
+    void removeConnection(const KeyFrame::Ptr &kf);
 
 public:
 
@@ -42,6 +47,10 @@ public:
     std::map<KeyFrame::Ptr, int> connectedKeyFrames_;
 
     std::multimap<int, KeyFrame::Ptr> orderedConnectedKeyFrames_;
+
+private:
+
+    std::mutex mutex_connection_;
 
 };
 

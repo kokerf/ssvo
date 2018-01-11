@@ -74,10 +74,4 @@ uint64_t Map::MapPointsInMap()
     return mpts_.size();
 }
 
-void Map::insertNewMapPoint(const MapPoint::Ptr &mpt)
-{
-    std::lock_guard<std::mutex> lock(mutex_new_mpt_);
-    new_mpts_.emplace(mpt->id_, mpt);
-}
-
 }

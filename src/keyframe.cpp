@@ -69,21 +69,28 @@ void KeyFrame::updateConnections()
               [](const std::pair<int, KeyFrame::Ptr> &a, const std::pair<int, KeyFrame::Ptr> &b){ return a.first > b.first; });
 
     //! update
-    connectedKeyFrames_.clear();
-    for(const auto &item : weight_connections)
     {
-        connectedKeyFrames_.insert(std::make_pair(item.second, item.first));
-    }
+        std::lock_guard<std::mutex> lock(mutex_connection_);
 
-    orderedConnectedKeyFrames_ = std::multimap<int, KeyFrame::Ptr>(weight_connections.begin(), weight_connections.end());
+        connectedKeyFrames_.clear();
+        for(const auto &item : weight_connections)
+        {
+            connectedKeyFrames_.insert(std::make_pair(item.second, item.first));
+        }
+
+        orderedConnectedKeyFrames_ =
+            std::multimap<int, KeyFrame::Ptr>(weight_connections.begin(), weight_connections.end());
+    }
 }
 
 std::set<KeyFrame::Ptr> KeyFrame::getConnectedKeyFrames(int num)
 {
+    std::lock_guard<std::mutex> lock(mutex_connection_);
+
     std::set<KeyFrame::Ptr> kfs;
-    if(num == -1) num = orderedConnectedKeyFrames_.size();
+    if(num == -1) num = (int) orderedConnectedKeyFrames_.size();
     int count = 0;
-    for(const auto ordered_keyframe : orderedConnectedKeyFrames_)
+    for(const auto &ordered_keyframe : orderedConnectedKeyFrames_)
     {
         kfs.insert(ordered_keyframe.second);
         if(++count >= num)
@@ -93,25 +100,69 @@ std::set<KeyFrame::Ptr> KeyFrame::getConnectedKeyFrames(int num)
     return kfs;
 }
 
-void KeyFrame::addConnection(KeyFrame::Ptr kf, const int &weight)
+void KeyFrame::setBad()
 {
-    if(!connectedKeyFrames_.count(kf))
-        connectedKeyFrames_[kf] = weight;
-    else if(connectedKeyFrames_[kf] != weight)
-        connectedKeyFrames_[kf] = weight;
-    else
+    if(id_ == 0)
         return;
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_connection_);
+        for(const auto &connect : connectedKeyFrames_)
+        {
+            connect.first->removeConnection(shared_from_this());
+        }
+
+        connectedKeyFrames_.clear();
+        orderedConnectedKeyFrames_.clear();
+    }
+
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+    for(const Feature::Ptr &ft : fts_)
+    {
+        const MapPoint::Ptr &mpt = ft->mpt;
+        if(mpt == nullptr)
+            continue;
+
+        mpt->removeObservation(shared_from_this());
+    }
+
+    // TODO change refKF
+}
+
+void KeyFrame::addConnection(const KeyFrame::Ptr &kf, const int weight)
+{
+    {
+        std::lock_guard<std::mutex> lock(mutex_connection_);
+
+        if(!connectedKeyFrames_.count(kf))
+            connectedKeyFrames_[kf] = weight;
+        else if(connectedKeyFrames_[kf] != weight)
+            connectedKeyFrames_[kf] = weight;
+        else
+            return;
+    }
 
     updateOrderedConnections();
 }
 
 void KeyFrame::updateOrderedConnections()
 {
+    std::lock_guard<std::mutex> lock(mutex_connection_);
     orderedConnectedKeyFrames_.clear();
-    for(std::pair<KeyFrame::Ptr, int> connect : connectedKeyFrames_)
+    for(const auto &connect : connectedKeyFrames_)
     {
-        std::multimap<int, KeyFrame::Ptr>::iterator it = orderedConnectedKeyFrames_.lower_bound(connect.second);
+        auto it = orderedConnectedKeyFrames_.lower_bound(connect.second);
         orderedConnectedKeyFrames_.insert(it, std::pair<int, KeyFrame::Ptr>(connect.second, connect.first));
+    }
+}
+
+void KeyFrame::removeConnection(const KeyFrame::Ptr &kf)
+{
+    std::lock_guard<std::mutex> lock(mutex_connection_);
+    if(connectedKeyFrames_.count(kf))
+    {
+        connectedKeyFrames_.erase(kf);
+        updateOrderedConnections();
     }
 }
 

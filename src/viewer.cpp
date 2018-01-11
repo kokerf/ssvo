@@ -1,4 +1,3 @@
-#include <pangolin/pangolin.h>
 #include "viewer.hpp"
 
 namespace ssvo{
@@ -33,15 +32,19 @@ void Viewer::run()
     glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     pangolin::CreatePanel("menu").SetBounds(pangolin::Attach::Pix(WIN_HEIGHT-UI_HEIGHT), 1.0, 0.0, pangolin::Attach::Pix(UI_WIDTH));
-    pangolin::Var<bool> menu_follow_camera("menu.Follow Camera",true, true);
+    pangolin::Var<bool> menu_follow_camera("menu.Follow Camera", true, true);
+    pangolin::Var<bool> menu_show_connections("menu.Connections", true, true);
+    pangolin::Var<bool> menu_show_current_connections("menu.Connections_cur", true, true);
 
 
     bool following_camera = true;
+    bool show_connections = true;
+    bool show_current_connections = true;
 
     // Define Projection and initial ModelView matrix
     pangolin::OpenGlRenderState s_cam(
         pangolin::ProjectionMatrix(WIN_WIDTH, WIN_HEIGHT, 500, 500, WIN_WIDTH/2, WIN_HEIGHT/2, 0.1, 1000),
-        pangolin::ModelViewLookAt(0, 0, -1, 0, 0, 0, pangolin::AxisNegY));
+        pangolin::ModelViewLookAt(0, -1, -0.5, 0, 0, 0, 0, -1, 0));
 
     // Create Interactive View in window
     pangolin::View& camera_viewer = pangolin::Display("Camera")
@@ -61,41 +64,46 @@ void Viewer::run()
         camera_viewer.Activate(s_cam);
 
         glClearColor(1.0f,1.0f,1.0f,1.0f);
-//
-//        if(menu_follow_camera)
-//        {
-//            std::lock_guard<std::mutex> lock(mutex_camera_);
-//            s_cam.Follow(camera_pose_);
-//            following_camera = true;
-//        }
-//        else if(!menu_follow_camera && following_camera)
-//        {
-//            following_camera = false;
-//        }
 
-//        glPointSize(10.0f);
-//        glBegin(GL_POINTS);
-//        glColor3f(1.0,0.0,0.0);
-//        glVertex3f(0.0f,0.0f,0.0f);
-//        glVertex3f(0,0,1);
-//        glEnd();
+        if(menu_follow_camera)
+        {
+            pangolin::OpenGlMatrix pose;
+            getCurrentCameraPose(pose);
+            s_cam.SetModelViewMatrix(pangolin::ModelViewLookAt(0, -1, -0.5, 0, 0, 0, 0, -1, 0));
+            s_cam.Follow(pose);
+            following_camera = true;
+        }
+        else if(!menu_follow_camera && following_camera)
+        {
+            following_camera = false;
+        }
 
-        //pangolin::glDrawLine(0.0,0.0,0.0,0,0,0.5);
+        if(menu_show_connections)
+        {
+            show_connections = true;
+        }
+        else if(!menu_show_connections && show_connections)
+        {
+            show_connections = false;
+        }
+
+        if(menu_show_current_connections)
+        {
+            show_current_connections = true;
+        }
+        else if(!menu_show_current_connections && show_current_connections)
+        {
+            show_current_connections = false;
+        }
+
         pangolin::glDrawAxis(0.1);
         drawMapPoints();
 
-        drawKeyFrames();
+        drawKeyFrames(show_connections, show_current_connections);
 
-        drawCurFrame();
+        drawCurrentFrame();
 
-        cv::Mat im;
-        {
-            std::lock_guard<std::mutex> lock(mutex_image_);
-            if(!image_.empty())
-                imageTexture.Upload(image_.data, GL_RGB, GL_UNSIGNED_BYTE);
-//            cv::imshow("image_",image_);
-//            cv::waitKey(1);
-        }
+        drawCurrentImage(imageTexture);
 
         image_viewer.Activate();
         glColor3f(1.0,1.0,1.0);
@@ -108,41 +116,59 @@ void Viewer::run()
     pangolin::DestroyWindow(win_name);
 }
 
-void Viewer::showImage(const cv::Mat &image)
+void Viewer::setCurrentFrame(const Frame::Ptr &frame)
 {
-    std::lock_guard<std::mutex> lock(mutex_image_);
-    LOG_ASSERT(!image.empty());
-    if(image.channels() != 3)
-        cv::cvtColor(image, image_, CV_GRAY2RGB);
-    else
-        image_ = image.clone();
+    std::lock_guard<std::mutex> lock(mutex_frame_);
+    frame_ = frame;
+    camera_pose_ = frame_->pose().matrix();
+    cv::cvtColor(frame_->getImage(0), image_, CV_GRAY2RGB);
 }
 
-void Viewer::setCurrentCameraPose(const Matrix4d &pose)
+void Viewer::getCurrentCameraPose(pangolin::OpenGlMatrix &M)
 {
-    std::lock_guard<std::mutex> lock(mutex_pose_);
-    camera_pose_ = pose;
+    Eigen::Map<Matrix<pangolin::GLprecision, 4, 4> > T(M.m);
+    {
+        std::lock_guard<std::mutex> lock(mutex_frame_);
+        T = camera_pose_;
+    }
 }
 
-void Viewer::drawKeyFrames()
+void Viewer::drawKeyFrames(bool show_connections, bool show_current)
 {
     std::vector<KeyFrame::Ptr> kfs = map_->getAllKeyFrames();
 
-    for(KeyFrame::Ptr kf : kfs)
+    std::set<KeyFrame::Ptr> loacl_kfs;
+    if(show_current)
+    {
+        const KeyFrame::Ptr &ref_kf = frame_->getRefKeyFrame();
+        if(ref_kf != nullptr)
+        {
+            loacl_kfs = ref_kf->getConnectedKeyFrames();
+            loacl_kfs.insert(ref_kf);
+        }
+    }
+
+    for(const KeyFrame::Ptr &kf : kfs)
     {
         SE3d pose = kf->pose();
-        drawCamera(pose.matrix(), cv::Scalar(0.0, 1.0, 0.2));
+        if(loacl_kfs.count(kf))
+            drawCamera(pose.matrix(), cv::Scalar(0.0, 0.5, 1.0));
+        else
+            drawCamera(pose.matrix(), cv::Scalar(0.0, 1.0, 0.2));
     }
+
+    if(!show_connections)
+        return;
 
     glLineWidth(key_frame_graph_line_width);
     glColor4f(0.0f,1.0f,0.0f,0.6f);
     glBegin(GL_LINES);
 
-    for(KeyFrame::Ptr kf : kfs)
+    for(const KeyFrame::Ptr &kf : kfs)
     {
         Vector3f O1 = kf->pose().translation().cast<float>();
         const std::set<KeyFrame::Ptr> conect_kfs = kf->getConnectedKeyFrames();
-        for(KeyFrame::Ptr ckf : conect_kfs)
+        for(const KeyFrame::Ptr &ckf : conect_kfs)
         {
             if(ckf->id_ < kf->id_)
                 continue;
@@ -151,16 +177,24 @@ void Viewer::drawKeyFrames()
             glVertex3f(O1[0], O1[1], O1[2]);
             glVertex3f(O2[0], O2[1], O2[2]);
         }
-
     }
     glEnd();
 
 }
 
-void Viewer::drawCurFrame()
+void Viewer::drawCurrentFrame()
 {
-    std::lock_guard<std::mutex> lock(mutex_pose_);
+    std::lock_guard<std::mutex> lock(mutex_frame_);
     drawCamera(camera_pose_.matrix(), cv::Scalar(0.0, 0.0, 1.0));
+}
+
+void Viewer::drawCurrentImage(pangolin::GlTexture &gl_texture)
+{
+    std::lock_guard<std::mutex> lock(mutex_frame_);
+    if(image_.empty())
+        return;
+
+    gl_texture.Upload(image_.data, GL_RGB, GL_UNSIGNED_BYTE);
 }
 
 void Viewer::drawMapPoints()
@@ -181,8 +215,8 @@ void Viewer::drawMapPoints()
 void Viewer::drawCamera(const Matrix4d &pose, cv::Scalar color)
 {
     const float w = key_frame_size ;
-    const float h = key_frame_size * 0.57;
-    const float z = key_frame_size * 0.6;
+    const float h = key_frame_size * 0.57f;
+    const float z = key_frame_size * 0.6f;
 
     glPushMatrix();
 

@@ -44,6 +44,7 @@ System::System(std::string config_file) :
 void System::process(const cv::Mat &image, const double timestamp)
 {
     //! get gray image
+    double t0 = (double)cv::getTickCount();
     rgb_ = image;
     cv::Mat gray = image.clone();
     if(gray.channels() == 3)
@@ -51,6 +52,8 @@ void System::process(const cv::Mat &image, const double timestamp)
 
     current_frame_ = Frame::create(gray, timestamp, camera_);
     current_frame_->setRefKeyFrame(mapper_->getReferenceKeyFrame());
+    double t1 = (double)cv::getTickCount();
+    LOG(WARNING) << "[System] Frame create time: " << (t1-t0)/cv::getTickFrequency();
 
     if(STAGE_NORMAL_FRAME == stage_)
     {
@@ -134,7 +137,8 @@ System::Status System::tracking()
                                       << (t2-t1)/cv::getTickFrequency() << " "
                                       << (t3-t2)/cv::getTickFrequency() << " "
                                       << (t4-t3)/cv::getTickFrequency() << " "
-                                      << (t5-t4)/cv::getTickFrequency();
+                                      << (t5-t4)/cv::getTickFrequency()
+                 << ", Total: " << (t5-t0)/cv::getTickFrequency();
 
     return STATUS_TRACKING_GOOD;
 }
@@ -163,8 +167,7 @@ void System::finishFrame()
     LOG(WARNING) << "[System] Finish Current Frame with Stage: " << stage_;
 
     //! display
-    viewer_->showImage(rgb_);
-    viewer_->setCurrentCameraPose(current_frame_->pose().matrix());
+    viewer_->setCurrentFrame(current_frame_);
     showImage(last_stage);
 }
 

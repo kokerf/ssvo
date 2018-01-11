@@ -19,7 +19,7 @@ public:
 
     static void motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool report=false, bool verbose=false);
 
-    static void localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report=false, bool verbose=false);
+    static void localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, bool report=false, bool verbose=false);
 
     static void refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool report=false, bool verbose=false);
 

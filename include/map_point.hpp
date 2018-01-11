@@ -34,6 +34,8 @@ public:
 
     void addObservation(const KeyFramePtr &kf, const Feature::Ptr &ft);
 
+    int observations();
+
     std::map<KeyFramePtr, Feature::Ptr> getObservations();
 
     bool removeObservation(const KeyFramePtr &kf);
@@ -42,13 +44,13 @@ public:
 
     void updateViewAndDepth();
 
-    int predictScale(const double dist, const int max_level) const;
+    int predictScale(const double dist, const int max_level);
 
     static int predictScale(const double dist_ref, const double dist_cur, const int level_ref, const int max_level);
 
-//    double getMinDistanceInvariance();
-//
-//    double getMaxDistanceInvariance();
+    double getMinDistanceInvariance();
+
+    double getMaxDistanceInvariance();
 
     bool getCloseViewObs(const FramePtr &frame, KeyFramePtr &keyframe, int &level);
 
@@ -69,8 +71,8 @@ public:
 
     inline Vector3d pose() { return pose_; }
 
-    inline static MapPoint::Ptr create(const Vector3d &p, const KeyFramePtr &kf)
-    { return std::make_shared<MapPoint>(MapPoint(p, kf)); }
+    inline static Ptr create(const Vector3d &p, const KeyFramePtr &kf)
+    { return Ptr(new MapPoint(p, kf)); }
 
 private:
 
@@ -108,6 +110,9 @@ private:
 
     int found_cunter_;
     int visiable_cunter_;
+
+    std::mutex mutex_obs_;
+    std::mutex mutex_pose_;
 
 };
 

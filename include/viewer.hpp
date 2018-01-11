@@ -1,6 +1,7 @@
 #ifndef _SSVO_VIEWER_HPP_
 #define _SSVO_VIEWER_HPP_
 
+#include <pangolin/pangolin.h>
 #include "global.hpp"
 #include "config.hpp"
 #include "map.hpp"
@@ -14,9 +15,7 @@ public:
 
     void run();
 
-    void setCurrentCameraPose(const Matrix4d &pose);
-
-    void showImage(const cv::Mat &image);
+    void setCurrentFrame(const Frame::Ptr &frame);
 
     static Viewer::Ptr create(const Map::Ptr &map, cv::Size image_size){ return Viewer::Ptr(new Viewer(map, image_size));}
 
@@ -28,9 +27,13 @@ private:
 
     void drawCamera(const Matrix4d &pose, cv::Scalar color);
 
-    void drawKeyFrames();
+    void drawKeyFrames(bool show_connections=false, bool show_current=false);
 
-    void drawCurFrame();
+    void drawCurrentFrame();
+
+    void drawCurrentImage(pangolin::GlTexture& gl_texture);
+
+    void getCurrentCameraPose(pangolin::OpenGlMatrix &M);
 
 private:
 
@@ -38,18 +41,17 @@ private:
 
     Map::Ptr map_;
 
+    Frame::Ptr frame_;
     cv::Mat image_;
     cv::Size image_size_;
     Matrix4d camera_pose_;
-
-    std::mutex mutex_pose_;
-    std::mutex mutex_image_;
 
     float map_point_size;
     float key_frame_size;
     float key_frame_line_width;
     float key_frame_graph_line_width;
 
+    std::mutex mutex_frame_;
 };
 
 }

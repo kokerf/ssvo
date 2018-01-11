@@ -56,7 +56,7 @@ double Seed::computeVar(const SE3d &T_cur_ref, const double z, const double delt
     double f_c_norm = f_c.norm();
     double f_r_norm = f_r.norm();
 
-    double alpha = acos(f_r.dot(-t)/f_r_norm/t_norm);
+//    double alpha = acos(f_r.dot(-t)/f_r_norm/t_norm);
 
     double epslion = atan(0.5*delta/f_c_norm/f_c[2])*2.0;
 //    epslion  = 0.0021867665614925609;

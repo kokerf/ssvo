@@ -20,7 +20,7 @@ Frame::Frame(const cv::Mat &img, const double timestamp, const Camera::Ptr &cam)
 //    utils::createPyramid(img, img_pyr_, nlevels_);
     //! create pyramid for optical flow
     cv::buildOpticalFlowPyramid(img, optical_pyr_, optical_win_size_, max_level_, false);
-    LOG_ASSERT(max_level_ == optical_pyr_.size()-1) << "The pyramid level is unsuitable! maxlevel should be " << optical_pyr_.size()-1;
+    LOG_ASSERT(max_level_ == (int) optical_pyr_.size()-1) << "The pyramid level is unsuitable! maxlevel should be " << optical_pyr_.size()-1;
 
     //! copy to image pyramid
     img_pyr_.resize(optical_pyr_.size());
@@ -46,7 +46,7 @@ const ImgPyr Frame::opticalImages() const
 
 const cv::Mat Frame::getImage(int level) const
 {
-    LOG_ASSERT(level < img_pyr_.size()) << "Error level: " << level;
+    LOG_ASSERT(level < (int) img_pyr_.size()) << "Error level: " << level;
     return img_pyr_[level];
 }
 

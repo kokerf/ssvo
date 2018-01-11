@@ -121,6 +121,7 @@ LocalMapper::LocalMapper(const FastDetector::Ptr &fast_detector, double fps, boo
     options_.align_epslion = 0.0001;
     options_.min_disparity = 100;
     options_.min_track_features = 50;
+    options_.min_redundant_observations = 3;
 }
 
 void LocalMapper::setThread(bool enable_main, bool enable_track)
@@ -397,12 +398,20 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
         current_keyframe_ = keyframe;
         int new_features = 0;//createNewFeatures();
 
+        std::list<MapPoint::Ptr> bad_mpts;
         if(map_->kfs_.size() > 2)
-            Optimizer::localBundleAdjustment(current_keyframe_, report_, verbose_);
+            Optimizer::localBundleAdjustment(current_keyframe_, bad_mpts, report_, verbose_);
+
+        for(const MapPoint::Ptr &mpt : bad_mpts)
+        {
+            map_->removeMapPoint(mpt);
+        }
 
         int new_seeds = createSeeds(map_->kfs_.size() > 1);//! start from the second kf
 
         LOG_IF(INFO, report_) << "[Mapping] New created features:" << new_features << ", seeds: " << new_seeds;
+
+//        checkCulling();
     }
 }
 
@@ -517,7 +526,7 @@ int LocalMapper::createNewFeatures()
                 current_keyframe_->addFeature(ft_cur);
 
                 //! mpt
-                map_->insertNewMapPoint(new_mpt);
+                map_->insertMapPoint(new_mpt);
                 new_mpt->addObservation(kf, ft_ref);
                 new_mpt->addObservation(current_keyframe_, ft_cur);
                 new_mpt->updateViewAndDepth();
@@ -779,16 +788,59 @@ bool LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
     map_->insertMapPoint(mpt);
     mpt->addObservation(seed->kf, ft);
     mpt->updateViewAndDepth();
-    std::cout << " Create new seed as mpt: " << ft->mpt->id_ << ", " << 1.0/seed->mu << ", kf: " << seed->kf->id_ << " his: ";
-    for(const auto his : seed->history){ std::cout << "[" << his.first << "," << his.second << "]";}
-    std::cout << std::endl;
+//    std::cout << " Create new seed as mpt: " << ft->mpt->id_ << ", " << 1.0/seed->mu << ", kf: " << seed->kf->id_ << " his: ";
+//    for(const auto his : seed->history){ std::cout << "[" << his.first << "," << his.second << "]";}
+//    std::cout << std::endl;
 
     return true;
 }
 
 void LocalMapper::checkCulling()
 {
+    const std::set<KeyFrame::Ptr> connected_keyframes = current_keyframe_->getConnectedKeyFrames();
 
+    int count = 0;
+    for(const KeyFrame::Ptr &kf : connected_keyframes)
+    {
+        if(kf->id_ == 0)
+            continue;
+
+        const int observations_threshold = 3;
+        int observations = 0;
+        int redundant_observations = 0;
+        const MapPoints mpts = kf->getMapPoints();
+        for(const MapPoint::Ptr &mpt : mpts)
+        {
+            std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+            if(obs.size() > observations_threshold)
+            {
+                const Feature::Ptr &ft = obs[kf];
+                for(const auto &it : obs)
+                {
+                    if(it.first == kf)
+                        continue;
+
+                    if(it.second->level <= ft->level+1)
+                    {
+                        observations++;
+                        if(observations >= options_.min_redundant_observations)
+                            break;
+                    }
+                }
+
+                if(observations >= options_.min_redundant_observations)
+                    redundant_observations++;
+            }
+
+            if(redundant_observations > mpts.size() * 0.9)
+            {
+                kf->setBad();
+                map_->removeKeyFrame(kf);
+                count++;
+            }
+        }
+
+    }
 }
 
 bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,

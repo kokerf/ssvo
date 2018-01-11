@@ -113,7 +113,7 @@ bool mptOptimizeOrder(const MapPoint::Ptr &mpt1, const MapPoint::Ptr &mpt2)
     return false;
 }
 
-void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report, bool verbose)
+void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, bool report, bool verbose)
 {
 
     std::set<KeyFrame::Ptr> local_keyframes = keyframe->getConnectedKeyFrames();
@@ -133,7 +133,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report
     for(const MapPoint::Ptr &mpt : local_mapoints)
     {
         std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
-        for(const auto item : obs)
+        for(const auto &item : obs)
         {
             if(local_keyframes.count(item.first))
                 continue;
@@ -176,7 +176,6 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report
         }
     }
 
-
     ceres::Solver::Options options;
     ceres::Solver::Summary summary;
     options.linear_solver_type = ceres::DENSE_SCHUR;
@@ -191,7 +190,6 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report
     }
 
     //! update mpts & remove mappoint with large error
-    int n = 0;
     double max_residual = Config::pixelUnSigma2() * 2;
     for(const MapPoint::Ptr &mpt : local_mapoints)
     {
@@ -203,7 +201,12 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report
                 continue;
 
             mpt->removeObservation(item.first);
-            n++;
+            std::cout << " rm outlier: " << mpt->id_ << " " << item.first->id_ << " " << obs.size() << std::endl;
+
+            if(mpt->type() == MapPoint::BAD)
+            {
+                bad_mpts.push_back(mpt);
+            }
         }
 
         mpt->setPose(mpt->optimal_pose_);
@@ -212,7 +215,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, bool report
     //! Report
     LOG_IF(INFO, report) << "[Optimizer] KFs: " << local_keyframes.size()
                          << "  Mpts: " << local_mapoints.size()
-                         << ", remove " << n << " outliers in loacl ba.";
+                         << ", remove " << bad_mpts.size() << " bad mpts in loacl ba.";
     reportInfo(problem, summary, report, verbose);
 }
 

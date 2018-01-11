@@ -48,11 +48,8 @@ private:
 
     std::unordered_map<uint64_t, MapPoint::Ptr> mpts_;
 
-    std::unordered_map<uint64_t, MapPoint::Ptr> new_mpts_;
-
     std::mutex mutex_kf_;
     std::mutex mutex_mpt_;
-    std::mutex mutex_new_mpt_;
 };
 
 }
