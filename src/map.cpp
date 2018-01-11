@@ -48,7 +48,10 @@ std::vector<KeyFrame::Ptr> Map::getAllKeyFrames()
 KeyFrame::Ptr Map::getKeyFrame(uint64_t id)
 {
     std::lock_guard<std::mutex> lock(mutex_kf_);
-    return kfs_[id];
+    if(kfs_.count(id))
+        return kfs_[id];
+    else
+        return nullptr;
 }
 
 std::vector<MapPoint::Ptr> Map::getAllMapPoints()

@@ -32,6 +32,8 @@ public:
 
     void resetType(Type type);
 
+    bool fusion(const MapPoint::Ptr &mpt);
+
     void addObservation(const KeyFramePtr &kf, const Feature::Ptr &ft);
 
     int observations();

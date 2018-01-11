@@ -21,7 +21,7 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
     MapPoints mpts;
     mpts.reserve(fts1.size());
 
-    for(Feature::Ptr ft1 : fts1)
+    for(const Feature::Ptr &ft1 : fts1)
     {
         MapPoint::Ptr mpt = ft1->mpt;
         if(mpt == nullptr)//! should not happen
@@ -73,7 +73,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool report,
     ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
 
     std::vector<Feature::Ptr> fts = frame->getFeatures();
-    for(Feature::Ptr ft : fts)
+    for(const Feature::Ptr &ft : fts)
     {
         MapPoint::Ptr mpt = ft->mpt;
         if(mpt == nullptr)
@@ -132,7 +132,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
 
     for(const MapPoint::Ptr &mpt : local_mapoints)
     {
-        std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+        const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
         for(const auto &item : obs)
         {
             if(local_keyframes.count(item.first))
@@ -165,7 +165,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
     for(const MapPoint::Ptr &mpt : local_mapoints)
     {
         mpt->optimal_pose_ = mpt->pose();
-        std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+        const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
 
         for(const auto &item : obs)
         {
@@ -190,10 +190,11 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
     }
 
     //! update mpts & remove mappoint with large error
+    std::set<KeyFrame::Ptr> changed_keyframes;
     double max_residual = Config::pixelUnSigma2() * 2;
     for(const MapPoint::Ptr &mpt : local_mapoints)
     {
-        std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+        const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
         for(const auto &item : obs)
         {
             double residual = utils::reprojectError(item.second->fn.head<2>(), item.first->Tcw(), mpt->optimal_pose_);
@@ -201,7 +202,8 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
                 continue;
 
             mpt->removeObservation(item.first);
-            std::cout << " rm outlier: " << mpt->id_ << " " << item.first->id_ << " " << obs.size() << std::endl;
+            changed_keyframes.insert(item.first);
+//            std::cout << " rm outlier: " << mpt->id_ << " " << item.first->id_ << " " << obs.size() << std::endl;
 
             if(mpt->type() == MapPoint::BAD)
             {
@@ -210,6 +212,11 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
         }
 
         mpt->setPose(mpt->optimal_pose_);
+    }
+
+    for(const KeyFrame::Ptr &kf : changed_keyframes)
+    {
+        kf->updateConnections();
     }
 
     //! Report

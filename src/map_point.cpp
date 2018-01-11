@@ -33,9 +33,40 @@ void MapPoint::setBad()
 
 void MapPoint::addObservation(const KeyFrame::Ptr &kf, const Feature::Ptr &ft)
 {
+    LOG_ASSERT(kf && kf) << " Error input kf: " << kf << ", or ft: " << ft;
+
     std::lock_guard<std::mutex> lock(mutex_obs_);
     obs_.emplace(kf, ft);
     n_obs_++;
+}
+
+//! it do not change the connections of keyframe
+//! usually, old mappoint fusion the new one
+bool MapPoint::fusion(const MapPoint::Ptr &mpt)
+{
+    const auto obs = mpt->getObservations();
+    bool update = false;
+    {
+        std::lock_guard<std::mutex> lock(mutex_obs_);
+
+        for(const auto &it : obs)
+        {
+            if(obs_.count(it.first) == 0)
+            {
+                obs_.insert(it);
+                update = true;
+            }
+
+            it.first->removeFeature(it.second);
+        }
+    }
+
+    if(update)
+        updateViewAndDepth();
+
+    mpt->setBad();
+
+    return true;
 }
 
 int MapPoint::observations()
@@ -44,14 +75,16 @@ int MapPoint::observations()
     return (int)obs_.size();
 }
 
+//! should update connections for keyframe
 bool MapPoint::removeObservation(const KeyFramePtr &kf)
 {
     {
         std::lock_guard<std::mutex> lock(mutex_obs_);
-        Feature::Ptr ft = obs_[kf];
-        if(ft == nullptr)
+        const auto it = obs_.find(kf);
+        if(it == obs_.end())
             return false;
 
+        const Feature::Ptr &ft = it->second;
         kf->removeFeature(ft);
         obs_.erase(kf);
         if(obs_.empty())
@@ -107,7 +140,11 @@ std::map<KeyFrame::Ptr, Feature::Ptr> MapPoint::getObservations()
 Feature::Ptr MapPoint::findObservation(const KeyFrame::Ptr kf)
 {
     std::lock_guard<std::mutex> lock(mutex_obs_);
-    return obs_[kf];
+    const auto it = obs_.find(kf);
+    if(it != obs_.end())
+        return it->second;
+    else
+        return nullptr;
 }
 
 void MapPoint::updateViewAndDepth()
@@ -120,7 +157,7 @@ void MapPoint::updateViewAndDepth()
 
         Vector3d normal = Vector3d::Zero();
         int n = 0;
-        for(std::pair<KeyFrame::Ptr, Feature::Ptr> obs : obs_)
+        for(const auto &obs : obs_)
         {
             Vector3d Ow = obs.first->pose().translation();
             Vector3d obs_dir((Ow - pose_).normalized());

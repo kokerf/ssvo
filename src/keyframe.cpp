@@ -27,8 +27,8 @@ void KeyFrame::updateConnections()
         if(ft->mpt == nullptr)
             continue;
 
-        std::map<KeyFrame::Ptr, Feature::Ptr> observations = ft->mpt->getObservations();
-        for(auto obs : observations)
+        const std::map<KeyFrame::Ptr, Feature::Ptr> observations = ft->mpt->getObservations();
+        for(const auto &obs : observations)
         {
             if(obs.first->id_ == id_)
                 continue;

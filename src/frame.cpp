@@ -193,7 +193,7 @@ std::map<KeyFrame::Ptr, int> Frame::getOverLapKeyFrames()
         if(ft->mpt == nullptr)
             continue;
 
-        std::map<KeyFrame::Ptr, Feature::Ptr> obs = ft->mpt->getObservations();
+        const std::map<KeyFrame::Ptr, Feature::Ptr> obs = ft->mpt->getObservations();
         for(const auto &item : obs)
         {
             auto it = overlap_kfs.find(item.first);
