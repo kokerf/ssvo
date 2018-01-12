@@ -42,13 +42,15 @@ private:
 
     inline static Map::Ptr create() {return Map::Ptr(new Map());}
 
+public:
+
+    std::list<MapPoint::Ptr> removed_mpts_;
+
 private:
 
     std::unordered_map<uint64_t, KeyFrame::Ptr> kfs_;
 
     std::unordered_map<uint64_t, MapPoint::Ptr> mpts_;
-
-    std::list<MapPoint::Ptr> remved_mpts_;
 
     std::mutex mutex_kf_;
     std::mutex mutex_mpt_;

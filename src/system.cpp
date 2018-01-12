@@ -98,6 +98,8 @@ System::Status System::initialize()
     current_frame_->setPose(kf1->pose());
     current_frame_->setRefKeyFrame(kf1);
 
+    initializer_->reset();
+
     return STATUS_INITAL_SUCCEED;
 }
 

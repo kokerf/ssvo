@@ -102,8 +102,6 @@ private:
 
     std::unordered_map<KeyFramePtr, Feature::Ptr> obs_;
 
-    int n_obs_;
-
     Type type_;
 
     Vector3d obs_dir_; //!< mean viewing direction, from map point to keyframe

@@ -327,7 +327,7 @@ bool LocalMapper::needCreateKeyFrame()
 
     //! check disparity
     std::list<float> disparities;
-    const int threahold = max_overlap * 0.6;
+    const int threahold = (int)max_overlap * 0.6;
     for(const auto &ovlp_kf : overlap_kfs)
     {
         if(ovlp_kf.second < threahold)
@@ -361,6 +361,7 @@ bool LocalMapper::needCreateKeyFrame()
     //! create new keyFrame
     if(c1 || c2 || c3)
     {
+//        LOG(ERROR) << "C: (" << c1 << ", " << c2 << ", " << c3 << ") cur_n: " << current_frame_->N() << " ck: " << current_keyframe_->N();
         return true;
     }
     //! change reference keyframe
@@ -406,7 +407,7 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
         int new_features = 0;
         if(map_->kfs_.size() > 2)
         {
-            new_features = createNewFeatures();
+            new_features = createFeatureFromLocalMap();
             Optimizer::localBundleAdjustment(current_keyframe_, bad_mpts, report_, verbose_);
         }
 
@@ -491,7 +492,7 @@ int LocalMapper::createSeeds(bool is_track)
     return (int)new_seeds.size();
 }
 
-int LocalMapper::createNewFeatures()
+int LocalMapper::createFeatureFromLocalMap()
 {
     double t0 = (double)cv::getTickCount();
     std::set<KeyFrame::Ptr> connected_keyframes = current_keyframe_->getConnectedKeyFrames();
@@ -522,6 +523,9 @@ int LocalMapper::createNewFeatures()
         for(const MapPoint::Ptr &mpt : mpts)
         {
             if(local_mpts.count(mpt) || candidate_mpts.count(mpt))
+                continue;
+
+            if(mpt->isBad())//! however it should not happen, maybe still some bugs in somewhere
                 continue;
 
             candidate_mpts.insert(mpt);
@@ -574,6 +578,8 @@ int LocalMapper::createNewFeatures()
     }
 
     //! check whether the mappoint is already exist
+    int created_count = 0;
+    int fusion_count = 0;
     for(const Feature::Ptr &ft : new_fts)
     {
         const Vector2i px = ft->px.cast<int>();
@@ -586,6 +592,7 @@ int LocalMapper::createNewFeatures()
             ft->mpt->addObservation(current_keyframe_, ft);
             ft->mpt->increaseVisible();
             ft->mpt->increaseFound();
+            created_count++;
             LOG_IF(INFO, verbose_) << " create new feature from mpt " << ft->mpt->id_;
         }
         //! if already occupied, check whether the mappoint is the same
@@ -660,8 +667,7 @@ int LocalMapper::createNewFeatures()
                         continue;
 
                     int level_new = 0;
-                    bool matched =
-                        FeatureTracker::trackFeature(kf_old_ref, kf_new, ft_old, px_new, level_new, 15, 0.01, verbose_);
+                    bool matched = FeatureTracker::trackFeature(kf_old_ref, kf_new, ft_old, px_new, level_new, 15, 0.01, verbose_);
 
                     if(!matched)
                         continue;
@@ -730,8 +736,7 @@ int LocalMapper::createNewFeatures()
                         continue;
 
                     int level_old = 0;
-                    bool matched =
-                        FeatureTracker::trackFeature(kf_new_ref, kf_old, ft_new, px_old, level_old, 15, 0.01, verbose_);
+                    bool matched = FeatureTracker::trackFeature(kf_new_ref, kf_old, ft_new, px_old, level_old, 15, 0.01, verbose_);
 
                     if(!matched)
                         continue;
@@ -764,41 +769,42 @@ int LocalMapper::createNewFeatures()
 //                goto SHOW;
             }
 
+            fusion_count++;
             continue;
 
-            SHOW:
-            std::cout << " mpt_new: " << mpt_new->id_ << ", " << mpt_new->pose().transpose() << std::endl;
-            for(const auto &it : obs_new)
-            {
-                std::cout << "-kf: " << it.first->id_ << " px: [" << it.second->px[0] << ", " << it.second->px[1] << "]" << std::endl;
-            }
-
-            std::cout << " mpt_old: " << mpt_old->id_ << ", " << mpt_old->pose().transpose() << std::endl;
-            for(const auto &it : obs_old)
-            {
-                std::cout << "=kf: " << it.first->id_ << " px: [" << it.second->px[0] << ", " << it.second->px[1] << "]" << std::endl;
-            }
-
-            for(const auto &it : obs_new)
-            {
-                string name = "new -kf" + std::to_string(it.first->id_);
-                cv::Mat show = it.first->getImage(it.second->level).clone();
-                cv::cvtColor(show, show, CV_GRAY2RGB);
-                cv::Point2d px(it.second->px[0]/(1<<it.second->level), it.second->px[1]/(1<<it.second->level));
-                cv::circle(show, px, 5, cv::Scalar(0, 0, 255));
-                cv::imshow(name, show);
-            }
-
-            for(const auto &it : obs_old)
-            {
-                string name = "old -kf" + std::to_string(it.first->id_);
-                cv::Mat show = it.first->getImage(it.second->level).clone();
-                cv::cvtColor(show, show, CV_GRAY2RGB);
-                cv::Point2d px(it.second->px[0]/(1<<it.second->level), it.second->px[1]/(1<<it.second->level));
-                cv::circle(show, px, 5, cv::Scalar(0, 0, 255));
-                cv::imshow(name, show);
-            }
-            cv::waitKey(0);
+//            SHOW:
+//            std::cout << " mpt_new: " << mpt_new->id_ << ", " << mpt_new->pose().transpose() << std::endl;
+//            for(const auto &it : obs_new)
+//            {
+//                std::cout << "-kf: " << it.first->id_ << " px: [" << it.second->px[0] << ", " << it.second->px[1] << "]" << std::endl;
+//            }
+//
+//            std::cout << " mpt_old: " << mpt_old->id_ << ", " << mpt_old->pose().transpose() << std::endl;
+//            for(const auto &it : obs_old)
+//            {
+//                std::cout << "=kf: " << it.first->id_ << " px: [" << it.second->px[0] << ", " << it.second->px[1] << "]" << std::endl;
+//            }
+//
+//            for(const auto &it : obs_new)
+//            {
+//                string name = "new -kf" + std::to_string(it.first->id_);
+//                cv::Mat show = it.first->getImage(it.second->level).clone();
+//                cv::cvtColor(show, show, CV_GRAY2RGB);
+//                cv::Point2d px(it.second->px[0]/(1<<it.second->level), it.second->px[1]/(1<<it.second->level));
+//                cv::circle(show, px, 5, cv::Scalar(0, 0, 255));
+//                cv::imshow(name, show);
+//            }
+//
+//            for(const auto &it : obs_old)
+//            {
+//                string name = "old -kf" + std::to_string(it.first->id_);
+//                cv::Mat show = it.first->getImage(it.second->level).clone();
+//                cv::cvtColor(show, show, CV_GRAY2RGB);
+//                cv::Point2d px(it.second->px[0]/(1<<it.second->level), it.second->px[1]/(1<<it.second->level));
+//                cv::circle(show, px, 5, cv::Scalar(0, 0, 255));
+//                cv::imshow(name, show);
+//            }
+//            cv::waitKey(0);
         }
 
     }
@@ -808,8 +814,8 @@ int LocalMapper::createNewFeatures()
                              << (t1-t0)/cv::getTickFrequency() << " "
                              << (t2-t1)/cv::getTickFrequency() << " "
                              << (t3-t2)/cv::getTickFrequency() << " "
-                             << ", match points " << new_fts.size() << " + " << local_mpts.size()
-                             << " (" << project_count << ", " << candidate_mpts.size() << ")";
+                             << " old points: " << mpts_cur.size() << " new projected: " << project_count << "(" << candidate_mpts.size() << ")"
+                             << ", points matched: " << new_fts.size() << " with " << created_count << " created, " << fusion_count << " fusioned. ";
 
     return 0;
 }
@@ -927,6 +933,7 @@ int LocalMapper::updateSeeds()
     }
 
     LOG_IF(INFO, report_) << "[Mapping][2] Seeds updated: " << tracked_seeds_.size();
+    return (int)tracked_seeds_.size();
 }
 
 int LocalMapper::reprojectSeeds()
@@ -1019,6 +1026,8 @@ int LocalMapper::reprojectSeeds()
     }
 
     LOG_IF(INFO, report_) << "[Mapping][3] Seeds after reprojected: " << tracked_seeds_.size() << "(" << count << ")";
+
+    return (int) tracked_seeds_.size();
 }
 
 

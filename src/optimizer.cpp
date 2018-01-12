@@ -116,7 +116,7 @@ bool mptOptimizeOrder(const MapPoint::Ptr &mpt1, const MapPoint::Ptr &mpt2)
 void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, bool report, bool verbose)
 {
 
-    std::set<KeyFrame::Ptr> local_keyframes = keyframe->getConnectedKeyFrames();
+    std::set<KeyFrame::Ptr> local_keyframes = keyframe->getConnectedKeyFrames(10);
     local_keyframes.insert(keyframe);
     std::unordered_set<MapPoint::Ptr> local_mapoints;
     std::list<KeyFrame::Ptr> fixed_keyframe;

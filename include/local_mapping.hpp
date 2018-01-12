@@ -48,7 +48,7 @@ private:
 
     int createSeeds(bool is_track = true);
 
-    int createNewFeatures();
+    int createFeatureFromLocalMap();
 
     bool checkNewFrame();
 

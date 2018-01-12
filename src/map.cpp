@@ -32,7 +32,15 @@ void Map::removeMapPoint(const MapPoint::Ptr &mpt)
 {
     std::lock_guard<std::mutex> lock(mutex_mpt_);
     mpts_.erase(mpt->id_);
-    remved_mpts_.push_back(mpt);
+    removed_mpts_.push_back(mpt);
+//    std::string log;
+//    log += "removed mpts: [ ";
+//    for(const MapPoint::Ptr &rm_mpt : removed_mpts_)
+//    {
+//        log += "(" + std::to_string(rm_mpt->id_) + ", " + std::to_string(rm_mpt.use_count()) + "), ";
+//    }
+//    log += "] " + std::to_string(removed_mpts_.size());
+//    LOG(INFO) << log;
 }
 
 std::vector<KeyFrame::Ptr> Map::getAllKeyFrames()

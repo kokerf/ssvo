@@ -8,7 +8,7 @@ unsigned long int MapPoint::next_id_ = 0;
 const double MapPoint::log_level_factor_ = log(2.0f);
 
 MapPoint::MapPoint(const Vector3d &p, const KeyFrame::Ptr &kf) :
-        id_(next_id_++), last_structure_optimal_(0), pose_(p), n_obs_(0), type_(SEED),
+        id_(next_id_++), last_structure_optimal_(0), pose_(p), type_(SEED),
         min_distance_(0.0), max_distance_(0.0), refKF_(kf), found_cunter_(1), visiable_cunter_(1)
 {
 }
@@ -43,7 +43,6 @@ void MapPoint::addObservation(const KeyFrame::Ptr &kf, const Feature::Ptr &ft)
 
     std::lock_guard<std::mutex> lock(mutex_obs_);
     obs_.emplace(kf, ft);
-    n_obs_++;
 }
 
 //! it do not change the connections of keyframe
@@ -88,6 +87,8 @@ bool MapPoint::removeObservation(const KeyFramePtr &kf)
         const auto it = obs_.find(kf);
         if(it == obs_.end())
             return false;
+
+//        LOG(INFO) << " Remove obs, mpt: " << id_ << " kf: " << kf->id_ << " size: " << obs_.size();
 
         const Feature::Ptr &ft = it->second;
         kf->removeFeature(ft);
@@ -252,6 +253,7 @@ bool MapPoint::getCloseViewObs(const Frame::Ptr &frame, KeyFrame::Ptr &keyframe,
     Vector3d obs_dir;
     {
         std::lock_guard<std::mutex> lock(mutex_obs_);
+        // TODO 这里可能还有问题，bad 的 mpt没有被删除？
         LOG_ASSERT(!obs_.empty()) << "Map point is invalid!";
         obs = obs_;
         obs_dir = obs_dir_;
