@@ -1,6 +1,7 @@
 #include <include/config.hpp>
 #include "local_mapping.hpp"
 #include "feature_alignment.hpp"
+#include "feature_tracker.hpp"
 #include "image_alignment.hpp"
 #include "utils.hpp"
 #include "optimizer.hpp"
@@ -205,6 +206,7 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
     KeyFrame::Ptr keyframe_ref = KeyFrame::create(frame_ref);
     KeyFrame::Ptr keyframe_cur = KeyFrame::create(frame_cur);
 
+    //! before import, make sure the features are stored in the same order!
     std::vector<Feature::Ptr> fts_ref = keyframe_ref->getFeatures();
     std::vector<Feature::Ptr> fts_cur = keyframe_cur->getFeatures();
 
@@ -229,6 +231,9 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
     current_frame_ = frame_cur;
     insertKeyFrame(keyframe_ref);
     insertKeyFrame(keyframe_cur);
+
+    keyframe_ref->updateConnections();
+    keyframe_cur->updateConnections();
 
     LOG_IF(INFO, report_) << "[Mapping] Creating inital map with " << map_->MapPointsInMap() << " map points";
 }
@@ -396,11 +401,14 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
     else
     {
         current_keyframe_ = keyframe;
-        int new_features = 0;//createNewFeatures();
 
         std::list<MapPoint::Ptr> bad_mpts;
+        int new_features = 0;
         if(map_->kfs_.size() > 2)
+        {
+            new_features = createNewFeatures();
             Optimizer::localBundleAdjustment(current_keyframe_, bad_mpts, report_, verbose_);
+        }
 
         for(const MapPoint::Ptr &mpt : bad_mpts)
         {
@@ -485,61 +493,325 @@ int LocalMapper::createSeeds(bool is_track)
 
 int LocalMapper::createNewFeatures()
 {
-    std::map<KeyFrame::Ptr, std::deque<Seed::Ptr> > seeds_map;
-    for(const Seed::Ptr &track_seed : tracked_seeds_)
+    double t0 = (double)cv::getTickCount();
+    std::set<KeyFrame::Ptr> connected_keyframes = current_keyframe_->getConnectedKeyFrames();
+    std::set<KeyFrame::Ptr> local_keyframes = connected_keyframes;
+
+    for(const KeyFrame::Ptr &kf : connected_keyframes)
     {
-        const auto seeds_map_itr = seeds_map.lower_bound(track_seed->kf);
-        if(seeds_map_itr == seeds_map.end())
+        std::set<KeyFrame::Ptr> sub_connected_keyframe = kf->getConnectedKeyFrames();
+        for(const KeyFrame::Ptr &sub_kf : sub_connected_keyframe)
         {
-            std::deque<Seed::Ptr> new_deque;
-            new_deque.push_back(track_seed);
-            seeds_map.emplace(track_seed->kf, new_deque);
-        }
-        else
-        {
-            seeds_map_itr->second.push_back(track_seed);
+            local_keyframes.insert(sub_kf);
         }
     }
 
-    int count = 0;
-    tracked_seeds_.clear();
-    for(const auto &seed_map : seeds_map)
+
+    double t1 = (double)cv::getTickCount();
+    std::unordered_set<MapPoint::Ptr> local_mpts;
+    const MapPoints mpts_cur = current_keyframe_->getMapPoints();
+    for(const MapPoint::Ptr &mpt : mpts_cur)
     {
-        KeyFrame::Ptr kf = seed_map.first;
-        const std::deque<Seed::Ptr> &seeds_deque = seed_map.second;
-        const SE3d T_cur_from_ref = current_keyframe_->Tcw() * kf->pose();
-        for(const Seed::Ptr &seed : seeds_deque)
+        local_mpts.insert(mpt);
+    }
+
+    std::unordered_set<MapPoint::Ptr> candidate_mpts;
+    for(const KeyFrame::Ptr &kf : local_keyframes)
+    {
+        const MapPoints mpts = kf->getMapPoints();
+        for(const MapPoint::Ptr &mpt : mpts)
         {
-            const Vector3d fn_cur = current_keyframe_->cam_->lift(seed->px_cur);
-            double depth;
-            bool succeed = utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->fn_ref, fn_cur, depth);
-            if(succeed)
+            if(local_mpts.count(mpt) || candidate_mpts.count(mpt))
+                continue;
+
+            candidate_mpts.insert(mpt);
+        }
+    }
+    double t2 = (double)cv::getTickCount();
+
+    //! match the mappoints from nearby keyframes
+    int project_count = 0;
+    std::list<Feature::Ptr> new_fts;
+    for(const MapPoint::Ptr &mpt : candidate_mpts)
+    {
+        Vector3d xyz_cur(current_keyframe_->Tcw() * mpt->pose());
+        if(xyz_cur[2] < 0.0f)
+            continue;
+
+        Vector2d px_cur(current_keyframe_->cam_->project(xyz_cur));
+        if(!current_keyframe_->cam_->isInFrame(px_cur.cast<int>(), 8))
+            continue;
+
+        project_count++;
+
+        int level_cur = 0;
+        bool matched = FeatureTracker::reprojectMapPoint(current_keyframe_, mpt, px_cur, level_cur, 15, 0.01);
+        if(!matched)
+            continue;
+
+        Vector3d ft_cur = current_keyframe_->cam_->lift(px_cur);
+        Feature::Ptr new_feature = Feature::create(px_cur, ft_cur, level_cur, mpt);
+        new_fts.push_back(new_feature);
+    }
+
+    //! check whether the matched corner is near a exsit corner.
+    //! firstly, create a mask for exsit corners
+    const int cols = current_keyframe_->cam_->width();
+    const int rows = current_keyframe_->cam_->height();
+    cv::Mat mask(rows, cols, CV_16SC1, -1);
+    std::vector<Feature::Ptr> old_fts = current_keyframe_->getFeatures();
+    const int old_fts_size = (int) old_fts.size();
+    for(int i = 0; i < old_fts_size; ++i)
+    {
+        const Vector2i px = old_fts[i]->px.cast<int>();
+        for(int c = -1; c <= 1; ++c)
+        {
+            int16_t* ptr = mask.ptr<int16_t>(px[1]+c) + px[0];
+            ptr[-1] = (int16_t)i;
+            ptr[0] = (int16_t)i;
+            ptr[1] = (int16_t)i;
+        }
+    }
+
+    //! check whether the mappoint is already exist
+    for(const Feature::Ptr &ft : new_fts)
+    {
+        const Vector2i px = ft->px.cast<int>();
+        int64_t id = mask.ptr<int16_t>(px[1])[px[0]];
+        //! if not occupied, create new feature
+        if(id == -1)
+        {
+            //! create new features
+            current_keyframe_->addFeature(ft);
+            ft->mpt->addObservation(current_keyframe_, ft);
+            ft->mpt->increaseVisible();
+            ft->mpt->increaseFound();
+            LOG_IF(INFO, verbose_) << " create new feature from mpt " << ft->mpt->id_;
+        }
+        //! if already occupied, check whether the mappoint is the same
+        else
+        {
+            MapPoint::Ptr mpt_new = ft->mpt;
+            MapPoint::Ptr mpt_old = old_fts[id]->mpt;
+            const std::map<KeyFrame::Ptr, Feature::Ptr> obs_new = mpt_new->getObservations();
+            const std::map<KeyFrame::Ptr, Feature::Ptr> obs_old = mpt_old->getObservations();
+
+            bool is_same = true;
+            std::list<double> squared_dist;
+            std::unordered_set<KeyFrame::Ptr> sharing_keyframes;
+            for(const auto &it : obs_new)
             {
-                Vector3d pose = kf->Twc() * (seed->fn_ref*depth);
-                MapPoint::Ptr new_mpt = MapPoint::create(pose, current_keyframe_);
+                const auto it_old = obs_old.find(it.first);
+                if(it_old == obs_old.end())
+                    continue;
 
-                //! ft
-                Feature::Ptr ft_ref = Feature::create(seed->px_ref, seed->fn_ref, seed->level_ref, new_mpt);
-                Feature::Ptr ft_cur = Feature::create(seed->px_cur, fn_cur, seed->level_cur, new_mpt);
+                const Feature::Ptr &ft_old = it_old->second;
+                const Feature::Ptr &ft_new = it.second;
+                Vector2d px_delta(ft_new->px - ft_old->px);
+                squared_dist.push_back(px_delta.squaredNorm());
+                is_same &= squared_dist.back() < 1.0; //! only if all the points pair match the conditon
 
-                kf->addFeature(ft_ref);
-                current_keyframe_->addFeature(ft_cur);
+                sharing_keyframes.insert(it.first);
+            }
 
-                //! mpt
-                map_->insertMapPoint(new_mpt);
-                new_mpt->addObservation(kf, ft_ref);
-                new_mpt->addObservation(current_keyframe_, ft_cur);
-                new_mpt->updateViewAndDepth();
-//                    Optimizer::refineMapPoint(new_mpt, 20, true, true);
-                count++;
+            if(!squared_dist.empty() && !is_same)
+            {
+//                std::cout << " ***=-=*** ";
+//                std::for_each(squared_dist.begin(), squared_dist.end(), [](double dis){std::cout << dis << ", ";});
+//                std::cout << std::endl;
+//                goto SHOW;
                 continue;
             }
 
-            tracked_seeds_.push_back(seed);
+
+            if(obs_old.size() >= obs_new.size())
+            {
+                //! match all ft in obs_new
+                std::list<std::tuple<Feature::Ptr, double, double, int> > fts_to_update;
+                for(const auto &it_new : obs_new)
+                {
+                    const KeyFrame::Ptr &kf_new = it_new.first;
+                    if(sharing_keyframes.count(kf_new))
+                        continue;
+
+                    const Vector3d kf_new_dir(kf_new->ray().normalized());
+                    double max_cos_angle = 0;
+                    KeyFrame::Ptr kf_old_ref;
+                    for(const auto &it_old : obs_old)
+                    {
+                        Vector3d kf_old_dir(it_old.first->ray().normalized());
+                        double view_cos_angle = kf_old_dir.dot(kf_new_dir);
+
+                        //! find min angle, max cosangle
+                        if(view_cos_angle < max_cos_angle)
+                            continue;
+
+                        max_cos_angle = view_cos_angle;
+                        kf_old_ref = it_old.first;
+                    }
+
+                    Feature::Ptr ft_old = obs_old.find(kf_old_ref)->second;
+                    Vector3d xyz_new(kf_new->Tcw() * ft_old->mpt->pose());
+                    if(xyz_new[2] < 0.0f)
+                        continue;
+
+                    Vector2d px_new(kf_new->cam_->project(xyz_new));
+                    if(!kf_new->cam_->isInFrame(px_new.cast<int>(), 8))
+                        continue;
+
+                    int level_new = 0;
+                    bool matched =
+                        FeatureTracker::trackFeature(kf_old_ref, kf_new, ft_old, px_new, level_new, 15, 0.01, verbose_);
+
+                    if(!matched)
+                        continue;
+
+                    //! observation for update
+                    fts_to_update.emplace_back(obs_new.find(kf_new)->second, px_new[0], px_new[1], level_new);
+                }
+
+                //! update ft if succeed
+                const Camera::Ptr &cam = current_keyframe_->cam_;//! all camera is the same
+                for(const auto &it : fts_to_update)
+                {
+                    const Feature::Ptr &ft_update = std::get<0>(it);
+                    ft_update->px[0] = std::get<1>(it);
+                    ft_update->px[1] = std::get<2>(it);
+                    ft_update->level = std::get<3>(it);
+                    ft_update->fn = cam->lift(ft_update->px);
+                }
+
+                //! fusion the mappoint
+                mpt_old->fusion(mpt_new);
+                map_->removeMapPoint(mpt_new);
+
+                ft->mpt = mpt_old;
+                current_keyframe_->addFeature(ft);
+                mpt_old->addObservation(current_keyframe_, ft);
+                mpt_old->increaseVisible();
+                mpt_old->increaseFound();
+                LOG_IF(INFO, verbose_) << " Fusion mpt " << mpt_old->id_ << " with mpt " << mpt_new->id_;
+//                goto SHOW;
+            }
+            else
+            {
+                //! match all ft in obs_old
+                std::list<std::tuple<Feature::Ptr, double, double, int> > fts_to_update;
+                for(const auto &it_old : obs_old)
+                {
+                    const KeyFrame::Ptr &kf_old = it_old.first;
+                    if(sharing_keyframes.count(kf_old))
+                        continue;
+
+                    const Vector3d kf_old_dir(kf_old->ray().normalized());
+                    double max_cos_angle = 0;
+                    KeyFrame::Ptr kf_new_ref;
+                    for(const auto &it_new : obs_new)
+                    {
+                        Vector3d kf_new_dir(it_new.first->ray().normalized());
+                        double view_cos_angle = kf_new_dir.dot(kf_old_dir);
+
+                        //! find min angle, max cosangle
+                        if(view_cos_angle < max_cos_angle)
+                            continue;
+
+                        max_cos_angle = view_cos_angle;
+                        kf_new_ref = it_new.first;
+                    }
+
+                    Feature::Ptr ft_new = obs_new.find(kf_new_ref)->second;
+
+                    Vector3d xyz_old(kf_old->Tcw() * ft_new->mpt->pose());
+                    if(xyz_old[2] < 0.0f)
+                        continue;
+
+                    Vector2d px_old(kf_old->cam_->project(xyz_old));
+                    if(!kf_old->cam_->isInFrame(px_old.cast<int>(), 8))
+                        continue;
+
+                    int level_old = 0;
+                    bool matched =
+                        FeatureTracker::trackFeature(kf_new_ref, kf_old, ft_new, px_old, level_old, 15, 0.01, verbose_);
+
+                    if(!matched)
+                        continue;
+
+                    //! observation for update
+                    fts_to_update.emplace_back(obs_old.find(kf_old)->second, px_old[0], px_old[1], level_old);
+                }
+
+                //! update ft if succeed
+                const Camera::Ptr &cam = current_keyframe_->cam_;//! all camera is the same
+                for(const auto &it : fts_to_update)
+                {
+                    const Feature::Ptr &ft_update = std::get<0>(it);
+                    ft_update->px[0] = std::get<1>(it);
+                    ft_update->px[1] = std::get<2>(it);
+                    ft_update->level = std::get<3>(it);
+                    ft_update->fn = cam->lift(ft_update->px);
+                }
+
+                //! fusion the mappoint
+                mpt_new->fusion(mpt_old);
+                map_->removeMapPoint(mpt_old);
+
+                ft->mpt = mpt_new;
+                current_keyframe_->addFeature(ft);
+                mpt_new->addObservation(current_keyframe_, ft);
+                mpt_new->increaseVisible();
+                mpt_new->increaseFound();
+                LOG_IF(INFO, verbose_) << " Fusion mpt " << mpt_new->id_ << " with mpt " << mpt_old->id_;
+//                goto SHOW;
+            }
+
+            continue;
+
+            SHOW:
+            std::cout << " mpt_new: " << mpt_new->id_ << ", " << mpt_new->pose().transpose() << std::endl;
+            for(const auto &it : obs_new)
+            {
+                std::cout << "-kf: " << it.first->id_ << " px: [" << it.second->px[0] << ", " << it.second->px[1] << "]" << std::endl;
+            }
+
+            std::cout << " mpt_old: " << mpt_old->id_ << ", " << mpt_old->pose().transpose() << std::endl;
+            for(const auto &it : obs_old)
+            {
+                std::cout << "=kf: " << it.first->id_ << " px: [" << it.second->px[0] << ", " << it.second->px[1] << "]" << std::endl;
+            }
+
+            for(const auto &it : obs_new)
+            {
+                string name = "new -kf" + std::to_string(it.first->id_);
+                cv::Mat show = it.first->getImage(it.second->level).clone();
+                cv::cvtColor(show, show, CV_GRAY2RGB);
+                cv::Point2d px(it.second->px[0]/(1<<it.second->level), it.second->px[1]/(1<<it.second->level));
+                cv::circle(show, px, 5, cv::Scalar(0, 0, 255));
+                cv::imshow(name, show);
+            }
+
+            for(const auto &it : obs_old)
+            {
+                string name = "old -kf" + std::to_string(it.first->id_);
+                cv::Mat show = it.first->getImage(it.second->level).clone();
+                cv::cvtColor(show, show, CV_GRAY2RGB);
+                cv::Point2d px(it.second->px[0]/(1<<it.second->level), it.second->px[1]/(1<<it.second->level));
+                cv::circle(show, px, 5, cv::Scalar(0, 0, 255));
+                cv::imshow(name, show);
+            }
+            cv::waitKey(0);
         }
+
     }
 
-    return count;
+    double t3 = (double)cv::getTickCount();
+    LOG_IF(WARNING, report_) << "[Mapping][*] New Featrue Time: "
+                             << (t1-t0)/cv::getTickFrequency() << " "
+                             << (t2-t1)/cv::getTickFrequency() << " "
+                             << (t3-t2)/cv::getTickFrequency() << " "
+                             << ", match points " << new_fts.size() << " + " << local_mpts.size()
+                             << " (" << project_count << ", " << candidate_mpts.size() << ")";
+
+    return 0;
 }
 
 
@@ -851,7 +1123,7 @@ bool LocalMapper::findEpipolarMatch(const Seed::Ptr &seed,
                                     int &level_matched)
 {
     static const int patch_size = AlignPatch::Size;
-    static const int patch_area = AlignPatch::Area;
+//    static const int patch_area = AlignPatch::Area;
     static const int half_patch_size = AlignPatch::HalfSize;
 
     //! check if in the view of current frame

@@ -10,14 +10,14 @@ class Frame;
 
 class KeyFrame;
 
-class MapPoint
+class MapPoint : public std::enable_shared_from_this<MapPoint>
 {
 public:
 
     enum Type{
-        SEED,
-        STABLE,
-        BAD,
+        BAD = -1,
+        SEED = 0,
+        STABLE = 1,
     };
 
     typedef std::shared_ptr<MapPoint> Ptr;
@@ -29,6 +29,8 @@ public:
     Type type();
 
     void setBad();
+
+    bool isBad();
 
     void resetType(Type type);
 

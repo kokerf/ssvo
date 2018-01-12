@@ -24,10 +24,17 @@ void KeyFrame::updateConnections()
 
     for(const Feature::Ptr &ft : fts)
     {
-        if(ft->mpt == nullptr)
+        const MapPoint::Ptr &mpt = ft->mpt;
+        if(mpt == nullptr)
             continue;
 
-        const std::map<KeyFrame::Ptr, Feature::Ptr> observations = ft->mpt->getObservations();
+        if(mpt->isBad())
+        {
+            removeFeature(ft);
+            continue;
+        }
+
+        const std::map<KeyFrame::Ptr, Feature::Ptr> observations = mpt->getObservations();
         for(const auto &obs : observations)
         {
             if(obs.first->id_ == id_)

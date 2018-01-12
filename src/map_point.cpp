@@ -31,6 +31,12 @@ void MapPoint::setBad()
     type_ = BAD;
 }
 
+bool MapPoint::isBad()
+{
+    std::lock_guard<std::mutex> lock(mutex_obs_);
+    return type_ == BAD;
+}
+
 void MapPoint::addObservation(const KeyFrame::Ptr &kf, const Feature::Ptr &ft)
 {
     LOG_ASSERT(kf && kf) << " Error input kf: " << kf << ", or ft: " << ft;
@@ -41,7 +47,6 @@ void MapPoint::addObservation(const KeyFrame::Ptr &kf, const Feature::Ptr &ft)
 }
 
 //! it do not change the connections of keyframe
-//! usually, old mappoint fusion the new one
 bool MapPoint::fusion(const MapPoint::Ptr &mpt)
 {
     const auto obs = mpt->getObservations();

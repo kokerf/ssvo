@@ -106,11 +106,11 @@ bool Frame::isVisiable(const Vector3d &xyz_w, const int border)
         std::lock_guard<std::mutex> lock(mutex_pose_);
         Tcw = Tcw_;
     }
-    const Vector3d xyz_f = Tcw * xyz_w;
-    if(xyz_f[2] < 0.0f)
+    const Vector3d xyz_c = Tcw * xyz_w;
+    if(xyz_c[2] < 0.0f)
         return false;
 
-    Vector2d px = cam_->project(xyz_f);
+    Vector2d px = cam_->project(xyz_c);
     return cam_->isInFrame(px.cast<int>(), border);
 }
 

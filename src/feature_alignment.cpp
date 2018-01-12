@@ -88,8 +88,12 @@ bool AlignPatch::align2DI(const cv::Mat &image_cur,
 
         if(verbose)
         {
+            Matrix<float, Size, Size, RowMajor> patch_res = patch_cur - patch_ref_with_border.block<Size,Size>(1,1);
+            patch_res.array() += idiff+update[2];
+            float residual = patch_res.sum()/(Size*Size);
+
             using std::to_string;
-            std::string log = " Iter:" + to_string(iter) +
+            std::string log = " Iter:" + to_string(iter) + " res: " + to_string(residual) +
                 " estimate: [" + to_string(u) + ", " + to_string(v) + ", " + to_string(idiff) + "]\n";
             logs.push_back(log);
         }

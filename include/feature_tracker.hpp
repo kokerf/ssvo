@@ -35,6 +35,12 @@ public:
 
     int reprojectLoaclMap(const Frame::Ptr &frame);
 
+    static bool reprojectMapPoint(const Frame::Ptr &frame, const MapPoint::Ptr& mpt, Vector2d &px_cur, int &level_cur,
+                                  const int max_iterations = 30, const double epslion = 0.01, bool verbose = false);
+
+    static bool trackFeature(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, const Feature::Ptr &ft_ref,
+                             Vector2d &px_cur, int &level_cur, const int max_iterations = 30, const double epslion = 0.01, bool verbose = false);
+
     inline static FeatureTracker::Ptr create(int width, int height, int grid_size, int border, bool report = false, bool verbose = false)
     {return FeatureTracker::Ptr(new FeatureTracker(width, height, grid_size, border, report, verbose));}
 
@@ -44,9 +50,9 @@ private:
 
     void resetGrid();
 
-    bool reprojectMapPoint(const Frame::Ptr &frame, const MapPoint::Ptr &point);
+    bool reprojectMapPointToCell(const Frame::Ptr &frame, const MapPoint::Ptr &point);
 
-    bool matchMapPoints(const Frame::Ptr &frame, Grid::Cell &cell);
+    bool matchMapPointsFromCell(const Frame::Ptr &frame, Grid::Cell &cell);
 
 private:
 

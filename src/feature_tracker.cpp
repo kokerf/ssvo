@@ -52,20 +52,18 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     std::unordered_set<MapPoint::Ptr> local_mpts;
     for(const KeyFrame::Ptr &kf : candidate_keyframes)
     {
-        const std::vector<Feature::Ptr> &fts = kf->getFeatures();
-        for(const Feature::Ptr &ft : fts)
+        const MapPoints mpts= kf->getMapPoints();
+        for(const MapPoint::Ptr &mpt : mpts)
         {
-            const MapPoint::Ptr &mpt = ft->mpt;
-            if(mpt == nullptr)
-                continue;
-
             if(local_mpts.count(mpt))
                 continue;
 
             local_mpts.insert(mpt);
 
-            if(frame->isVisiable(mpt->pose()))
-                reprojectMapPoint(frame, mpt);
+            if(mpt->isBad())
+                continue;
+
+            reprojectMapPointToCell(frame, mpt);
         }
     }
 
@@ -75,7 +73,7 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     total_project_ = 0;
     for(int index : grid_.grid_order)
     {
-        if(matchMapPoints(frame, *grid_.cells[index]))
+        if(matchMapPointsFromCell(frame, *grid_.cells[index]))
             matches++;
         if(matches > options_.max_matches)
             break;
@@ -99,9 +97,13 @@ void FeatureTracker::resetGrid()
     std::random_shuffle(grid_.grid_order.begin(), grid_.grid_order.end());
 }
 
-bool FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame, const MapPoint::Ptr &point)
+bool FeatureTracker::reprojectMapPointToCell(const Frame::Ptr &frame, const MapPoint::Ptr &point)
 {
-    Vector2d px(frame->cam_->project(frame->Tcw()*point->pose()));
+    Vector3d pose(frame->Tcw() * point->pose());
+    if(pose[2] < 0.0f)
+        return false;
+
+    Vector2d px(frame->cam_->project(pose));
     if(!frame->cam_->isInFrame(px.cast<int>(), options_.border))
         return false;
 
@@ -112,86 +114,129 @@ bool FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame, const MapPoint::
     return true;
 }
 
-bool FeatureTracker::matchMapPoints(const Frame::Ptr &frame, Grid::Cell &cell)
+bool FeatureTracker::matchMapPointsFromCell(const Frame::Ptr &frame, Grid::Cell &cell)
 {
     // TODO sort? 选择质量较好的点优先投影
     cell.sort([](Candidate &c1, Candidate &c2){return c1.pt->getFoundRatio() > c2.pt->getFoundRatio();});
 
-    for(Candidate candidate : cell)
+    for(const Candidate &candidate : cell)
     {
-        double t0 = (double)cv::getTickCount();
-        KeyFrame::Ptr kf_ref;
-        int track_level = 0;
-        if(!candidate.pt->getCloseViewObs(frame, kf_ref, track_level))
+        total_project_++;
+        const MapPoint::Ptr &mpt = candidate.pt;
+        Vector2d px_cur = candidate.px;
+        int level_cur = 0;
+        bool matched = reprojectMapPoint(frame, mpt, px_cur, level_cur, 30, 0.01, verbose_);
+
+        if(!matched)
             continue;
 
-        double t1 = (double)cv::getTickCount();
-        const MapPoint::Ptr mpt = candidate.pt;
-        const Feature::Ptr ft_ref = mpt->findObservation(kf_ref);
-        const Vector3d obs_ref_dir(kf_ref->pose().translation() - mpt->pose());
-        const SE3d T_cur_from_ref = frame->Tcw() * kf_ref->pose();
-        const int patch_size = AlignPatch::Size;
-        Matrix2d A_cur_from_ref;
-        utils::getWarpMatrixAffine(kf_ref->cam_, frame->cam_, ft_ref->px, ft_ref->fn, ft_ref->level,
-                                   obs_ref_dir.norm(), T_cur_from_ref, patch_size, A_cur_from_ref);
+        Vector3d ft_cur = frame->cam_->lift(px_cur);
+        Feature::Ptr new_feature = Feature::create(px_cur, ft_cur, level_cur, mpt);
+        frame->addFeature(new_feature);
+        mpt->increaseVisible();
+        mpt->increaseFound();
 
-        // TODO 如果Affine很小的话，则不用warp
-        const int patch_border_size = AlignPatch::SizeWithBorder;
-        Matrix<float, patch_border_size, patch_border_size, RowMajor> patch_with_border;
-        utils::warpAffine<float, patch_border_size>(kf_ref->getImage(ft_ref->level), patch_with_border, A_cur_from_ref,
-                                                     ft_ref->px, ft_ref->level, track_level);
-
-        double t2 = (double)cv::getTickCount();
-        const cv::Mat image_cur = frame->getImage(track_level);
-
-        const double factor = static_cast<double>(1 << track_level);
-        Vector3d estimate(0,0,0); estimate.head<2>() = candidate.px / factor;
-
-        static bool show = false;
-        if(show)
-        {
-            cv::Mat show_ref, show_cur;
-            cv::cvtColor(kf_ref->getImage(ft_ref->level), show_ref, CV_GRAY2RGB);
-            cv::cvtColor(frame->getImage(track_level), show_cur, CV_GRAY2RGB);
-            cv::circle(show_ref, cv::Point2i((int)ft_ref->px[0], (int)ft_ref->px[1])/(1 << ft_ref->level), 3, cv::Scalar(255,0,0));
-            cv::circle(show_cur, cv::Point2i((int)estimate[0], (int)estimate[1]), 3, cv::Scalar(255,0,0));
-            cv::imshow("ref track", show_ref);
-            cv::imshow("cur track", show_cur);
-            cv::waitKey(0);
-        }
-
-        total_project_++;
-        if(AlignPatch::align2DI(image_cur, patch_with_border, estimate, 30, 0.01, verbose_))
-        {
-            Vector2d new_px = estimate.head<2>() * factor;
-            Vector3d new_ft = frame->cam_->lift(new_px);
-            Feature::Ptr new_feature = Feature::create(new_px, new_ft, track_level, mpt);
-            frame->addFeature(new_feature);
-            mpt->increaseVisible();
-            mpt->increaseFound();
-
-//            LOG(INFO) << "Creat new feature in level: " << track_level;
-//
-//            cv::circle(show_cur, cv::Point2i((int)estimate[0], (int)estimate[1]), 3, cv::Scalar(0,255,0));
-//            cv::imshow("ref track", show_ref);
-//            cv::imshow("cur track", show_cur);
-//            cv::waitKey(0);
-            double t3 = (double)cv::getTickCount();
-            LOG_IF(INFO, verbose_) << "-level:" << track_level
-                                  << " Time(ms),find obs: " << (t1-t0)/cv::getTickFrequency() * 1000
-                                  << " perwarp: " << (t2-t1)/cv::getTickFrequency() * 1000
-                                  << " align: " << (t3-t2)/cv::getTickFrequency() * 1000;
-            return true;
-        }
-        else
-        {
-            //! if this point is not near the border, increase visiable
-            if(frame->cam_->isInFrame(candidate.px.cast<int>()/factor, (patch_size >> 1) + 2, track_level))
-                mpt->increaseVisible();
-        }
+        return true;
     }
 
     return false;
+}
+
+bool FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
+                                       const MapPoint::Ptr &mpt,
+                                       Vector2d &px_cur,
+                                       int &level_cur,
+                                       const int max_iterations,
+                                       const double epslion,
+                                       bool verbose)
+{
+    static const int patch_size = AlignPatch::Size;
+    static const int patch_border_size = AlignPatch::SizeWithBorder;
+
+    KeyFrame::Ptr kf_ref;
+    if(!mpt->getCloseViewObs(frame, kf_ref, level_cur))
+        return false;
+
+    const Feature::Ptr ft_ref = mpt->findObservation(kf_ref);
+    const Vector3d obs_ref_dir(kf_ref->pose().translation() - mpt->pose());
+    const SE3d T_cur_from_ref = frame->Tcw() * kf_ref->pose();
+
+    Matrix2d A_cur_from_ref;
+    utils::getWarpMatrixAffine(kf_ref->cam_, frame->cam_, ft_ref->px, ft_ref->fn, ft_ref->level,
+                               obs_ref_dir.norm(), T_cur_from_ref, patch_size, A_cur_from_ref);
+
+    // TODO 如果Affine很小的话，则不用warp
+    const cv::Mat image_ref = kf_ref->getImage(ft_ref->level);
+    Matrix<float, patch_border_size, patch_border_size, RowMajor> patch_with_border;
+    utils::warpAffine<float, patch_border_size>(image_ref, patch_with_border, A_cur_from_ref,
+                                                ft_ref->px, ft_ref->level, level_cur);
+
+    const cv::Mat image_cur = frame->getImage(level_cur);
+
+    const double factor = static_cast<double>(1 << level_cur);
+    Vector3d estimate(0,0,0); estimate.head<2>() = px_cur / factor;
+
+    static bool show = false;
+    if(show)
+    {
+        cv::Mat show_ref, show_cur;
+        cv::cvtColor(image_ref, show_ref, CV_GRAY2RGB);
+        cv::cvtColor(image_cur, show_cur, CV_GRAY2RGB);
+        cv::circle(show_ref, cv::Point2i((int)ft_ref->px[0], (int)ft_ref->px[1])/(1 << ft_ref->level), 3, cv::Scalar(255,0,0));
+        cv::circle(show_cur, cv::Point2i((int)estimate[0], (int)estimate[1]), 3, cv::Scalar(255,0,0));
+        cv::imshow("ref track", show_ref);
+        cv::imshow("cur track", show_cur);
+        cv::waitKey(0);
+    }
+
+    bool matched = AlignPatch::align2DI(image_cur, patch_with_border, estimate, max_iterations, epslion, verbose);
+    if(!matched)
+        return false;
+
+    px_cur = estimate.head<2>() * factor;
+
+    return true;
+}
+
+bool FeatureTracker::trackFeature(const Frame::Ptr &frame_ref,
+                                  const Frame::Ptr &frame_cur,
+                                  const Feature::Ptr &ft_ref,
+                                  Vector2d &px_cur,
+                                  int &level_cur,
+                                  const int max_iterations,
+                                  const double epslion,
+                                  bool verbose)
+{
+    static const int patch_size = AlignPatch::Size;
+    static const int patch_border_size = AlignPatch::SizeWithBorder;
+
+    const Vector3d obs_ref_dir(frame_ref->pose().translation() - ft_ref->mpt->pose());
+    const SE3d T_cur_from_ref = frame_cur->Tcw() * frame_ref->pose();
+
+    Matrix2d A_cur_from_ref;
+    utils::getWarpMatrixAffine(frame_ref->cam_, frame_cur->cam_, ft_ref->px, ft_ref->fn, ft_ref->level,
+                               obs_ref_dir.norm(), T_cur_from_ref, patch_size, A_cur_from_ref);
+
+    level_cur = utils::getBestSearchLevel(A_cur_from_ref, frame_cur->max_level_);
+//    std::cout << "A:\n" << A_cur_from_ref << std::endl;
+
+    const cv::Mat image_ref = frame_ref->getImage(ft_ref->level);
+    Matrix<float, patch_border_size, patch_border_size, RowMajor> patch_with_border;
+    utils::warpAffine<float, patch_border_size>(image_ref, patch_with_border, A_cur_from_ref,
+                                                ft_ref->px, ft_ref->level, level_cur);
+
+    const cv::Mat image_cur = frame_cur->getImage(level_cur);
+
+    const double factor = static_cast<double>(1 << level_cur);
+    Vector3d estimate(0,0,0); estimate.head<2>() = px_cur / factor;
+
+    bool matched = AlignPatch::align2DI(image_cur, patch_with_border, estimate, max_iterations, epslion, verbose);
+    if(!matched)
+        return false;
+
+    px_cur = estimate.head<2>() * factor;
+
+    return true;
 }
 
 }
