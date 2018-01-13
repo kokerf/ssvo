@@ -32,7 +32,7 @@ void Map::removeMapPoint(const MapPoint::Ptr &mpt)
 {
     std::lock_guard<std::mutex> lock(mutex_mpt_);
     mpts_.erase(mpt->id_);
-    removed_mpts_.push_back(mpt);
+    removed_mpts_.insert(mpt);
 //    std::string log;
 //    log += "removed mpts: [ ";
 //    for(const MapPoint::Ptr &rm_mpt : removed_mpts_)

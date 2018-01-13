@@ -17,9 +17,9 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
     problem.AddParameterBlock(kf2->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
     problem.SetParameterBlockConstant(kf1->optimal_Tcw_.data());
 
-    const std::vector<Feature::Ptr> fts1 = kf1->getFeatures();
+    std::vector<Feature::Ptr> fts1;
+    kf1->getFeatures(fts1);
     MapPoints mpts;
-    mpts.reserve(fts1.size());
 
     for(const Feature::Ptr &ft1 : fts1)
     {
@@ -72,7 +72,8 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool report,
     double scale = Config::pixelUnSigma() * 2;
     ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
 
-    std::vector<Feature::Ptr> fts = frame->getFeatures();
+    std::vector<Feature::Ptr> fts;
+    frame->getFeatures(fts);
     for(const Feature::Ptr &ft : fts)
     {
         MapPoint::Ptr mpt = ft->mpt;
@@ -123,7 +124,8 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
 
     for(const KeyFrame::Ptr &kf : local_keyframes)
     {
-        MapPoints mpts = kf->getMapPoints();
+        MapPoints mpts;
+        kf->getMapPoints(mpts);
         for(const MapPoint::Ptr &mpt : mpts)
         {
             local_mapoints.insert(mpt);

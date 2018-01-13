@@ -81,7 +81,8 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
 
 int AlignSE3::computeReferencePatches(int level)
 {
-    std::vector<Feature::Ptr> fts = ref_frame_->getFeatures();
+    std::vector<Feature::Ptr> fts;
+    ref_frame_->getFeatures(fts);
     const size_t N = fts.size();
 
     Vector3d ref_pose = ref_frame_->pose().translation();

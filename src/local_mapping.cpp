@@ -168,7 +168,8 @@ void LocalMapper::drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
 {
     //! draw features
     const cv::Mat src = frame->getImage(0);
-    std::vector<Feature::Ptr> fts = frame->getFeatures();
+    std::vector<Feature::Ptr> fts;
+    frame->getFeatures(fts);
     cv::cvtColor(src, dst, CV_GRAY2RGB);
     int font_face = 1;
     double font_scale = 0.5;
@@ -179,7 +180,7 @@ void LocalMapper::drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
         cv::Scalar color(0, 255, 0);
         cv::circle(dst, px, 2, color, -1);
 
-        string id_str = std::to_string((frame->Tcw()*ft->mpt->pose()).norm());
+        string id_str = std::to_string((frame->Tcw()*ft->mpt->pose()).norm());//ft->mpt->getFoundRatio());//
         cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
     }
 
@@ -198,7 +199,7 @@ void LocalMapper::drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
 
 }
 
-void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, const std::vector<Vector3d> &points)
+void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur)
 {
     map_->clear();
 
@@ -207,33 +208,30 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
     KeyFrame::Ptr keyframe_cur = KeyFrame::create(frame_cur);
 
     //! before import, make sure the features are stored in the same order!
-    std::vector<Feature::Ptr> fts_ref = keyframe_ref->getFeatures();
-    std::vector<Feature::Ptr> fts_cur = keyframe_cur->getFeatures();
+    std::vector<Feature::Ptr> fts_ref, fts_cur;
+    keyframe_ref->getFeatures(fts_ref);
+    keyframe_cur->getFeatures(fts_cur);
 
     const size_t N = fts_ref.size();
     LOG_ASSERT(N == fts_cur.size()) << "Error in create inital map! Two frames' features is not matched!";
-    LOG_ASSERT(N == points.size()) << "Error in create inital map! Two frames' features is not matched mappoints!";
     for(size_t i = 0; i < N; i++)
     {
-        MapPoint::Ptr mpt = ssvo::MapPoint::create(points[i], keyframe_ref);
+        fts_ref[i]->mpt->addObservation(keyframe_ref, fts_ref[i]);
+        fts_cur[i]->mpt->addObservation(keyframe_cur, fts_cur[i]);
+    }
 
-        fts_ref[i]->mpt = mpt;
-        fts_cur[i]->mpt = mpt;
-
-        map_->insertMapPoint(mpt);
-        mpt->resetType(MapPoint::STABLE);
-
-        mpt->addObservation(keyframe_ref, fts_ref[i]);
-        mpt->addObservation(keyframe_cur, fts_cur[i]);
-        mpt->updateViewAndDepth();
+    for(Feature::Ptr ft : fts_ref)
+    {
+        map_->insertMapPoint(ft->mpt);
+        ft->mpt->resetType(MapPoint::STABLE);
+        ft->mpt->updateViewAndDepth();
     }
 
     current_frame_ = frame_cur;
-    insertKeyFrame(keyframe_ref);
-    insertKeyFrame(keyframe_cur);
-
     keyframe_ref->updateConnections();
     keyframe_cur->updateConnections();
+    insertKeyFrame(keyframe_ref);
+    insertKeyFrame(keyframe_cur);
 
     LOG_IF(INFO, report_) << "[Mapping] Creating inital map with " << map_->MapPointsInMap() << " map points";
 }
@@ -281,6 +279,36 @@ bool LocalMapper::finishFrame()
             processNewKeyFrame();
     }
 
+//    std::vector<MapPoint::Ptr> mpts = map_->getAllMapPoints();
+//    std::vector<int> histogram(10, 0);
+//    std::vector<int> histogram_low(10, 0);
+//    int size_low = 0;
+//    for(const MapPoint::Ptr &mpt : mpts)
+//    {
+//        int hist = int (mpt->getFoundRatio() * 9.99);
+//        histogram[hist]++;
+//        if(hist == 0)
+//        {
+//            int hist_low = int (mpt->getFoundRatio() * 99.9);
+//            histogram_low[hist_low]++;
+//            size_low++;
+//        }
+//    }
+//    std::string log = " [ ";
+//    for(int i = 0; i < 10; ++i)
+//    {
+//        log += std::to_string((float)histogram[i] / mpts.size()) + " ";
+//    }
+//    log += "], " + std::to_string(mpts.size());
+//    LOG(ERROR) << log;
+//    log = " [ ";
+//    for(int i = 0; i < 10; ++i)
+//    {
+//        log += std::to_string(histogram_low[i]) + " ";
+//    }
+//    log += "], " + std::to_string(size_low);
+//    LOG(ERROR) << log;
+
     return true;
 }
 
@@ -289,7 +317,8 @@ bool LocalMapper::needCreateKeyFrame()
     std::map<KeyFrame::Ptr, int> overlap_kfs = current_frame_->getOverLapKeyFrames();
     const int overlap = overlap_kfs[current_keyframe_];
 
-    std::vector<Feature::Ptr> fts = current_frame_->getFeatures();
+    std::vector<Feature::Ptr> fts;
+    current_frame_->getFeatures(fts);
     std::map<MapPoint::Ptr, Feature::Ptr> mpt_ft;
     for(const Feature::Ptr &ft : fts)
     {
@@ -335,7 +364,8 @@ bool LocalMapper::needCreateKeyFrame()
 
         std::vector<float> disparity;
         disparity.reserve(ovlp_kf.second);
-        MapPoints mpts = ovlp_kf.first->getMapPoints();
+        MapPoints mpts;
+        ovlp_kf.first->getMapPoints(mpts);
         for(const MapPoint::Ptr &mpt : mpts)
         {
             Feature::Ptr ft_ref = mpt->findObservation(ovlp_kf.first);
@@ -378,7 +408,8 @@ void LocalMapper::processNewKeyFrame()
 {
     //! create new keyframe
     KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
-    const std::vector<Feature::Ptr> &fts = new_keyframe->getFeatures();
+    std::vector<Feature::Ptr> fts;
+    new_keyframe->getFeatures(fts);
     for(const Feature::Ptr &ft : fts)
     {
         ft->mpt->addObservation(new_keyframe, ft);
@@ -446,7 +477,8 @@ int LocalMapper::createSeeds(bool is_track)
     if(current_keyframe_ == nullptr)
         return 0;
 
-    std::vector<Feature::Ptr> fts = current_keyframe_->getFeatures();
+    std::vector<Feature::Ptr> fts;
+    current_keyframe_->getFeatures(fts);
 
     Corners old_corners;
     old_corners.reserve(fts.size());
@@ -510,7 +542,8 @@ int LocalMapper::createFeatureFromLocalMap()
 
     double t1 = (double)cv::getTickCount();
     std::unordered_set<MapPoint::Ptr> local_mpts;
-    const MapPoints mpts_cur = current_keyframe_->getMapPoints();
+    MapPoints mpts_cur;
+    current_keyframe_->getMapPoints(mpts_cur);
     for(const MapPoint::Ptr &mpt : mpts_cur)
     {
         local_mpts.insert(mpt);
@@ -519,14 +552,25 @@ int LocalMapper::createFeatureFromLocalMap()
     std::unordered_set<MapPoint::Ptr> candidate_mpts;
     for(const KeyFrame::Ptr &kf : local_keyframes)
     {
-        const MapPoints mpts = kf->getMapPoints();
+        MapPoints mpts;
+        kf->getMapPoints(mpts);
         for(const MapPoint::Ptr &mpt : mpts)
         {
             if(local_mpts.count(mpt) || candidate_mpts.count(mpt))
                 continue;
 
             if(mpt->isBad())//! however it should not happen, maybe still some bugs in somewhere
+            {
+                kf->removeMapPoint(mpt);
                 continue;
+            }
+
+//            if(mpt->getFoundRatio() < 0.1)
+//            {
+//                mpt->setBad();
+//                map_->removeMapPoint(mpt);
+//                continue;
+//            }
 
             candidate_mpts.insert(mpt);
         }
@@ -549,8 +593,8 @@ int LocalMapper::createFeatureFromLocalMap()
         project_count++;
 
         int level_cur = 0;
-        bool matched = FeatureTracker::reprojectMapPoint(current_keyframe_, mpt, px_cur, level_cur, 15, 0.01);
-        if(!matched)
+        int result = FeatureTracker::reprojectMapPoint(current_keyframe_, mpt, px_cur, level_cur, 15, 0.01);
+        if(result != 1)
             continue;
 
         Vector3d ft_cur = current_keyframe_->cam_->lift(px_cur);
@@ -563,7 +607,8 @@ int LocalMapper::createFeatureFromLocalMap()
     const int cols = current_keyframe_->cam_->width();
     const int rows = current_keyframe_->cam_->height();
     cv::Mat mask(rows, cols, CV_16SC1, -1);
-    std::vector<Feature::Ptr> old_fts = current_keyframe_->getFeatures();
+    std::vector<Feature::Ptr> old_fts;
+    current_keyframe_->getFeatures(old_fts);
     const int old_fts_size = (int) old_fts.size();
     for(int i = 0; i < old_fts_size; ++i)
     {
@@ -590,8 +635,8 @@ int LocalMapper::createFeatureFromLocalMap()
             //! create new features
             current_keyframe_->addFeature(ft);
             ft->mpt->addObservation(current_keyframe_, ft);
-            ft->mpt->increaseVisible();
-            ft->mpt->increaseFound();
+            ft->mpt->increaseVisible(2);
+            ft->mpt->increaseFound(2);
             created_count++;
             LOG_IF(INFO, verbose_) << " create new feature from mpt " << ft->mpt->id_;
         }
@@ -688,14 +733,10 @@ int LocalMapper::createFeatureFromLocalMap()
                 }
 
                 //! fusion the mappoint
+                //! just reject the new one
                 mpt_old->fusion(mpt_new);
                 map_->removeMapPoint(mpt_new);
 
-                ft->mpt = mpt_old;
-                current_keyframe_->addFeature(ft);
-                mpt_old->addObservation(current_keyframe_, ft);
-                mpt_old->increaseVisible();
-                mpt_old->increaseFound();
                 LOG_IF(INFO, verbose_) << " Fusion mpt " << mpt_old->id_ << " with mpt " << mpt_new->id_;
 //                goto SHOW;
             }
@@ -756,15 +797,14 @@ int LocalMapper::createFeatureFromLocalMap()
                     ft_update->fn = cam->lift(ft_update->px);
                 }
 
-                //! fusion the mappoint
-                mpt_new->fusion(mpt_old);
-                map_->removeMapPoint(mpt_old);
-
+                //! add new feature for keyframe, then fusion the mappoint
                 ft->mpt = mpt_new;
                 current_keyframe_->addFeature(ft);
                 mpt_new->addObservation(current_keyframe_, ft);
-                mpt_new->increaseVisible();
-                mpt_new->increaseFound();
+
+                mpt_new->fusion(mpt_old);
+                map_->removeMapPoint(mpt_old);
+
                 LOG_IF(INFO, verbose_) << " Fusion mpt " << mpt_new->id_ << " with mpt " << mpt_old->id_;
 //                goto SHOW;
             }
@@ -1063,7 +1103,7 @@ bool LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
     //! create new feature
     // TODO add_observation 不用，需不需要找一下其他关键帧是否观测改点，增加约束
     // TODO 把这部分放入一个队列，在单独线程进行处理
-    MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->mu), seed->kf);
+    MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->mu));
     Feature::Ptr ft = Feature::create(seed->px_ref, seed->fn_ref, seed->level_ref, mpt);
     seed->kf->addFeature(ft);
     map_->insertMapPoint(mpt);
@@ -1089,7 +1129,8 @@ void LocalMapper::checkCulling()
         const int observations_threshold = 3;
         int observations = 0;
         int redundant_observations = 0;
-        const MapPoints mpts = kf->getMapPoints();
+        MapPoints mpts;
+        kf->getMapPoints(mpts);
         for(const MapPoint::Ptr &mpt : mpts)
         {
             std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();

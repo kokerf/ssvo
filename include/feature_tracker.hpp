@@ -35,7 +35,7 @@ public:
 
     int reprojectLoaclMap(const Frame::Ptr &frame);
 
-    static bool reprojectMapPoint(const Frame::Ptr &frame, const MapPoint::Ptr& mpt, Vector2d &px_cur, int &level_cur,
+    static int reprojectMapPoint(const Frame::Ptr &frame, const MapPoint::Ptr& mpt, Vector2d &px_cur, int &level_cur,
                                   const int max_iterations = 30, const double epslion = 0.01, bool verbose = false);
 
     static bool trackFeature(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, const Feature::Ptr &ft_ref,

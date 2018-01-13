@@ -9,6 +9,19 @@ Feature::Feature(const Vector2d &px, const Vector3d &fn, const int level, const 
     px(px), fn(fn), level(level), mpt(mpt)
 {
     assert(fn[2] == 1);
+    assert(mpt);
+}
+
+std::ostream& operator<<(std::ostream &out, const Feature &ft)
+{
+    Vector3d xyz = ft.mpt->pose();
+    out << "{ px: [" << ft.px[0] << ", " << ft.px[1] << "],"
+        << " fn: [" << ft.fn[0] << ", " << ft.fn[1] << ", " << ft.fn[2] << "],"
+        << " level: " << ft.level
+        << " mpt: " << ft.mpt->id_ << ", [" << xyz[0] << ", " << xyz[1] << ", " << xyz[2] << "] "
+        << " }";
+
+    return out;
 }
 
 //! Seed

@@ -16,7 +16,7 @@ public:
 
     void setThread(bool enable_main = false, bool enable_track = true);
 
-    void createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, const std::vector<Vector3d> &points);
+    void createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur);
 
     void insertFrame(const Frame::Ptr &frame);
 

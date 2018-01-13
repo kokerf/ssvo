@@ -199,14 +199,25 @@ void Viewer::drawCurrentImage(pangolin::GlTexture &gl_texture)
 
 void Viewer::drawMapPoints()
 {
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> obs_mpts;
+    {
+        std::lock_guard<std::mutex> lock(mutex_frame_);
+        obs_mpts = frame_->features();
+    }
+
     std::vector<MapPoint::Ptr> mpts = map_->getAllMapPoints();
 
     glPointSize(map_point_size);
     glBegin(GL_POINTS);
-    glColor3f(0.0,0.0,1.0);
-    for(MapPoint::Ptr mpt : mpts)
+    for(const MapPoint::Ptr &mpt : mpts)
     {
         Vector3d pose = mpt->pose();
+        if(obs_mpts.count(mpt))
+            glColor3f(1.0,0.0,0.3);
+        else
+            glColor3f(0.0,0.0,1.0);
+//        float rate = (float)mpt->getFoundRatio();
+//        glColor3f((1-rate)*rate, 0, rate*rate);
         glVertex3f(pose[0], pose[1], pose[2]);
     }
     glEnd();

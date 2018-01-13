@@ -54,7 +54,7 @@ public:
 
     void reset();
 
-    void createInitalMap(std::vector<Vector3d> &points, double map_scale=1.0);
+    void createInitalMap(double map_scale=1.0);
 
     Frame::Ptr getReferenceFrame(){return cand_ref_->frame;}
 

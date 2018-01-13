@@ -48,13 +48,19 @@ public:
 
     size_t N();
 
-    Features features();
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> features();
 
-    std::vector<Feature::Ptr> getFeatures();
+    void getFeatures(std::vector<Feature::Ptr> &fts);
 
-    void addFeature(const Feature::Ptr &ft);
+    void getMapPoints(std::list<MapPoint::Ptr> &mpts);
 
-    void removeFeature(const Feature::Ptr &ft);
+    bool addFeature(const Feature::Ptr &ft);
+
+    bool removeFeature(const Feature::Ptr &ft);
+
+    bool removeMapPoint(const MapPoint::Ptr &mpt);
+
+    Feature::Ptr getFeatureByMapPoint(const MapPoint::Ptr &mpt);
 
     bool getSceneDepth(double &depth_mean, double &depth_min);
 
@@ -114,7 +120,7 @@ public:
 
 protected:
 
-    Features fts_;
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts_;
 
     ImgPyr img_pyr_;
 

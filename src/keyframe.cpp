@@ -9,7 +9,8 @@ uint64_t KeyFrame::next_id_ = 0;
 KeyFrame::KeyFrame(const Frame::Ptr frame):
     Frame(frame->images(), next_id_++, frame->timestamp_, frame->cam_), frame_id_(frame->id_)
 {
-    fts_ = frame->features();
+    mpt_fts_ = frame->features();
+
     setPose(frame->pose());
 }
 void KeyFrame::updateConnections()
@@ -17,7 +18,8 @@ void KeyFrame::updateConnections()
     Features fts;
     {
         std::lock_guard<std::mutex> lock(mutex_feature_);
-        fts = fts_;
+        for(const auto &it : mpt_fts_)
+            fts.push_back(it.second);
     }
 
     std::map<KeyFrame::Ptr, int> connection_counter;
@@ -25,8 +27,6 @@ void KeyFrame::updateConnections()
     for(const Feature::Ptr &ft : fts)
     {
         const MapPoint::Ptr &mpt = ft->mpt;
-        if(mpt == nullptr)
-            continue;
 
         if(mpt->isBad())
         {
@@ -124,13 +124,9 @@ void KeyFrame::setBad()
     }
 
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    for(const Feature::Ptr &ft : fts_)
+    for(const auto &it : mpt_fts_)
     {
-        const MapPoint::Ptr &mpt = ft->mpt;
-        if(mpt == nullptr)
-            continue;
-
-        mpt->removeObservation(shared_from_this());
+        it.first->removeObservation(shared_from_this());
     }
 
     // TODO change refKF
@@ -171,21 +167,6 @@ void KeyFrame::removeConnection(const KeyFrame::Ptr &kf)
         connectedKeyFrames_.erase(kf);
         updateOrderedConnections();
     }
-}
-
-MapPoints KeyFrame::getMapPoints()
-{
-    std::lock_guard<std::mutex> lock(mutex_feature_);
-
-    MapPoints mpts;
-    mpts.reserve(fts_.size());
-    for(const Feature::Ptr &ft : fts_)
-    {
-        if(ft->mpt != nullptr)
-            mpts.push_back(ft->mpt);
-    }
-
-    return mpts;
 }
 
 }

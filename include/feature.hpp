@@ -27,6 +27,8 @@ public:
     inline static Ptr create(const Vector2d &_px, const Vector3d &_fn, int _level, const std::shared_ptr<MapPoint> &_mpt)
     {return std::make_shared<Feature>(Feature(_px, _fn, _level, _mpt));}
 
+    friend std::ostream& operator<<(std::ostream& out, const Feature& ft);
+
 private:
     Feature(const Vector2d &px, const Vector3d &fn, int _level, const std::shared_ptr<MapPoint> &mpt);
 

@@ -7,9 +7,9 @@ namespace ssvo
 unsigned long int MapPoint::next_id_ = 0;
 const double MapPoint::log_level_factor_ = log(2.0f);
 
-MapPoint::MapPoint(const Vector3d &p, const KeyFrame::Ptr &kf) :
+MapPoint::MapPoint(const Vector3d &p) :
         id_(next_id_++), last_structure_optimal_(0), pose_(p), type_(SEED),
-        min_distance_(0.0), max_distance_(0.0), refKF_(kf), found_cunter_(1), visiable_cunter_(1)
+        min_distance_(0.0), max_distance_(0.0), refKF_(nullptr), found_cunter_(1), visiable_cunter_(1)
 {
 }
 
@@ -29,6 +29,14 @@ void MapPoint::setBad()
 {
     std::lock_guard<std::mutex> lock(mutex_obs_);
     type_ = BAD;
+
+    for(const auto &it : obs_)
+        it.first->removeFeature(it.second);
+
+    for(const auto &it : obs_)
+        it.first->updateConnections();
+
+    obs_.clear();
 }
 
 bool MapPoint::isBad()
@@ -42,6 +50,10 @@ void MapPoint::addObservation(const KeyFrame::Ptr &kf, const Feature::Ptr &ft)
     LOG_ASSERT(kf && kf) << " Error input kf: " << kf << ", or ft: " << ft;
 
     std::lock_guard<std::mutex> lock(mutex_obs_);
+    LOG_ASSERT(type_ != BAD) << " Error to use a BAD MapPoint！";
+
+    if(refKF_ == nullptr)
+        refKF_ = kf;
     obs_.emplace(kf, ft);
 }
 
@@ -52,6 +64,8 @@ bool MapPoint::fusion(const MapPoint::Ptr &mpt)
     bool update = false;
     {
         std::lock_guard<std::mutex> lock(mutex_obs_);
+        found_cunter_ += mpt->getFound();
+        visiable_cunter_ += mpt->getVisible();
 
         for(const auto &it : obs)
         {
@@ -60,15 +74,13 @@ bool MapPoint::fusion(const MapPoint::Ptr &mpt)
                 obs_.insert(it);
                 update = true;
             }
-
-            it.first->removeFeature(it.second);
         }
     }
 
+    mpt->setBad();
+
     if(update)
         updateViewAndDepth();
-
-    mpt->setBad();
 
     return true;
 }
@@ -239,6 +251,18 @@ void MapPoint::increaseVisible(int n)
 {
     std::lock_guard<std::mutex> lock(mutex_obs_);
     visiable_cunter_ += n;
+}
+
+uint64_t MapPoint::getFound()
+{
+    std::lock_guard<std::mutex> lock(mutex_obs_);
+    return found_cunter_;
+}
+
+uint64_t MapPoint::getVisible()
+{
+    std::lock_guard<std::mutex> lock(mutex_obs_);
+    return visiable_cunter_;
 }
 
 double MapPoint::getFoundRatio()

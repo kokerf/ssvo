@@ -44,7 +44,7 @@ private:
 
 public:
 
-    std::list<MapPoint::Ptr> removed_mpts_;
+    std::set<MapPoint::Ptr> removed_mpts_;
 
 private:
 

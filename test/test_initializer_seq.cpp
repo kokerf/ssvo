@@ -56,7 +56,8 @@ void loadImages(const std::string &strFileDirectory, std::vector<string> &vstrIm
 
 void evalueErrors(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, double& error)
 {
-    std::vector<Feature::Ptr> fts1 = kf1->getFeatures();
+    std::vector<Feature::Ptr> fts1;
+    kf1->getFeatures(fts1);
     double residuals[2] = {0,0};
     Matrix3d R = kf2->Tcw().rotationMatrix();
     Vector3d t = kf2->Tcw().translation();
@@ -163,8 +164,8 @@ int main(int argc, char const *argv[])
 
     ssvo::LocalMapper::Ptr mapper = ssvo::LocalMapper::create(detector, fps);
     std::vector<Vector3d> points;
-    initializer->createInitalMap(points, 1.0);
-    mapper->createInitalMap(initializer->getReferenceFrame(), frame_cur, points);
+    initializer->createInitalMap(1.0);
+    mapper->createInitalMap(initializer->getReferenceFrame(), frame_cur);
 
     KeyFrame::Ptr kf0 = mapper->map_->getKeyFrame(0);
     KeyFrame::Ptr kf1 = mapper->map_->getKeyFrame(1);

@@ -185,7 +185,8 @@ void align_by_ceres(Frame::Ptr reference_frame, Frame::Ptr current_frame, int le
     const int border = 4+1;
     Vector3d ref_pose = reference_frame->pose().translation();
 
-    const std::vector<Feature::Ptr> fts = reference_frame->getFeatures();
+    std::vector<Feature::Ptr> fts;
+    reference_frame->getFeatures(fts);
     for(Feature::Ptr ft : fts)
     {
         Vector2d ref_px = ft->px*scale;
@@ -300,7 +301,7 @@ int main(int argc, char *argv[])
         Vector3d pt = frame1->cam_->lift(px_ref);
         pt *= depth/5000.0/pt[2];
 
-        ssvo::MapPoint::Ptr mpt = ssvo::MapPoint::create(pt, nullptr);
+        ssvo::MapPoint::Ptr mpt = ssvo::MapPoint::create(pt);
         Feature::Ptr feature_ref = Feature::create(px_ref, pt.normalized(), 0, mpt);
 
         frame0->addFeature(feature_ref);

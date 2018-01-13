@@ -62,6 +62,10 @@ public:
 
     void increaseVisible(int n=1);
 
+    uint64_t getFound();
+
+    uint64_t getVisible();
+
     double getFoundRatio();
 
     inline void setPose(const double x, const double y, const double z)
@@ -75,12 +79,12 @@ public:
 
     inline Vector3d pose() { return pose_; }
 
-    inline static Ptr create(const Vector3d &p, const KeyFramePtr &kf)
-    { return Ptr(new MapPoint(p, kf)); }
+    inline static Ptr create(const Vector3d &p)
+    { return Ptr(new MapPoint(p)); }
 
 private:
 
-    MapPoint(const Vector3d &p, const KeyFramePtr &kf);
+    MapPoint(const Vector3d &p);
 
     void updateRefKF();
 
@@ -110,15 +114,15 @@ private:
 
     KeyFramePtr refKF_;
 
-    int found_cunter_;
-    int visiable_cunter_;
+    uint64_t found_cunter_;
+    uint64_t visiable_cunter_;
 
     std::mutex mutex_obs_;
     std::mutex mutex_pose_;
 
 };
 
-typedef std::vector<MapPoint::Ptr> MapPoints;
+typedef std::list<MapPoint::Ptr> MapPoints;
 
 }
 

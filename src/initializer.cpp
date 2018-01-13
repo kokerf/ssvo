@@ -334,7 +334,7 @@ Initializer::Result Initializer::addImage(Frame::Ptr frame_cur)
     return SUCCESS;
 }
 
-void Initializer::createInitalMap(std::vector<Vector3d> &points, double map_scale)
+void Initializer::createInitalMap(double map_scale)
 {
     LOG_ASSERT(finished_) << "[INIT][6] Initialization is not finished!";
 
@@ -362,7 +362,6 @@ void Initializer::createInitalMap(std::vector<Vector3d> &points, double map_scal
     cand_cur_->frame->setPose(T_ref_from_cur);
 
     //! create and rescale map points
-    points.reserve(count);
     for(size_t i = 0; i < N; ++i)
     {
         if(!inliers_[i])
@@ -373,11 +372,11 @@ void Initializer::createInitalMap(std::vector<Vector3d> &points, double map_scal
         Vector3d ft_ref(cand_ref_->fts[i].x, cand_ref_->fts[i].y, 1);
         Vector3d ft_cur(cand_cur_->fts[i].x, cand_cur_->fts[i].y, 1);
 
-        points.emplace_back(p3ds_[i]*scale);
+        MapPoint::Ptr mpt = ssvo::MapPoint::create(p3ds_[i]*scale);
 
         LOG_ASSERT(cand_cur_->level[i] >= 0) << "Error in level, index:" << i;
-        Feature::Ptr feature_ref = Feature::create(px_ref, ft_ref, cand_cur_->level[i], nullptr);
-        Feature::Ptr feature_cur = Feature::create(px_cur, ft_cur, cand_cur_->level[i], nullptr);
+        Feature::Ptr feature_ref = Feature::create(px_ref, ft_ref, cand_cur_->level[i], mpt);
+        Feature::Ptr feature_cur = Feature::create(px_cur, ft_cur, cand_cur_->level[i], mpt);
 
         cand_ref_->frame->addFeature(feature_ref);
         cand_cur_->frame->addFeature(feature_cur);

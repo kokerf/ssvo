@@ -114,34 +114,72 @@ bool Frame::isVisiable(const Vector3d &xyz_w, const int border)
     return cam_->isInFrame(px.cast<int>(), border);
 }
 
-Features Frame::features()
+std::unordered_map<MapPoint::Ptr, Feature::Ptr> Frame::features()
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    return fts_;
+    return mpt_fts_;
 }
 
 size_t Frame::N()
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    return fts_.size();
+    return mpt_fts_.size();
 }
 
-std::vector<Feature::Ptr> Frame::getFeatures()
+void Frame::getFeatures(std::vector<Feature::Ptr>& fts)
 {
+    if(!fts.empty()) fts.clear();
+
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    return std::vector<Feature::Ptr>(fts_.begin(), fts_.end());
+    fts.reserve(mpt_fts_.size());
+    for(const auto &it : mpt_fts_)
+        fts.push_back(it.second);
 }
 
-void Frame::addFeature(const Feature::Ptr &ft)
+void Frame::getMapPoints(std::list<MapPoint::Ptr> &mpts)
 {
+    if(!mpts.empty()) mpts.clear();
+
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    fts_.push_back(ft);
+    for(const auto &it : mpt_fts_)
+        mpts.push_back(it.first);
 }
 
-void Frame::removeFeature(const Feature::Ptr &ft)
+bool Frame::addFeature(const Feature::Ptr &ft)
+{
+    LOG_ASSERT(ft->mpt != nullptr) << " The feature is invalid with empty mappoint!";
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+    if(mpt_fts_.count(ft->mpt))
+    {
+        LOG(ERROR) << " The mappoint is already be observed! Frame: " << id_ << " Mpt: " << ft->mpt->id_;
+        return false;
+    }
+
+    mpt_fts_.emplace(ft->mpt, ft);
+
+    return true;
+}
+
+bool Frame::removeFeature(const Feature::Ptr &ft)
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    fts_.remove(ft);
+    return (bool)mpt_fts_.erase(ft->mpt);
+}
+
+bool Frame::removeMapPoint(const MapPoint::Ptr &mpt)
+{
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+    return (bool)mpt_fts_.erase(mpt);
+}
+
+Feature::Ptr Frame::getFeatureByMapPoint(const MapPoint::Ptr &mpt)
+{
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+    const auto it = mpt_fts_.find(mpt);
+    if(it != mpt_fts_.end())
+        return it->second;
+    else
+        return nullptr;
 }
 
 bool Frame::getSceneDepth(double &depth_mean, double &depth_min)
@@ -154,7 +192,8 @@ bool Frame::getSceneDepth(double &depth_mean, double &depth_min)
     Features fts;
     {
         std::lock_guard<std::mutex> lock(mutex_feature_);
-        fts = fts_;
+        for(const auto &it : mpt_fts_)
+            fts.push_back(it.second);
     }
 
     std::vector<double> depth_vec;
@@ -180,20 +219,14 @@ bool Frame::getSceneDepth(double &depth_mean, double &depth_min)
 
 std::map<KeyFrame::Ptr, int> Frame::getOverLapKeyFrames()
 {
-    Features fts;
-    {
-        std::lock_guard<std::mutex> lock(mutex_feature_);
-        fts = fts_;
-    }
+    std::list<MapPoint::Ptr> mpts;
+    getMapPoints(mpts);
 
     std::map<KeyFrame::Ptr, int> overlap_kfs;
 
-    for(const Feature::Ptr &ft : fts)
+    for(const MapPoint::Ptr &mpt : mpts)
     {
-        if(ft->mpt == nullptr)
-            continue;
-
-        const std::map<KeyFrame::Ptr, Feature::Ptr> obs = ft->mpt->getObservations();
+        const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
         for(const auto &item : obs)
         {
             auto it = overlap_kfs.find(item.first);

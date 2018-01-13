@@ -81,8 +81,8 @@ System::Status System::initialize()
         return STATUS_INITAL_PROCESS;
 
     std::vector<Vector3d> points;
-    initializer_->createInitalMap(points, Config::mapScale());
-    mapper_->createInitalMap(initializer_->getReferenceFrame(), current_frame_, points);
+    initializer_->createInitalMap(Config::mapScale());
+    mapper_->createInitalMap(initializer_->getReferenceFrame(), current_frame_);
 
     LOG(WARNING) << "[System] Start two-view BA";
 

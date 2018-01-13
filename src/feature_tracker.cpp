@@ -52,7 +52,8 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     std::unordered_set<MapPoint::Ptr> local_mpts;
     for(const KeyFrame::Ptr &kf : candidate_keyframes)
     {
-        const MapPoints mpts= kf->getMapPoints();
+        MapPoints mpts;
+        kf->getMapPoints(mpts);
         for(const MapPoint::Ptr &mpt : mpts)
         {
             if(local_mpts.count(mpt))
@@ -60,8 +61,11 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
 
             local_mpts.insert(mpt);
 
-            if(mpt->isBad())
+            if(mpt->isBad()) //! should not happen
+            {
+                kf->removeMapPoint(mpt);
                 continue;
+            }
 
             reprojectMapPointToCell(frame, mpt);
         }
@@ -125,16 +129,17 @@ bool FeatureTracker::matchMapPointsFromCell(const Frame::Ptr &frame, Grid::Cell 
         const MapPoint::Ptr &mpt = candidate.pt;
         Vector2d px_cur = candidate.px;
         int level_cur = 0;
-        bool matched = reprojectMapPoint(frame, mpt, px_cur, level_cur, 30, 0.01, verbose_);
+        int result = reprojectMapPoint(frame, mpt, px_cur, level_cur, 30, 0.01, verbose_);
 
-        if(!matched)
+        mpt->increaseVisible(result+1);
+
+        if(result != 1)
             continue;
 
         Vector3d ft_cur = frame->cam_->lift(px_cur);
         Feature::Ptr new_feature = Feature::create(px_cur, ft_cur, level_cur, mpt);
         frame->addFeature(new_feature);
-        mpt->increaseVisible();
-        mpt->increaseFound();
+        mpt->increaseFound(2);
 
         return true;
     }
@@ -142,7 +147,7 @@ bool FeatureTracker::matchMapPointsFromCell(const Frame::Ptr &frame, Grid::Cell 
     return false;
 }
 
-bool FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
+int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
                                        const MapPoint::Ptr &mpt,
                                        Vector2d &px_cur,
                                        int &level_cur,
@@ -155,7 +160,7 @@ bool FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
 
     KeyFrame::Ptr kf_ref;
     if(!mpt->getCloseViewObs(frame, kf_ref, level_cur))
-        return false;
+        return -1;
 
     const Feature::Ptr ft_ref = mpt->findObservation(kf_ref);
     const Vector3d obs_ref_dir(kf_ref->pose().translation() - mpt->pose());
@@ -191,11 +196,11 @@ bool FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
 
     bool matched = AlignPatch::align2DI(image_cur, patch_with_border, estimate, max_iterations, epslion, verbose);
     if(!matched)
-        return false;
+        return 0;
 
     px_cur = estimate.head<2>() * factor;
 
-    return true;
+    return 1;
 }
 
 bool FeatureTracker::trackFeature(const Frame::Ptr &frame_ref,

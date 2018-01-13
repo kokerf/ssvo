@@ -17,8 +17,6 @@ public:
 
     void updateConnections();
 
-    MapPoints getMapPoints();
-
     void setBad();
 
     std::set<KeyFrame::Ptr> getConnectedKeyFrames(int num=-1);
