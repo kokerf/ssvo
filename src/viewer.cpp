@@ -33,11 +33,13 @@ void Viewer::run()
 
     pangolin::CreatePanel("menu").SetBounds(pangolin::Attach::Pix(WIN_HEIGHT-UI_HEIGHT), 1.0, 0.0, pangolin::Attach::Pix(UI_WIDTH));
     pangolin::Var<bool> menu_follow_camera("menu.Follow Camera", true, true);
+    pangolin::Var<bool> menu_show_keyframe("menu.Show KeyFrame", true, true);
     pangolin::Var<bool> menu_show_connections("menu.Connections", true, true);
     pangolin::Var<bool> menu_show_current_connections("menu.Connections_cur", true, true);
 
 
     bool following_camera = true;
+    bool show_keyframe = true;
     bool show_connections = true;
     bool show_current_connections = true;
 
@@ -96,10 +98,20 @@ void Viewer::run()
             show_current_connections = false;
         }
 
+        if(menu_show_keyframe)
+        {
+            show_keyframe = true;
+        }
+        else if(!menu_show_keyframe && show_keyframe)
+        {
+            show_keyframe = false;
+        }
+
         pangolin::glDrawAxis(0.1);
         drawMapPoints();
 
-        drawKeyFrames(show_connections, show_current_connections);
+        if(show_keyframe)
+            drawKeyFrames(show_connections, show_current_connections);
 
         drawCurrentFrame();
 

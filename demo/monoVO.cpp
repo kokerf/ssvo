@@ -1,7 +1,6 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <time.h>
 #include <iomanip>
 #include <memory>
 #include "system.hpp"
@@ -24,11 +23,13 @@ int main(int argc, char *argv[])
         dataset.readItemByIndex(i, image_name, timestamp);
         LOG(INFO) << "=== Load Image " << i << ": " << image_name << ", time: " << std::fixed <<std::setprecision(7)<< timestamp << std::endl;
         cv::Mat image = cv::imread(image_name, CV_LOAD_IMAGE_UNCHANGED);
-        vo.process(image, timestamp);
+        if(image.empty())
+            continue;
 
-        //cv::imshow("Image Show", image);
-//        cv::waitKey(40);
+        vo.process(image, timestamp);
     }
+
+    cv::waitKey(0);
 
     return 0;
 }

@@ -100,7 +100,6 @@ LIST(APPEND LINK_LIBS
 LIST(APPEND SOURCEFILES
     src/camera.cpp
     src/map_point.cpp
-    src/feature.cpp
     src/frame.cpp
     src/keyframe.cpp
     src/map.cpp
@@ -111,6 +110,7 @@ LIST(APPEND SOURCEFILES
     src/image_alignment.cpp
     src/initializer.cpp
     src/optimizer.cpp
+    src/depth_filter.cpp
     src/local_mapping.cpp
     src/system.cpp
     src/viewer.cpp

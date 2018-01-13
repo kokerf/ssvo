@@ -42,6 +42,8 @@ private:
 
     Status initialize();
 
+    bool createNewKeyFrame();
+
     void finishFrame();
 
     void showImage(Stage stage);
@@ -55,6 +57,7 @@ private:
     FastDetector::Ptr fast_detector_;
     FeatureTracker::Ptr feature_tracker_;
     Initializer::Ptr initializer_;
+    DepthFilter::Ptr depth_filter_;
     LocalMapper::Ptr mapper_;
 
     Viewer::Ptr viewer_;
@@ -62,8 +65,9 @@ private:
     std::thread viewer_thread_;
 
     cv::Mat rgb_;
-    Frame::Ptr current_frame_;
     Frame::Ptr last_frame_;
+    Frame::Ptr current_frame_;
+    KeyFrame::Ptr reference_keyframe_;
 
     double time_;
 };

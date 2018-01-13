@@ -38,8 +38,6 @@ private:
 
     void removeMapPoint(const MapPoint::Ptr &mpt);
 
-    void insertNewMapPoint(const MapPoint::Ptr &mpt);
-
     inline static Map::Ptr create() {return Map::Ptr(new Map());}
 
 public:

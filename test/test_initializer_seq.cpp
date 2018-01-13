@@ -134,7 +134,7 @@ int main(int argc, char const *argv[])
     std::vector<Corner> corners;
     std::vector<Corner> old_corners;
     Frame::Ptr frame_cur;
-    for(std::vector<std::string>::iterator i = img_file_names.begin(); i != img_file_names.end(); ++i)
+    for(auto i = img_file_names.begin(); i != img_file_names.end(); ++i)
     {
         cv::Mat img = cv::imread(*i, CV_LOAD_IMAGE_UNCHANGED);
         if(img.empty()) throw std::runtime_error("Could not open image: " + *i);
@@ -144,25 +144,23 @@ int main(int argc, char const *argv[])
         if(gray.channels() != 1)
             cv::cvtColor(gray, gray, cv::COLOR_RGB2GRAY);
 
-        if(initial == 0)
-        {
-            frame_cur = Frame::create(gray, 0, camera);
-            Initializer::Result res = initializer->addImage(frame_cur);
 
-            if(res == Initializer::RESET)
-                initializer->reset();
-            else if(res == Initializer::SUCCESS)
-                break;
+        frame_cur = Frame::create(gray, 0, camera);
+        Initializer::Result res = initializer->addImage(frame_cur);
 
-            cv::Mat klt_img;
-            initializer->drowOpticalFlow(klt_img);
-            cv::imshow("KLTracking", klt_img);
-        }
+        if(res == Initializer::RESET)
+            initializer->reset();
+        else if(res == Initializer::SUCCESS)
+            break;
+
+        cv::Mat klt_img;
+        initializer->drowOpticalFlow(klt_img);
+        cv::imshow("KLTracking", klt_img);
 
         cv::waitKey(fps);
     }
 
-    ssvo::LocalMapper::Ptr mapper = ssvo::LocalMapper::create(detector, fps);
+    ssvo::LocalMapper::Ptr mapper = ssvo::LocalMapper::create(fps);
     std::vector<Vector3d> points;
     initializer->createInitalMap(1.0);
     mapper->createInitalMap(initializer->getReferenceFrame(), frame_cur);
