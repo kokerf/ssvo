@@ -11,8 +11,8 @@ namespace utils {
 template<typename Ts, typename Td, int Size>
 inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src, Td* dst_ptr, Td* dx_ptr, Td* dy_ptr, const double u, const double v)
 {
-    const int iu = floorf(u);
-    const int iv = floorf(v);
+    const int iu = floor(u);
+    const int iv = floor(v);
     const float wu1 = u - iu;
     const float wu0 = 1.0 - wu1;
     const float wv1 = v - iv;
@@ -27,6 +27,12 @@ inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src, Td
     const int expand_size1 = Size + 3;
     const int start_v = iv - half_size - 1;
     const int start_u = iu - half_size - 1;
+
+    LOG_ASSERT(start_v >= 0 && start_u >= 0 && start_v+expand_size1 <= src.cols() && start_v+expand_size1 <= src.rows())
+        << " Out of image scope! image cols=" << src.cols() << " rows=" << src.rows() << ", "
+        << "LT: (" << start_u << ", " << start_v << ") - "
+        << "BR: (" << start_u+expand_size1 << ", " << start_v+expand_size1 << ")";
+
     Matrix<Td, expand_size1, expand_size1, RowMajor>
         patch_with_border = src.block(start_v, start_u, expand_size1, expand_size1).template cast<Td>();
     //! block(i,j,p,q) i-rows j-cols
@@ -52,8 +58,8 @@ inline void interpolateMat(const cv::Mat &src, Td* dst_ptr, Td* dx_ptr, Td* dy_p
 {
     assert(src.type() == cv::DataType<Ts>::type);
     Eigen::Map<Matrix<Ts, Dynamic, Dynamic, RowMajor> > src_map(src.data, src.rows, src.cols);
-    const int iu = floorf(u);
-    const int iv = floorf(v);
+    const int iu = floor(u);
+    const int iv = floor(v);
     const float wu1 = u - iu;
     const float wu0 = 1.0 - wu1;
     const float wv1 = v - iv;
@@ -68,6 +74,12 @@ inline void interpolateMat(const cv::Mat &src, Td* dst_ptr, Td* dx_ptr, Td* dy_p
     const int expand_size1 = Size + 3;
     const int start_v = iv - half_size - 1;
     const int start_u = iu - half_size - 1;
+
+    LOG_ASSERT(start_v >= 0 && start_u >= 0 && start_v+expand_size1 <= src.cols && start_v+expand_size1 <= src.rows)
+    << " Out of image scope! image cols=" << src.cols << " rows=" << src.rows << ", "
+    << "LT: (" << start_u << ", " << start_v << ") - "
+    << "BR: (" << start_u+expand_size1 << ", " << start_v+expand_size1 << ")";
+
     Matrix<Td, expand_size1, expand_size1, RowMajor>
         patch_with_border = src_map.block(start_v, start_u, expand_size1, expand_size1).template cast<Td>();
     //! block(i,j,p,q) i-rows j-cols
@@ -91,8 +103,8 @@ inline void interpolateMat(const cv::Mat &src, Td* dst_ptr, Td* dx_ptr, Td* dy_p
 template<typename Ts, typename Td, int Size>
 inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src, Td* dst_ptr, const double u, const double v)
 {
-    const int iu = floorf(u);
-    const int iv = floorf(v);
+    const int iu = floor(u);
+    const int iv = floor(v);
     const float wu1 = u - iu;
     const float wu0 = 1.0 - wu1;
     const float wv1 = v - iv;
@@ -106,6 +118,12 @@ inline void interpolateMat(const Matrix<Ts, Dynamic, Dynamic, RowMajor> &src, Td
     const int expand_size = Size + 1;
     const int start_v = iv - half_size;
     const int start_u = iu - half_size;
+
+    LOG_ASSERT(start_v >= 0 && start_u >= 0 && start_v+expand_size <= src.cols() && start_v+expand_size <= src.rows())
+    << " Out of image scope! image cols=" << src.cols() << " rows=" << src.rows() << ", "
+    << "LT: (" << start_u << ", " << start_v << ") - "
+    << "BR: (" << start_u+expand_size << ", " << start_v+expand_size << ")";
+
     Matrix<Td, expand_size, expand_size, RowMajor> patch = src.block(start_v, start_u, expand_size, expand_size).template cast<Td>();
     Matrix<Td, Size, Size, RowMajor> mat_tl = w_tl * patch.block(0, 0, Size, Size);
     Matrix<Td, Size, Size, RowMajor> mat_tr = w_tr * patch.block(0, 1, Size, Size);
@@ -121,8 +139,8 @@ inline void interpolateMat(const cv::Mat &src, Td* dst_ptr, const double u, cons
 {
     assert(src.type() == cv::DataType<Ts>::type);
     Eigen::Map<Matrix<Ts, Dynamic, Dynamic, RowMajor> > src_map(src.data, src.rows, src.cols);
-    const int iu = floorf(u);
-    const int iv = floorf(v);
+    const int iu = floor(u);
+    const int iv = floor(v);
     const float wu1 = u - iu;
     const float wu0 = 1.0 - wu1;
     const float wv1 = v - iv;
@@ -136,6 +154,12 @@ inline void interpolateMat(const cv::Mat &src, Td* dst_ptr, const double u, cons
     const int expand_size = Size + 1;
     const int start_v = iv - half_size;
     const int start_u = iu - half_size;
+
+    LOG_ASSERT(start_v >= 0 && start_u >= 0 && start_v+expand_size <= src.cols && start_v+expand_size <= src.rows)
+    << " Out of image scope! image cols=" << src.cols << " rows=" << src.rows << ", "
+    << "LT: (" << start_u << ", " << start_v << ") - "
+    << "BR: (" << start_u+expand_size << ", " << start_v+expand_size << ")";
+
     Matrix<Td, expand_size, expand_size, RowMajor> patch = src_map.block(start_v, start_u, expand_size, expand_size).template cast<Td>();
     Matrix<Td, Size, Size, RowMajor> mat_tl = w_tl * patch.block(0, 0, Size, Size);
     Matrix<Td, Size, Size, RowMajor> mat_tr = w_tr * patch.block(0, 1, Size, Size);
