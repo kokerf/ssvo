@@ -147,15 +147,15 @@ void Frame::getMapPoints(std::list<MapPoint::Ptr> &mpts)
 
 bool Frame::addFeature(const Feature::Ptr &ft)
 {
-    LOG_ASSERT(ft->mpt != nullptr) << " The feature is invalid with empty mappoint!";
+    LOG_ASSERT(ft->mpt_ != nullptr) << " The feature is invalid with empty mappoint!";
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    if(mpt_fts_.count(ft->mpt))
+    if(mpt_fts_.count(ft->mpt_))
     {
-        LOG(ERROR) << " The mappoint is already be observed! Frame: " << id_ << " Mpt: " << ft->mpt->id_;
+        LOG(ERROR) << " The mappoint is already be observed! Frame: " << id_ << " Mpt: " << ft->mpt_->id_;
         return false;
     }
 
-    mpt_fts_.emplace(ft->mpt, ft);
+    mpt_fts_.emplace(ft->mpt_, ft);
 
     return true;
 }
@@ -163,7 +163,7 @@ bool Frame::addFeature(const Feature::Ptr &ft)
 bool Frame::removeFeature(const Feature::Ptr &ft)
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    return (bool)mpt_fts_.erase(ft->mpt);
+    return (bool)mpt_fts_.erase(ft->mpt_);
 }
 
 bool Frame::removeMapPoint(const MapPoint::Ptr &mpt)
@@ -202,10 +202,10 @@ bool Frame::getSceneDepth(double &depth_mean, double &depth_min)
     depth_min = std::numeric_limits<double>::max();
     for(const Feature::Ptr &ft : fts)
     {
-        if(ft->mpt == nullptr)
+        if(ft->mpt_ == nullptr)
             continue;
 
-        const Vector3d p =  Tcw * ft->mpt->pose();
+        const Vector3d p =  Tcw * ft->mpt_->pose();
         depth_vec.push_back(p[2]);
         depth_min = fmin(depth_min, p[2]);
     }

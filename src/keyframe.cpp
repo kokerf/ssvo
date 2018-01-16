@@ -26,7 +26,7 @@ void KeyFrame::updateConnections()
 
     for(const Feature::Ptr &ft : fts)
     {
-        const MapPoint::Ptr &mpt = ft->mpt;
+        const MapPoint::Ptr &mpt = ft->mpt_;
 
         if(mpt->isBad())
         {

@@ -160,14 +160,13 @@ System::Status System::tracking()
 bool System::createNewKeyFrame()
 {
     std::map<KeyFrame::Ptr, int> overlap_kfs = current_frame_->getOverLapKeyFrames();
-    const int overlap = overlap_kfs[reference_keyframe_];
 
     std::vector<Feature::Ptr> fts;
     current_frame_->getFeatures(fts);
     std::map<MapPoint::Ptr, Feature::Ptr> mpt_ft;
     for(const Feature::Ptr &ft : fts)
     {
-        mpt_ft.emplace(ft->mpt, ft);
+        mpt_ft.emplace(ft->mpt_, ft);
     }
 
     KeyFrame::Ptr max_overlap_keyframe;
@@ -217,7 +216,7 @@ bool System::createNewKeyFrame()
             Feature::Ptr ft_cur = mpt_ft[mpt];
             if(ft_ref != nullptr && ft_cur != nullptr)
             {
-                const Vector2d px(ft_ref->px - ft_cur->px);
+                const Vector2d px(ft_ref->px_ - ft_cur->px_);
                 disparity.push_back(px.norm());
             }
         }
@@ -240,8 +239,8 @@ bool System::createNewKeyFrame()
         KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
         for(const Feature::Ptr &ft : fts)
         {
-            ft->mpt->addObservation(new_keyframe, ft);
-            ft->mpt->updateViewAndDepth();
+            ft->mpt_->addObservation(new_keyframe, ft);
+            ft->mpt_->updateViewAndDepth();
         }
         new_keyframe->updateConnections();
         reference_keyframe_ = new_keyframe;

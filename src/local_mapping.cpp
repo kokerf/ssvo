@@ -10,11 +10,11 @@ namespace ssvo{
 
 std::ostream& operator<<(std::ostream& out, const Feature& ft)
 {
-    Vector3d xyz = ft.mpt->pose();
-    out << "{ px: [" << ft.px[0] << ", " << ft.px[1] << "],"
-        << " fn: [" << ft.fn[0] << ", " << ft.fn[1] << ", " << ft.fn[2] << "],"
-        << " level: " << ft.level
-        << " mpt: " << ft.mpt->id_ << ", [" << xyz[0] << ", " << xyz[1] << ", " << xyz[2] << "] "
+    Vector3d xyz = ft.mpt_->pose();
+    out << "{ px: [" << ft.px_[0] << ", " << ft.px_[1] << "],"
+        << " fn: [" << ft.fn_[0] << ", " << ft.fn_[1] << ", " << ft.fn_[2] << "],"
+        << " level: " << ft.level_
+        << " mpt: " << ft.mpt_->id_ << ", [" << xyz[0] << ", " << xyz[1] << ", " << xyz[2] << "] "
         << " }";
 
     return out;
@@ -41,7 +41,7 @@ void LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
     map_->insertMapPoint(mpt);
     mpt->addObservation(seed->kf, ft);
     mpt->updateViewAndDepth();
-//    std::cout << " Create new seed as mpt: " << ft->mpt->id_ << ", " << 1.0/seed->mu << ", kf: " << seed->kf->id_ << " his: ";
+//    std::cout << " Create new seed as mpt: " << ft->mpt_->id_ << ", " << 1.0/seed->mu << ", kf: " << seed->kf->id_ << " his: ";
 //    for(const auto his : seed->history){ std::cout << "[" << his.first << "," << his.second << "]";}
 //    std::cout << std::endl;
 }
@@ -63,15 +63,15 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
     LOG_ASSERT(N == fts_cur.size()) << "Error in create inital map! Two frames' features is not matched!";
     for(size_t i = 0; i < N; i++)
     {
-        fts_ref[i]->mpt->addObservation(keyframe_ref, fts_ref[i]);
-        fts_cur[i]->mpt->addObservation(keyframe_cur, fts_cur[i]);
+        fts_ref[i]->mpt_->addObservation(keyframe_ref, fts_ref[i]);
+        fts_cur[i]->mpt_->addObservation(keyframe_cur, fts_cur[i]);
     }
 
     for(const Feature::Ptr &ft : fts_ref)
     {
-        map_->insertMapPoint(ft->mpt);
-        ft->mpt->resetType(MapPoint::STABLE);
-        ft->mpt->updateViewAndDepth();
+        map_->insertMapPoint(ft->mpt_);
+        ft->mpt_->resetType(MapPoint::STABLE);
+        ft->mpt_->updateViewAndDepth();
     }
 
     keyframe_ref->updateConnections();
@@ -200,7 +200,7 @@ int LocalMapper::createFeatureFromLocalMap()
     const int old_fts_size = (int) old_fts.size();
     for(int i = 0; i < old_fts_size; ++i)
     {
-        const Vector2i px = old_fts[i]->px.cast<int>();
+        const Vector2i px = old_fts[i]->px_.cast<int>();
         for(int c = -1; c <= 1; ++c)
         {
             int16_t* ptr = mask.ptr<int16_t>(px[1]+c) + px[0];
@@ -215,24 +215,24 @@ int LocalMapper::createFeatureFromLocalMap()
     int fusion_count = 0;
     for(const Feature::Ptr &ft : new_fts)
     {
-        const Vector2i px = ft->px.cast<int>();
+        const Vector2i px = ft->px_.cast<int>();
         int64_t id = mask.ptr<int16_t>(px[1])[px[0]];
         //! if not occupied, create new feature
         if(id == -1)
         {
             //! create new features
             current_keyframe_->addFeature(ft);
-            ft->mpt->addObservation(current_keyframe_, ft);
-            ft->mpt->increaseVisible(2);
-            ft->mpt->increaseFound(2);
+            ft->mpt_->addObservation(current_keyframe_, ft);
+            ft->mpt_->increaseVisible(2);
+            ft->mpt_->increaseFound(2);
             created_count++;
-            LOG_IF(INFO, verbose_) << " create new feature from mpt " << ft->mpt->id_;
+            LOG_IF(INFO, verbose_) << " create new feature from mpt " << ft->mpt_->id_;
         }
         //! if already occupied, check whether the mappoint is the same
         else
         {
-            MapPoint::Ptr mpt_new = ft->mpt;
-            MapPoint::Ptr mpt_old = old_fts[id]->mpt;
+            MapPoint::Ptr mpt_new = ft->mpt_;
+            MapPoint::Ptr mpt_old = old_fts[id]->mpt_;
             const std::map<KeyFrame::Ptr, Feature::Ptr> obs_new = mpt_new->getObservations();
             const std::map<KeyFrame::Ptr, Feature::Ptr> obs_old = mpt_old->getObservations();
 
@@ -247,7 +247,7 @@ int LocalMapper::createFeatureFromLocalMap()
 
                 const Feature::Ptr &ft_old = it_old->second;
                 const Feature::Ptr &ft_new = it.second;
-                Vector2d px_delta(ft_new->px - ft_old->px);
+                Vector2d px_delta(ft_new->px_ - ft_old->px_);
                 squared_dist.push_back(px_delta.squaredNorm());
                 is_same &= squared_dist.back() < 1.0; //! only if all the points pair match the conditon
 
@@ -291,7 +291,7 @@ int LocalMapper::createFeatureFromLocalMap()
                     }
 
                     Feature::Ptr ft_old = obs_old.find(kf_old_ref)->second;
-                    Vector3d xyz_new(kf_new->Tcw() * ft_old->mpt->pose());
+                    Vector3d xyz_new(kf_new->Tcw() * ft_old->mpt_->pose());
                     if(xyz_new[2] < 0.0f)
                         continue;
 
@@ -314,10 +314,10 @@ int LocalMapper::createFeatureFromLocalMap()
                 for(const auto &it : fts_to_update)
                 {
                     const Feature::Ptr &ft_update = std::get<0>(it);
-                    ft_update->px[0] = std::get<1>(it);
-                    ft_update->px[1] = std::get<2>(it);
-                    ft_update->level = std::get<3>(it);
-                    ft_update->fn = cam->lift(ft_update->px);
+                    ft_update->px_[0] = std::get<1>(it);
+                    ft_update->px_[1] = std::get<2>(it);
+                    ft_update->level_ = std::get<3>(it);
+                    ft_update->fn_ = cam->lift(ft_update->px_);
                 }
 
                 //! fusion the mappoint
@@ -356,7 +356,7 @@ int LocalMapper::createFeatureFromLocalMap()
 
                     Feature::Ptr ft_new = obs_new.find(kf_new_ref)->second;
 
-                    Vector3d xyz_old(kf_old->Tcw() * ft_new->mpt->pose());
+                    Vector3d xyz_old(kf_old->Tcw() * ft_new->mpt_->pose());
                     if(xyz_old[2] < 0.0f)
                         continue;
 
@@ -379,14 +379,14 @@ int LocalMapper::createFeatureFromLocalMap()
                 for(const auto &it : fts_to_update)
                 {
                     const Feature::Ptr &ft_update = std::get<0>(it);
-                    ft_update->px[0] = std::get<1>(it);
-                    ft_update->px[1] = std::get<2>(it);
-                    ft_update->level = std::get<3>(it);
-                    ft_update->fn = cam->lift(ft_update->px);
+                    ft_update->px_[0] = std::get<1>(it);
+                    ft_update->px_[1] = std::get<2>(it);
+                    ft_update->level_ = std::get<3>(it);
+                    ft_update->fn_ = cam->lift(ft_update->px_);
                 }
 
                 //! add new feature for keyframe, then fusion the mappoint
-                ft->mpt = mpt_new;
+                ft->mpt_ = mpt_new;
                 current_keyframe_->addFeature(ft);
                 mpt_new->addObservation(current_keyframe_, ft);
 
@@ -404,21 +404,21 @@ int LocalMapper::createFeatureFromLocalMap()
 //            std::cout << " mpt_new: " << mpt_new->id_ << ", " << mpt_new->pose().transpose() << std::endl;
 //            for(const auto &it : obs_new)
 //            {
-//                std::cout << "-kf: " << it.first->id_ << " px: [" << it.second->px[0] << ", " << it.second->px[1] << "]" << std::endl;
+//                std::cout << "-kf: " << it.first->id_ << " px: [" << it.second->px_[0] << ", " << it.second->px_[1] << "]" << std::endl;
 //            }
 //
 //            std::cout << " mpt_old: " << mpt_old->id_ << ", " << mpt_old->pose().transpose() << std::endl;
 //            for(const auto &it : obs_old)
 //            {
-//                std::cout << "=kf: " << it.first->id_ << " px: [" << it.second->px[0] << ", " << it.second->px[1] << "]" << std::endl;
+//                std::cout << "=kf: " << it.first->id_ << " px: [" << it.second->px_[0] << ", " << it.second->px_[1] << "]" << std::endl;
 //            }
 //
 //            for(const auto &it : obs_new)
 //            {
 //                string name = "new -kf" + std::to_string(it.first->id_);
-//                cv::Mat show = it.first->getImage(it.second->level).clone();
+//                cv::Mat show = it.first->getImage(it.second->level_).clone();
 //                cv::cvtColor(show, show, CV_GRAY2RGB);
-//                cv::Point2d px(it.second->px[0]/(1<<it.second->level), it.second->px[1]/(1<<it.second->level));
+//                cv::Point2d px(it.second->px_[0]/(1<<it.second->level_), it.second->px_[1]/(1<<it.second->level_));
 //                cv::circle(show, px, 5, cv::Scalar(0, 0, 255));
 //                cv::imshow(name, show);
 //            }
@@ -426,9 +426,9 @@ int LocalMapper::createFeatureFromLocalMap()
 //            for(const auto &it : obs_old)
 //            {
 //                string name = "old -kf" + std::to_string(it.first->id_);
-//                cv::Mat show = it.first->getImage(it.second->level).clone();
+//                cv::Mat show = it.first->getImage(it.second->level_).clone();
 //                cv::cvtColor(show, show, CV_GRAY2RGB);
-//                cv::Point2d px(it.second->px[0]/(1<<it.second->level), it.second->px[1]/(1<<it.second->level));
+//                cv::Point2d px(it.second->px_[0]/(1<<it.second->level_), it.second->px_[1]/(1<<it.second->level_));
 //                cv::circle(show, px, 5, cv::Scalar(0, 0, 255));
 //                cv::imshow(name, show);
 //            }
@@ -474,7 +474,7 @@ void LocalMapper::checkCulling()
                     if(it.first == kf)
                         continue;
 
-                    if(it.second->level <= ft->level+1)
+                    if(it.second->level_ <= ft->level_+1)
                     {
                         observations++;
                         if(observations >= options_.min_redundant_observations)

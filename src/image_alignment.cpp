@@ -98,13 +98,13 @@ int AlignSE3::computeReferencePatches(int level)
     int feature_counter = 0;
     for(size_t n = 0; n < N; ++n)
     {
-        Vector2d ref_px = fts[n]->px * scale;
-        if(fts[n]->mpt == nullptr ||
+        Vector2d ref_px = fts[n]->px_ * scale;
+        if(fts[n]->mpt_ == nullptr ||
             ref_px[0] < border || ref_px[1] < border || ref_px[0] + border > cols - 1 || ref_px[1] + border > rows - 1)
             continue;
 
-        double depth = (fts[n]->mpt->pose() - ref_pose).norm();
-        Vector3d ref_xyz = fts[n]->fn;
+        double depth = (fts[n]->mpt_->pose() - ref_pose).norm();
+        Vector3d ref_xyz = fts[n]->fn_;
         ref_xyz *= depth;
 
         ref_feature_cache_.col(feature_counter) = ref_xyz;

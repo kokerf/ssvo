@@ -19,17 +19,17 @@ public:
 
     typedef std::shared_ptr<Feature> Ptr;
 
-    Vector2d px;
-    Vector3d fn;
-    int level;
-    std::shared_ptr<MapPoint> mpt;
+    Vector2d px_;
+    Vector3d fn_;
+    int level_;
+    std::shared_ptr<MapPoint> mpt_;
 
     inline static Ptr create(const Vector2d &_px, const Vector3d &_fn, int _level, const std::shared_ptr<MapPoint> &_mpt)
     {return std::make_shared<Feature>(Feature(_px, _fn, _level, _mpt));}
 
 private:
     Feature(const Vector2d &px, const Vector3d &fn, const int level, const std::shared_ptr<MapPoint> &mpt):
-        px(px), fn(fn), level(level), mpt(mpt)
+        px_(px), fn_(fn), level_(level), mpt_(mpt)
     {
         assert(fn[2] == 1);
         assert(mpt);

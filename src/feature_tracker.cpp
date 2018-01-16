@@ -167,14 +167,14 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
     const SE3d T_cur_from_ref = frame->Tcw() * kf_ref->pose();
 
     Matrix2d A_cur_from_ref;
-    utils::getWarpMatrixAffine(kf_ref->cam_, frame->cam_, ft_ref->px, ft_ref->fn, ft_ref->level,
+    utils::getWarpMatrixAffine(kf_ref->cam_, frame->cam_, ft_ref->px_, ft_ref->fn_, ft_ref->level_,
                                obs_ref_dir.norm(), T_cur_from_ref, patch_size, A_cur_from_ref);
 
     // TODO 如果Affine很小的话，则不用warp
-    const cv::Mat image_ref = kf_ref->getImage(ft_ref->level);
+    const cv::Mat image_ref = kf_ref->getImage(ft_ref->level_);
     Matrix<float, patch_border_size, patch_border_size, RowMajor> patch_with_border;
     utils::warpAffine<float, patch_border_size>(image_ref, patch_with_border, A_cur_from_ref,
-                                                ft_ref->px, ft_ref->level, level_cur);
+                                                ft_ref->px_, ft_ref->level_, level_cur);
 
     const cv::Mat image_cur = frame->getImage(level_cur);
 
@@ -187,7 +187,7 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
         cv::Mat show_ref, show_cur;
         cv::cvtColor(image_ref, show_ref, CV_GRAY2RGB);
         cv::cvtColor(image_cur, show_cur, CV_GRAY2RGB);
-        cv::circle(show_ref, cv::Point2i((int)ft_ref->px[0], (int)ft_ref->px[1])/(1 << ft_ref->level), 3, cv::Scalar(255,0,0));
+        cv::circle(show_ref, cv::Point2i((int)ft_ref->px_[0], (int)ft_ref->px_[1])/(1 << ft_ref->level_), 3, cv::Scalar(255,0,0));
         cv::circle(show_cur, cv::Point2i((int)estimate[0], (int)estimate[1]), 3, cv::Scalar(255,0,0));
         cv::imshow("ref track", show_ref);
         cv::imshow("cur track", show_cur);
@@ -215,20 +215,20 @@ bool FeatureTracker::trackFeature(const Frame::Ptr &frame_ref,
     static const int patch_size = AlignPatch::Size;
     static const int patch_border_size = AlignPatch::SizeWithBorder;
 
-    const Vector3d obs_ref_dir(frame_ref->pose().translation() - ft_ref->mpt->pose());
+    const Vector3d obs_ref_dir(frame_ref->pose().translation() - ft_ref->mpt_->pose());
     const SE3d T_cur_from_ref = frame_cur->Tcw() * frame_ref->pose();
 
     Matrix2d A_cur_from_ref;
-    utils::getWarpMatrixAffine(frame_ref->cam_, frame_cur->cam_, ft_ref->px, ft_ref->fn, ft_ref->level,
+    utils::getWarpMatrixAffine(frame_ref->cam_, frame_cur->cam_, ft_ref->px_, ft_ref->fn_, ft_ref->level_,
                                obs_ref_dir.norm(), T_cur_from_ref, patch_size, A_cur_from_ref);
 
     level_cur = utils::getBestSearchLevel(A_cur_from_ref, frame_cur->max_level_);
 //    std::cout << "A:\n" << A_cur_from_ref << std::endl;
 
-    const cv::Mat image_ref = frame_ref->getImage(ft_ref->level);
+    const cv::Mat image_ref = frame_ref->getImage(ft_ref->level_);
     Matrix<float, patch_border_size, patch_border_size, RowMajor> patch_with_border;
     utils::warpAffine<float, patch_border_size>(image_ref, patch_with_border, A_cur_from_ref,
-                                                ft_ref->px, ft_ref->level, level_cur);
+                                                ft_ref->px_, ft_ref->level_, level_cur);
 
     const cv::Mat image_cur = frame_cur->getImage(level_cur);
 

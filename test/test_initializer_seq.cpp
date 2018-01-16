@@ -63,7 +63,7 @@ void evalueErrors(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, double& error)
     Vector3d t = kf2->Tcw().translation();
     for(Feature::Ptr ft1:fts1)
     {
-        MapPoint::Ptr mpt = ft1->mpt;
+        MapPoint::Ptr mpt = ft1->mpt_;
 
         if(mpt == nullptr)
             continue;
@@ -75,8 +75,8 @@ void evalueErrors(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, double& error)
 
         double predicted_x1 = p1[0] / p1[2];
         double predicted_y1 = p1[1] / p1[2];
-        double obversed_x1 = ft1->fn[0]/ft1->fn[2];
-        double obversed_y1 = ft1->fn[1]/ft1->fn[2];
+        double obversed_x1 = ft1->fn_[0]/ft1->fn_[2];
+        double obversed_y1 = ft1->fn_[1]/ft1->fn_[2];
         double dx1 = predicted_x1 - obversed_x1;
         double dy1 = predicted_y1 - obversed_y1;
         double res1 = dx1*dx1 + dy1*dy1;
@@ -84,8 +84,8 @@ void evalueErrors(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, double& error)
 
         double predicted_x2 = p2[0] / p2[2];
         double predicted_y2 = p2[1] / p2[2];
-        double obversed_x2 = ft2->fn[0]/ft2->fn[2];
-        double obversed_y2 = ft2->fn[1]/ft2->fn[2];
+        double obversed_x2 = ft2->fn_[0]/ft2->fn_[2];
+        double obversed_y2 = ft2->fn_[1]/ft2->fn_[2];
         double dx2 = predicted_x2 - obversed_x2;
         double dy2 = predicted_y2 - obversed_y2;
         double res2 = dx2*dx2 + dy2*dy2;
@@ -130,7 +130,6 @@ int main(int argc, char const *argv[])
 
     Initializer::Ptr initializer = Initializer::create(detector, true);
 
-    int initial = 0;
     std::vector<Corner> corners;
     std::vector<Corner> old_corners;
     Frame::Ptr frame_cur;
@@ -179,7 +178,6 @@ int main(int argc, char const *argv[])
     LOG(INFO) <<"Pose:\n" << kf1->pose().matrix();
     evalueErrors(kf0, kf1, error);
     LOG(INFO) << "Error after BA: " << error;
-
 
     cv::waitKey(0);
 

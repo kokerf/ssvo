@@ -191,7 +191,7 @@ void MapPoint::updateViewAndDepth()
 
         const double dist = ref_obs_dir.norm();
         Feature::Ptr ft = findObservation(refKF_);
-        const int level_scale = 1 << ft->level;
+        const int level_scale = 1 << ft->level_;
         const int max_scale = 1 << refKF_->max_level_;
 
         max_distance_ = dist * level_scale; //! regard it is top level, we may obsevere the point if we go closer

@@ -189,14 +189,14 @@ void align_by_ceres(Frame::Ptr reference_frame, Frame::Ptr current_frame, int le
     reference_frame->getFeatures(fts);
     for(Feature::Ptr ft : fts)
     {
-        Vector2d ref_px = ft->px*scale;
-        MapPoint::Ptr mpt = ft->mpt;
+        Vector2d ref_px = ft->px_*scale;
+        MapPoint::Ptr mpt = ft->mpt_;
         if(mpt == nullptr ||
             ref_px[0] < border || ref_px[1] < border || ref_px[0] + border > cols - 1 || ref_px[1] + border > rows - 1)
             continue;
 
-        double depth = (ft->mpt->pose() - ref_pose).norm();
-        Vector3d ref_xyz = ft->fn;
+        double depth = (ft->mpt_->pose() - ref_pose).norm();
+        Vector3d ref_xyz = ft->fn_;
         ref_xyz *= depth;
 
         Matrix<double, 16, 1> patch, dx, dy;

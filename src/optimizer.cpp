@@ -23,22 +23,22 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
 
     for(const Feature::Ptr &ft1 : fts1)
     {
-        MapPoint::Ptr mpt = ft1->mpt;
+        MapPoint::Ptr mpt = ft1->mpt_;
         if(mpt == nullptr)//! should not happen
             continue;
 
         Feature::Ptr ft2 = mpt->findObservation(kf2);
 
-        if(ft2 == nullptr || ft2->mpt == nullptr)
+        if(ft2 == nullptr || ft2->mpt_ == nullptr)
             continue;
 
         mpt->optimal_pose_ = mpt->pose();
         mpts.push_back(mpt);
 
-        ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft1->fn[0]/ft1->fn[2], ft1->fn[1]/ft1->fn[2]);
+        ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft1->fn_[0]/ft1->fn_[2], ft1->fn_[1]/ft1->fn_[2]);
         problem.AddResidualBlock(cost_function1, NULL, kf1->optimal_Tcw_.data(), mpt->optimal_pose_.data());
 
-        ceres::CostFunction* cost_function2 = ceres_slover::ReprojectionErrorSE3::Create(ft2->fn[0]/ft2->fn[2], ft2->fn[1]/ft2->fn[2]);
+        ceres::CostFunction* cost_function2 = ceres_slover::ReprojectionErrorSE3::Create(ft2->fn_[0]/ft2->fn_[2], ft2->fn_[1]/ft2->fn_[2]);
         problem.AddResidualBlock(cost_function2, NULL, kf2->optimal_Tcw_.data(), mpt->optimal_pose_.data());
     }
 
@@ -76,12 +76,12 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool report,
     frame->getFeatures(fts);
     for(const Feature::Ptr &ft : fts)
     {
-        MapPoint::Ptr mpt = ft->mpt;
+        MapPoint::Ptr mpt = ft->mpt_;
         if(mpt == nullptr)
             continue;
 
         mpt->optimal_pose_ = mpt->pose();
-        ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn[0]/ft->fn[2], ft->fn[1]/ft->fn[2]);
+        ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);
         problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), mpt->optimal_pose_.data());
         problem.SetParameterBlockConstant(mpt->optimal_pose_.data());
     }
@@ -173,7 +173,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
         {
             const KeyFrame::Ptr &kf = item.first;
             const Feature::Ptr &ft = item.second;
-            ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft->fn[0]/ft->fn[2], ft->fn[1]/ft->fn[2]);
+            ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);
             problem.AddResidualBlock(cost_function1, lossfunction, kf->optimal_Tcw_.data(), mpt->optimal_pose_.data());
         }
     }
@@ -199,7 +199,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
         const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
         for(const auto &item : obs)
         {
-            double residual = utils::reprojectError(item.second->fn.head<2>(), item.first->Tcw(), mpt->optimal_pose_);
+            double residual = utils::reprojectError(item.second->fn_.head<2>(), item.first->Tcw(), mpt->optimal_pose_);
             if(residual < max_residual)
                 continue;
 
@@ -242,7 +242,7 @@ void Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool repo
         const KeyFrame::Ptr &kf = obs_item.first;
         const Feature::Ptr &ft = obs_item.second;
         kf->optimal_Tcw_ = kf->Tcw();
-        ceres::CostFunction *cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn[0] / ft->fn[2], ft->fn[1] / ft->fn[2]);
+        ceres::CostFunction *cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0] / ft->fn_[2], ft->fn_[1] / ft->fn_[2]);
         problem.AddResidualBlock(cost_function, lossfunction, kf->optimal_Tcw_.data(), mpt->optimal_pose_.data());
         problem.SetParameterBlockConstant(kf->optimal_Tcw_.data());
     }

@@ -226,12 +226,12 @@ void DepthFilter::drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
     double font_scale = 0.5;
     for(const Feature::Ptr &ft : fts)
     {
-        Vector2d ft_px = ft->px;
+        Vector2d ft_px = ft->px_;
         cv::Point2f px(ft_px[0], ft_px[1]);
         cv::Scalar color(0, 255, 0);
         cv::circle(dst, px, 2, color, -1);
 
-        string id_str = std::to_string((frame->Tcw()*ft->mpt->pose()).norm());//ft->mpt->getFoundRatio());//
+        string id_str = std::to_string((frame->Tcw()*ft->mpt_->pose()).norm());//ft->mpt_->getFoundRatio());//
         cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
     }
 
@@ -366,7 +366,7 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &kf)
     old_corners.reserve(fts.size());
     for(const Feature::Ptr &ft : fts)
     {
-        old_corners.emplace_back(Corner(ft->px[0], ft->px[1], 0, ft->level));
+        old_corners.emplace_back(Corner(ft->px_[0], ft->px_[1], 0, ft->level_));
     }
 
     // TODO 如果对应的seed收敛，在跟踪过的关键帧增加观测？
@@ -528,8 +528,8 @@ int DepthFilter::reprojectSeeds()
     for(const Seed::Ptr &seed : tracked_seeds_)
         seed_tracking.insert(seed);
 
-    int total = 0;
-    int count = 0;
+    int project_count = 0;
+    int matched_count = 0;
     static double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
     auto buffer_itr = seeds_buffer_.begin();
     for(;buffer_itr != seeds_buffer_.end();)
@@ -557,8 +557,8 @@ int DepthFilter::reprojectSeeds()
                 continue;
             }
 
+            project_count++;
             bool matched = findEpipolarMatch(seed, keyframe, current_frame_, T_cur_from_ref, px_matched, level_matched);
-            total++;
             if(!matched)
             {
                 seed_itr++;
@@ -599,7 +599,7 @@ int DepthFilter::reprojectSeeds()
             //! update px
             seed->px_cur = px_matched;
             tracked_seeds_.emplace_back(seed);
-            count++;
+            matched_count++;
             seed_itr++;
         }
 
@@ -609,7 +609,7 @@ int DepthFilter::reprojectSeeds()
             buffer_itr++;
     }
 
-    LOG_IF(ERROR, report_) << "[DepthFilter][3]  Seeds after reprojected: " << tracked_seeds_.size() << "(" << count << ", " << total << ")";
+    LOG_IF(ERROR, report_) << "[DepthFilter][3] Seeds reprojected: " << project_count << ", matched: " << matched_count << ", tracked seeds: "<< tracked_seeds_.size();
 
     return (int) tracked_seeds_.size();
 }
@@ -657,7 +657,7 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
     const Vector3d xyz_ref(seed->fn_ref * z_ref);
     const Vector3d xyz_cur(T_cur_from_ref * xyz_ref);
     const double z_cur = xyz_cur[2];
-    if(z_cur < 0.00f)
+    if(z_cur < 0.001f)
         return false;
 
     const Vector2d px_cur(frame->cam_->project(xyz_cur));
@@ -671,13 +671,6 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
     const double z_ref_min = 1.0/d_max;
     const double z_ref_max = 1.0/d_min;
 
-    //! on unit plane in cur frame
-    Vector3d xyz_near = T_cur_from_ref * (seed->fn_ref * z_ref_min);
-    Vector3d xyz_far  = T_cur_from_ref * (seed->fn_ref * z_ref_max);
-    xyz_near /= xyz_near[2];
-    xyz_far  /= xyz_far[2];
-    Vector2d epl_dir = (xyz_near - xyz_far).head<2>();
-
     //! calculate best search level
     const int level_ref = seed->level_ref;
     const int level_cur = MapPoint::predictScale(z_ref, z_cur, level_ref, frame->max_level_);
@@ -685,16 +678,90 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
     const double factor = static_cast<double>(1 << level_cur);
 
     //! px in image plane
+    Vector3d xyz_near = T_cur_from_ref * (seed->fn_ref * z_ref_min);
+    Vector3d xyz_far  = T_cur_from_ref * (seed->fn_ref * z_ref_max);
+
+    //! Pc = R*Pr + t = z * R*Pn + t
+    if(xyz_near[2] < 0.001f)
+    {
+        const Vector3d t = T_cur_from_ref.translation();
+        const Vector3d R_fn = T_cur_from_ref.rotationMatrix() * seed->fn_ref;
+        double z_ref_min_adjust = (0.001f - t[2]) / R_fn[2];
+        xyz_near = z_ref_min_adjust * R_fn + t;
+    }
+
     Vector2d px_near = frame->cam_->project(xyz_near) / factor;
     Vector2d px_far  = frame->cam_->project(xyz_far) / factor;
-    if(!frame->cam_->isInFrame(px_far.cast<int>(), half_patch_size, level_cur) ||
-        !frame->cam_->isInFrame(px_near.cast<int>(), half_patch_size, level_cur))
+    Vector2d epl_px_dir(px_near - px_far);
+    epl_px_dir.normalize();
+
+    //! make search pixel all within image
+    const int min_sample_width = half_patch_size;
+    const int min_sample_height = half_patch_size;
+    const int max_sample_width = frame->cam_->width()/ (1 << level_cur);
+    const int max_sample_height = frame->cam_->height() / (1 << level_cur);
+    if(px_near[0] <= min_sample_width)
+    {
+        double adjust = ceil(min_sample_width - px_near[0])/epl_px_dir[0];
+        px_near.noalias() += adjust * epl_px_dir;
+    }
+    else if(px_near[0] >= max_sample_width)
+    {
+        double adjust = floor(max_sample_width - px_near[0])/epl_px_dir[0];
+        px_near.noalias() += adjust * epl_px_dir;
+    }
+
+    if(px_near[1] <= min_sample_height)
+    {
+        double adjust = ceil(min_sample_height - px_near[1])/epl_px_dir[1];
+        px_near.noalias() += adjust * epl_px_dir;
+    }
+    else if(px_near[1] >= max_sample_height)
+    {
+        double adjust = floor(max_sample_height - px_near[1])/epl_px_dir[1];
+        px_near.noalias() += adjust * epl_px_dir;
+    }
+
+    if(px_near[0] <= min_sample_width || px_near[0] >= max_sample_width ||
+        px_near[1] <= min_sample_height || px_near[1] >= max_sample_height)
+        return false;
+
+    if(px_far[0] <= min_sample_width)
+    {
+        double adjust = ceil(min_sample_width - px_far[0])/epl_px_dir[0];
+        px_far.noalias() += adjust * epl_px_dir;
+    }
+    else if(px_far[0] >= max_sample_width)
+    {
+        double adjust = floor(max_sample_width - px_far[0])/epl_px_dir[0];
+        px_far.noalias() += adjust * epl_px_dir;
+    }
+
+    if(px_far[1] <= min_sample_height)
+    {
+        double adjust = ceil(min_sample_height - px_far[1])/epl_px_dir[1];
+        px_far.noalias() += adjust * epl_px_dir;
+    }
+    else if(px_far[1] >= max_sample_height)
+    {
+        double adjust = floor(max_sample_height - px_far[1])/epl_px_dir[1];
+        px_far.noalias() += adjust * epl_px_dir;
+    }
+
+    if(px_far[0] <= min_sample_width || px_far[0] >= max_sample_width ||
+        px_far[1] <= min_sample_height || px_far[1] >= max_sample_height)
         return false;
 
     //! reject the seed whose epl is too long
+    //! it maybe not nessary
     double epl_length = (px_near-px_far).norm();
     if(epl_length > options_.max_epl_length)
         return false;
+
+    //! get px in normilzed plane
+    xyz_near = frame->cam_->lift(px_near);
+    xyz_far = frame->cam_->lift(px_far);
+    Vector2d epl_dir = (xyz_near - xyz_far).head<2>();
 
     //! get warp patch
     Matrix2d A_cur_from_ref;
@@ -736,7 +803,7 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
         Vector2d fn(fn_start);
         for(int i = 0; i < n_steps; ++i, fn += step)
         {
-            Vector2d px(frame->cam_->project(fn[0], fn[1]) / factor);
+            Vector2f px = (frame->cam_->project(fn[0], fn[1]) / factor).cast<float>();
 
             //! always in frame's view
             if(!frame->cam_->isInFrame(px.cast<int>(), half_patch_size, level_cur))
