@@ -76,8 +76,6 @@ private:
         double min_track_features;
     } options_;
 
-    std::shared_ptr<std::thread> filter_thread_;
-
     FastDetector::Ptr fast_detector_;
 
     Map::Ptr map_;
@@ -90,6 +88,8 @@ private:
     const bool verbose_;
 
     //! main thread
+    std::shared_ptr<std::thread> filter_thread_;
+
     bool stop_require_;
     std::mutex mutex_stop_;
     std::mutex mutex_frame_;

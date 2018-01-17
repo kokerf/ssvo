@@ -22,7 +22,7 @@ void Viewer::setStop()
     required_stop_ = true;
 }
 
-bool Viewer::requiredStop()
+bool Viewer::isRequiredStop()
 {
     std::lock_guard<std::mutex> lock(mutex_stop_);
     return required_stop_;
@@ -30,7 +30,7 @@ bool Viewer::requiredStop()
 
 bool Viewer::waitForFinish()
 {
-    if(!requiredStop())
+    if(!isRequiredStop())
         setStop();
 
     if(pongolin_thread_->joinable())
@@ -84,7 +84,7 @@ void Viewer::run()
 
     pangolin::GlTexture imageTexture(image_size_.width, image_size_.height, GL_RGB, false, 0, GL_BGR,GL_UNSIGNED_BYTE);
 
-    while(!pangolin::ShouldQuit())
+    while(!pangolin::ShouldQuit() && !isRequiredStop())
     {
         // Clear screen and activate view to render into
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -148,9 +148,6 @@ void Viewer::run()
 
         // Swap frames and Process Events
         pangolin::FinishFrame();
-
-        if(requiredStop())
-            break;
     }
 
     pangolin::DestroyWindow(win_name);

@@ -38,8 +38,10 @@ System::System(std::string config_file) :
     mapper_ = LocalMapper::create(fps, true, false);
     DepthFilter::Callback depth_fliter_callback = std::bind(&LocalMapper::createFeatureFromSeed, mapper_, std::placeholders::_1);
     depth_filter_ = DepthFilter::create(fast_detector_, depth_fliter_callback, true);
-//    depth_filter_->startMainThread();
     viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));
+
+    mapper_->startMainThread();
+    //    depth_filter_->startMainThread();
 
     time_ = 1000.0/fps;
 }
@@ -47,6 +49,9 @@ System::System(std::string config_file) :
 System::~System()
 {
     viewer_->setStop();
+    depth_filter_->stopMainThread();
+    mapper_->stopMainThread();
+
     viewer_->waitForFinish();
 }
 

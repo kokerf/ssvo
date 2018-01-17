@@ -273,6 +273,9 @@ double MapPoint::getFoundRatio()
 
 bool MapPoint::getCloseViewObs(const Frame::Ptr &frame, KeyFrame::Ptr &keyframe, int &level)
 {
+    if(isBad())
+        return false;
+
     std::unordered_map<KeyFramePtr, Feature::Ptr> obs;
     Vector3d obs_dir;
     {

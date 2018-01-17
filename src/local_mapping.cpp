@@ -22,7 +22,8 @@ std::ostream& operator<<(std::ostream& out, const Feature& ft)
 
 //! LocalMapper
 LocalMapper::LocalMapper(double fps, bool report, bool verbose) :
-    delay_(static_cast<int>(1000.0/fps)), report_(report), verbose_(report&&verbose), status_track_thread_(true)
+    delay_(static_cast<int>(1000.0/fps)), report_(report), verbose_(report&&verbose),
+    mapping_thread_(nullptr), stop_require_(false)
 {
     map_ = Map::create();
 
@@ -82,25 +83,92 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
     LOG_IF(INFO, report_) << "[Mapping] Creating inital map with " << map_->MapPointsInMap() << " map points";
 }
 
+void LocalMapper::startMainThread()
+{
+    if(mapping_thread_ == nullptr)
+        mapping_thread_ = std::make_shared<std::thread>(std::bind(&LocalMapper::run, this));
+}
+
+void LocalMapper::stopMainThread()
+{
+    setStop();
+    if(mapping_thread_)
+    {
+        if(mapping_thread_->joinable())
+            mapping_thread_->join();
+        mapping_thread_.reset();
+    }
+}
+
+void LocalMapper::setStop()
+{
+    std::unique_lock<std::mutex> lock(mutex_stop_);
+    stop_require_ = true;
+}
+
+bool LocalMapper::isRequiredStop()
+{
+    std::unique_lock<std::mutex> lock(mutex_stop_);
+    return stop_require_;
+}
+
+void LocalMapper::run()
+{
+    while(!isRequiredStop())
+    {
+        KeyFrame::Ptr keyframe_cur = checkNewKeyFrame();
+        if(keyframe_cur)
+        {
+            std::list<MapPoint::Ptr> bad_mpts;
+            int new_features = 0;
+            if(map_->kfs_.size() > 2)
+            {
+                new_features = createFeatureFromLocalMap(keyframe_cur);
+                LOG_IF(INFO, report_) << "[Mapping] create " << new_features << " new feature from local map.";
+                Optimizer::localBundleAdjustment(keyframe_cur, bad_mpts, report_, verbose_);
+            }
+
+            for(const MapPoint::Ptr &mpt : bad_mpts)
+            {
+                map_->removeMapPoint(mpt);
+            }
+
+//        checkCulling();
+        }
+    }
+}
+
+KeyFrame::Ptr LocalMapper::checkNewKeyFrame()
+{
+    std::unique_lock<std::mutex> lock(mutex_keyframe_);
+    cond_process_.wait_for(lock, std::chrono::milliseconds(5));
+    if(keyframes_buffer_.empty())
+        return nullptr;
+
+    KeyFrame::Ptr keyframe = keyframes_buffer_.front();
+    keyframes_buffer_.pop_front();
+
+    return keyframe;
+}
+
 void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
 {
     map_->insertKeyFrame(keyframe);
     if(mapping_thread_ != nullptr)
     {
         std::unique_lock<std::mutex> lock(mutex_keyframe_);
-        current_keyframe_ = keyframe;
+        keyframes_buffer_.push_back(keyframe);
         cond_process_.notify_one();
     }
     else
     {
-        current_keyframe_ = keyframe;
-
         std::list<MapPoint::Ptr> bad_mpts;
         int new_features = 0;
         if(map_->kfs_.size() > 2)
         {
-            new_features = createFeatureFromLocalMap();
-            Optimizer::localBundleAdjustment(current_keyframe_, bad_mpts, report_, verbose_);
+            new_features = createFeatureFromLocalMap(keyframe);
+            LOG_IF(INFO, report_) << "[Mapping] create " << new_features << " new feature from local map.";
+            Optimizer::localBundleAdjustment(keyframe, bad_mpts, report_, verbose_);
         }
 
         for(const MapPoint::Ptr &mpt : bad_mpts)
@@ -112,10 +180,10 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
     }
 }
 
-int LocalMapper::createFeatureFromLocalMap()
+int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
 {
     double t0 = (double)cv::getTickCount();
-    std::set<KeyFrame::Ptr> connected_keyframes = current_keyframe_->getConnectedKeyFrames();
+    std::set<KeyFrame::Ptr> connected_keyframes = keyframe->getConnectedKeyFrames();
     std::set<KeyFrame::Ptr> local_keyframes = connected_keyframes;
 
     for(const KeyFrame::Ptr &kf : connected_keyframes)
@@ -131,7 +199,7 @@ int LocalMapper::createFeatureFromLocalMap()
     double t1 = (double)cv::getTickCount();
     std::unordered_set<MapPoint::Ptr> local_mpts;
     MapPoints mpts_cur;
-    current_keyframe_->getMapPoints(mpts_cur);
+    keyframe->getMapPoints(mpts_cur);
     for(const MapPoint::Ptr &mpt : mpts_cur)
     {
         local_mpts.insert(mpt);
@@ -170,33 +238,33 @@ int LocalMapper::createFeatureFromLocalMap()
     std::list<Feature::Ptr> new_fts;
     for(const MapPoint::Ptr &mpt : candidate_mpts)
     {
-        Vector3d xyz_cur(current_keyframe_->Tcw() * mpt->pose());
+        Vector3d xyz_cur(keyframe->Tcw() * mpt->pose());
         if(xyz_cur[2] < 0.0f)
             continue;
 
-        Vector2d px_cur(current_keyframe_->cam_->project(xyz_cur));
-        if(!current_keyframe_->cam_->isInFrame(px_cur.cast<int>(), 8))
+        Vector2d px_cur(keyframe->cam_->project(xyz_cur));
+        if(!keyframe->cam_->isInFrame(px_cur.cast<int>(), 8))
             continue;
 
         project_count++;
 
         int level_cur = 0;
-        int result = FeatureTracker::reprojectMapPoint(current_keyframe_, mpt, px_cur, level_cur, 15, 0.01);
+        int result = FeatureTracker::reprojectMapPoint(keyframe, mpt, px_cur, level_cur, 15, 0.01);
         if(result != 1)
             continue;
 
-        Vector3d ft_cur = current_keyframe_->cam_->lift(px_cur);
+        Vector3d ft_cur = keyframe->cam_->lift(px_cur);
         Feature::Ptr new_feature = Feature::create(px_cur, ft_cur, level_cur, mpt);
         new_fts.push_back(new_feature);
     }
 
     //! check whether the matched corner is near a exsit corner.
     //! firstly, create a mask for exsit corners
-    const int cols = current_keyframe_->cam_->width();
-    const int rows = current_keyframe_->cam_->height();
+    const int cols = keyframe->cam_->width();
+    const int rows = keyframe->cam_->height();
     cv::Mat mask(rows, cols, CV_16SC1, -1);
     std::vector<Feature::Ptr> old_fts;
-    current_keyframe_->getFeatures(old_fts);
+    keyframe->getFeatures(old_fts);
     const int old_fts_size = (int) old_fts.size();
     for(int i = 0; i < old_fts_size; ++i)
     {
@@ -221,8 +289,8 @@ int LocalMapper::createFeatureFromLocalMap()
         if(id == -1)
         {
             //! create new features
-            current_keyframe_->addFeature(ft);
-            ft->mpt_->addObservation(current_keyframe_, ft);
+            keyframe->addFeature(ft);
+            ft->mpt_->addObservation(keyframe, ft);
             ft->mpt_->increaseVisible(2);
             ft->mpt_->increaseFound(2);
             created_count++;
@@ -310,7 +378,7 @@ int LocalMapper::createFeatureFromLocalMap()
                 }
 
                 //! update ft if succeed
-                const Camera::Ptr &cam = current_keyframe_->cam_;//! all camera is the same
+                const Camera::Ptr &cam = keyframe->cam_;//! all camera is the same
                 for(const auto &it : fts_to_update)
                 {
                     const Feature::Ptr &ft_update = std::get<0>(it);
@@ -375,7 +443,7 @@ int LocalMapper::createFeatureFromLocalMap()
                 }
 
                 //! update ft if succeed
-                const Camera::Ptr &cam = current_keyframe_->cam_;//! all camera is the same
+                const Camera::Ptr &cam = keyframe->cam_;//! all camera is the same
                 for(const auto &it : fts_to_update)
                 {
                     const Feature::Ptr &ft_update = std::get<0>(it);
@@ -387,8 +455,8 @@ int LocalMapper::createFeatureFromLocalMap()
 
                 //! add new feature for keyframe, then fusion the mappoint
                 ft->mpt_ = mpt_new;
-                current_keyframe_->addFeature(ft);
-                mpt_new->addObservation(current_keyframe_, ft);
+                keyframe->addFeature(ft);
+                mpt_new->addObservation(keyframe, ft);
 
                 mpt_new->fusion(mpt_old);
                 map_->removeMapPoint(mpt_old);
@@ -448,9 +516,9 @@ int LocalMapper::createFeatureFromLocalMap()
     return 0;
 }
 
-void LocalMapper::checkCulling()
+void LocalMapper::checkCulling(const KeyFrame::Ptr &keyframe)
 {
-    const std::set<KeyFrame::Ptr> connected_keyframes = current_keyframe_->getConnectedKeyFrames();
+    const std::set<KeyFrame::Ptr> connected_keyframes = keyframe->getConnectedKeyFrames();
 
     int count = 0;
     for(const KeyFrame::Ptr &kf : connected_keyframes)

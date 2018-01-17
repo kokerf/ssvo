@@ -116,7 +116,7 @@ bool mptOptimizeOrder(const MapPoint::Ptr &mpt1, const MapPoint::Ptr &mpt2)
 
 void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, bool report, bool verbose)
 {
-
+    double t0 = (double)cv::getTickCount();
     std::set<KeyFrame::Ptr> local_keyframes = keyframe->getConnectedKeyFrames(10);
     local_keyframes.insert(keyframe);
     std::unordered_set<MapPoint::Ptr> local_mapoints;
@@ -222,9 +222,13 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
     }
 
     //! Report
-    LOG_IF(INFO, report) << "[Optimizer] KFs: " << local_keyframes.size()
-                         << "  Mpts: " << local_mapoints.size()
-                         << ", remove " << bad_mpts.size() << " bad mpts in loacl ba.";
+    double t1 = (double)cv::getTickCount();
+    LOG_IF(INFO, report) << "[Optimizer] Finish local BA for KF: " << keyframe->id_ << "(" << keyframe->frame_id_ << ")"
+                         << ", KFs: " << local_keyframes.size()
+                         << ", Mpts: " << local_mapoints.size()
+                         << ", remove " << bad_mpts.size() << " bad mpts."
+                         << " (" << (t1-t0)/cv::getTickFrequency() << "ms)";
+
     reportInfo(problem, summary, report, verbose);
 }
 

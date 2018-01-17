@@ -109,7 +109,8 @@ void showAffine(const cv::Mat &src, const Vector2d &px_ref, const Matrix2d &A_re
 //! DepthFilter
 DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback &callback, bool report, bool verbose) :
     seed_coverged_callback_(callback), fast_detector_(fast_detector),
-    report_(report), verbose_(report&&verbose), track_thread_enabled_(true)
+    report_(report), verbose_(report&&verbose),
+    filter_thread_(nullptr), track_thread_enabled_(true)
 
 {
     options_.max_kfs = 3;
@@ -184,8 +185,12 @@ void DepthFilter::startMainThread()
 void DepthFilter::stopMainThread()
 {
     setStop();
-    filter_thread_->join();
-    filter_thread_.reset();
+    if(filter_thread_)
+    {
+        if(filter_thread_->joinable())
+            filter_thread_->join();
+        filter_thread_.reset();
+    }
 }
 
 void DepthFilter::setStop()

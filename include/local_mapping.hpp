@@ -20,6 +20,10 @@ public:
 
     void createFeatureFromSeed(const Seed::Ptr &seed);
 
+    void startMainThread();
+
+    void stopMainThread();
+
     static LocalMapper::Ptr create(double fps, bool report = false, bool verbose = false)
     { return LocalMapper::Ptr(new LocalMapper(fps, report, verbose));}
 
@@ -27,9 +31,17 @@ private:
 
     LocalMapper(double fps, bool report, bool verbose);
 
-    int createFeatureFromLocalMap();
+    void run();
 
-    void checkCulling();
+    void setStop();
+
+    bool isRequiredStop();
+
+    KeyFrame::Ptr checkNewKeyFrame();
+
+    int createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe);
+
+    void checkCulling(const KeyFrame::Ptr &keyframe);
 
 public:
 
@@ -42,27 +54,20 @@ private:
         int min_redundant_observations;
     } options_;
 
-    std::shared_ptr<std::thread> mapping_thread_;
-
     FastDetector::Ptr fast_detector_;
 
-    std::deque<std::pair<Frame::Ptr, KeyFrame::Ptr> > frames_buffer_;
-    std::deque<std::pair<KeyFrame::Ptr, std::shared_ptr<Seeds> > > seeds_buffer_;
-    Seeds tracked_seeds_;
-
-    KeyFrame::Ptr current_keyframe_;
+    std::deque<KeyFrame::Ptr> keyframes_buffer_;
 
     const int delay_;
     const bool report_;
     const bool verbose_;
 
+    std::shared_ptr<std::thread> mapping_thread_;
+
     bool stop_require_;
-    std::mutex mutex_frame_;
-    std::mutex mutex_keyframe_;
     std::mutex mutex_stop_;
+    std::mutex mutex_keyframe_;
     std::condition_variable cond_process_;
-    std::future<uint64_t> frame_process_future_;
-    bool status_track_thread_;
 
 };
 

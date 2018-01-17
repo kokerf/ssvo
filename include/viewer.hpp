@@ -27,7 +27,7 @@ private:
 
     Viewer(const Map::Ptr &map, cv::Size image_size);
 
-    bool requiredStop();
+    bool isRequiredStop();
 
     void setFinished();
 
