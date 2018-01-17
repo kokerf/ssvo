@@ -100,6 +100,7 @@ LIST(APPEND LINK_LIBS
 LIST(APPEND SOURCEFILES
     src/camera.cpp
     src/map_point.cpp
+    src/seed.cpp
     src/frame.cpp
     src/keyframe.cpp
     src/map.cpp

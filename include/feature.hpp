@@ -10,7 +10,6 @@
 namespace ssvo {
 
 class MapPoint;
-class KeyFrame;
 
 class Feature
 {
@@ -24,8 +23,8 @@ public:
     int level_;
     std::shared_ptr<MapPoint> mpt_;
 
-    inline static Ptr create(const Vector2d &_px, const Vector3d &_fn, int _level, const std::shared_ptr<MapPoint> &_mpt)
-    {return std::make_shared<Feature>(Feature(_px, _fn, _level, _mpt));}
+    inline static Ptr create(const Vector2d &px, const Vector3d &fn, int level, const std::shared_ptr<MapPoint> &mpt)
+    {return std::make_shared<Feature>(Feature(px, fn, level, mpt));}
 
 private:
     Feature(const Vector2d &px, const Vector3d &fn, const int level, const std::shared_ptr<MapPoint> &mpt):
