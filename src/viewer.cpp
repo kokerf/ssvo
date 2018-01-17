@@ -2,7 +2,8 @@
 
 namespace ssvo{
 
-Viewer::Viewer(const Map::Ptr &map, cv::Size image_size) : map_(map), image_size_(image_size)
+Viewer::Viewer(const Map::Ptr &map, cv::Size image_size) :
+    map_(map), image_size_(image_size), required_stop_(false), is_finished_(false)
 {
     camera_pose_.setIdentity();
 
@@ -12,6 +13,30 @@ Viewer::Viewer(const Map::Ptr &map, cv::Size image_size) : map_(map), image_size
     key_frame_graph_line_width = 1;
 
     pongolin_thread_ = std::make_shared<std::thread>(std::bind(&Viewer::run, this));
+}
+
+
+void Viewer::setStop()
+{
+    std::lock_guard<std::mutex> lock(mutex_stop_);
+    required_stop_ = true;
+}
+
+bool Viewer::requiredStop()
+{
+    std::lock_guard<std::mutex> lock(mutex_stop_);
+    return required_stop_;
+}
+
+bool Viewer::waitForFinish()
+{
+    if(!requiredStop())
+        setStop();
+
+    if(pongolin_thread_->joinable())
+        pongolin_thread_->join();
+    
+    return true;
 }
 
 void Viewer::run()
@@ -123,6 +148,9 @@ void Viewer::run()
 
         // Swap frames and Process Events
         pangolin::FinishFrame();
+
+        if(requiredStop())
+            break;
     }
 
     pangolin::DestroyWindow(win_name);

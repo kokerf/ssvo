@@ -15,6 +15,10 @@ public:
 
     void run();
 
+    void setStop();
+
+    bool waitForFinish();
+
     void setCurrentFrame(const Frame::Ptr &frame);
 
     static Viewer::Ptr create(const Map::Ptr &map, cv::Size image_size){ return Viewer::Ptr(new Viewer(map, image_size));}
@@ -22,6 +26,10 @@ public:
 private:
 
     Viewer(const Map::Ptr &map, cv::Size image_size);
+
+    bool requiredStop();
+
+    void setFinished();
 
     void drawMapPoints();
 
@@ -51,7 +59,11 @@ private:
     float key_frame_line_width;
     float key_frame_graph_line_width;
 
+    bool required_stop_;
+    bool is_finished_;
+
     std::mutex mutex_frame_;
+    std::mutex mutex_stop_;
 };
 
 }

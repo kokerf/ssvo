@@ -44,6 +44,12 @@ System::System(std::string config_file) :
 
 }
 
+System::~System()
+{
+    viewer_->setStop();
+    viewer_->waitForFinish();
+}
+
 void System::process(const cv::Mat &image, const double timestamp)
 {
     //! get gray image

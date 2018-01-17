@@ -32,6 +32,8 @@ public:
 
     System(std::string config_file);
 
+    ~System();
+
     void process(const cv::Mat& image, const double timestamp);
 
 private:
