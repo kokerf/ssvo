@@ -22,8 +22,6 @@ public:
     const Vector3d fn_ref;                  //!< Pixel in the keyframe's normalized plane where the depth should be computed.
     const Vector2d px_ref;                  //!< Pixel matched in current frame
     const int level_ref;                    //!< Corner detected level in refrence frame
-    Vector2d px_cur;                        //!< Pixel matched in current frame
-    int level_cur;                          //!< Corner detected level in current frame
     double a;                               //!< a of Beta distribution: When high, probability of inlier is large.
     double b;                               //!< b of Beta distribution: When high, probability of outlier is large.
     double mu;                              //!< Mean of normal distribution.

@@ -38,10 +38,10 @@ System::System(std::string config_file) :
     mapper_ = LocalMapper::create(fps, true, false);
     DepthFilter::Callback depth_fliter_callback = std::bind(&LocalMapper::createFeatureFromSeed, mapper_, std::placeholders::_1);
     depth_filter_ = DepthFilter::create(fast_detector_, depth_fliter_callback, true);
+//    depth_filter_->startMainThread();
     viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));
 
     time_ = 1000.0/fps;
-
 }
 
 System::~System()
@@ -62,7 +62,7 @@ void System::process(const cv::Mat &image, const double timestamp)
     current_frame_ = Frame::create(gray, timestamp, camera_);
     current_frame_->setRefKeyFrame(reference_keyframe_);
     double t1 = (double)cv::getTickCount();
-    LOG(WARNING) << "[System] Frame create time: " << (t1-t0)/cv::getTickFrequency();
+    LOG(WARNING) << "[System] Frame " << current_frame_->id_ << " create time: " << (t1-t0)/cv::getTickFrequency();
 
     if(STAGE_NORMAL_FRAME == stage_)
     {
@@ -108,6 +108,9 @@ System::Status System::initialize()
     current_frame_->setRefKeyFrame(kf1);
     reference_keyframe_ = kf1;
 
+    depth_filter_->createSeeds(kf0);
+    depth_filter_->createSeeds(kf1, current_frame_);
+
     initializer_->reset();
 
     return STATUS_INITAL_SUCCEED;
@@ -117,7 +120,7 @@ System::Status System::tracking()
 {
     //! track seeds
     double t0 = (double)cv::getTickCount();
-    depth_filter_->insertFrame(current_frame_);
+    depth_filter_->trackFrame(last_frame_, current_frame_);
     double t1 = (double)cv::getTickCount();
 
     // TODO 先验信息怎么设置？
@@ -143,7 +146,7 @@ System::Status System::tracking()
     LOG(WARNING) << "[System] Finish Motion-Only BA";
     double t4 = (double)cv::getTickCount();
 
-    depth_filter_->finishFrame();
+    depth_filter_->insertFrame(current_frame_);
     if(createNewKeyFrame())
     {
         mapper_->insertKeyFrame(reference_keyframe_);

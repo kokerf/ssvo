@@ -5,6 +5,7 @@
 #include "camera.hpp"
 #include "feature.hpp"
 #include "map_point.hpp"
+#include "seed.hpp"
 #include "feature_detector.hpp"
 
 namespace ssvo{
@@ -46,6 +47,7 @@ public:
 
     bool isVisiable(const Vector3d &xyz_w, const int border = 0);
 
+    //! Feature created by MapPoint
     size_t N();
 
     std::unordered_map<MapPoint::Ptr, Feature::Ptr> features();
@@ -61,6 +63,13 @@ public:
     bool removeMapPoint(const MapPoint::Ptr &mpt);
 
     Feature::Ptr getFeatureByMapPoint(const MapPoint::Ptr &mpt);
+
+    //! Feature created by Seed
+    void getSeeds(std::vector<Feature::Ptr> &fts);
+
+    bool addSeed(const Feature::Ptr &ft);
+
+    bool removeSeed(const Seed::Ptr &seed);
 
     bool getSceneDepth(double &depth_mean, double &depth_min);
 
@@ -122,6 +131,8 @@ protected:
 
     std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts_;
 
+    std::unordered_map<Seed::Ptr, Feature::Ptr> seed_fts_;
+
     ImgPyr img_pyr_;
 
     SE3d Tcw_;
@@ -132,6 +143,7 @@ protected:
 
     std::mutex mutex_pose_;
     std::mutex mutex_feature_;
+    std::mutex mutex_seed_;
 
 private:
     ImgPyr optical_pyr_;

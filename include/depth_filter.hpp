@@ -19,11 +19,11 @@ public:
 
     void drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst);
 
+    void trackFrame(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur);
+
     void insertFrame(const Frame::Ptr &frame);
 
-    void finishFrame();
-
-    int createSeeds(const KeyFrame::Ptr &kf);
+    int createSeeds(const KeyFrame::Ptr &kf, const Frame::Ptr &frame = nullptr);
 
     void enableTrackThread();
 
@@ -50,13 +50,13 @@ private:
 
     bool isRequiredStop();
 
-    bool checkNewFrame();
+    Frame::Ptr checkNewFrame();
 
-    uint64_t trackSeeds();
+    int trackSeeds(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur) const;
 
-    int updateSeeds();
+    int updateSeeds(const Frame::Ptr &frame);
 
-    int reprojectSeeds();
+    int reprojectSeeds(const Frame::Ptr &frame);
 
     bool earseSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed);
 
@@ -82,12 +82,9 @@ private:
 
     Map::Ptr map_;
 
-    std::deque<std::pair<Frame::Ptr, bool> > frames_buffer_;
+    std::deque<Frame::Ptr> frames_buffer_;
     std::deque<std::pair<KeyFrame::Ptr, std::shared_ptr<Seeds> > > seeds_buffer_;
     Seeds tracked_seeds_;
-
-    Frame::Ptr last_frame_;
-    Frame::Ptr current_frame_;
 
     const bool report_;
     const bool verbose_;
@@ -98,7 +95,7 @@ private:
     std::mutex mutex_frame_;
     //! track thread
     std::condition_variable cond_process_;
-    std::future<uint64_t> seeds_track_future_;
+    std::future<int> seeds_track_future_;
     bool track_thread_enabled_;
 
 };

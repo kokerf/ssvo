@@ -182,6 +182,40 @@ Feature::Ptr Frame::getFeatureByMapPoint(const MapPoint::Ptr &mpt)
         return nullptr;
 }
 
+void Frame::getSeeds(std::vector<Feature::Ptr> &fts)
+{
+    if(!fts.empty()) fts.clear();
+    fts.reserve(seed_fts_.size());
+
+    std::lock_guard<std::mutex> lock(mutex_seed_);
+    for(const auto &it : seed_fts_)
+        fts.push_back(it.second);
+}
+
+bool Frame::addSeed(const Feature::Ptr &ft)
+{
+    LOG_ASSERT(ft->seed_ != nullptr) << " The feature is invalid with empty mappoint!";
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_seed_);
+        if(seed_fts_.count(ft->seed_))
+        {
+            LOG(ERROR) << " The seed is already exited ! Frame: " << id_ << " Seed: " << ft->seed_->id;
+            return false;
+        }
+
+        seed_fts_.emplace(ft->seed_, ft);
+    }
+
+    return true;
+}
+
+bool Frame::removeSeed(const Seed::Ptr &seed)
+{
+    std::lock_guard<std::mutex> lock(mutex_seed_);
+    return (bool) seed_fts_.erase(seed);
+}
+
 bool Frame::getSceneDepth(double &depth_mean, double &depth_min)
 {
     SE3d Tcw;

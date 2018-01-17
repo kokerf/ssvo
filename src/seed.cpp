@@ -10,7 +10,7 @@ uint64_t Seed::next_id = 0;
 //! =================================================================================================
 //! Seed
 Seed::Seed(const KeyFrame::Ptr &kf, const Vector2d &px, const Vector3d &fn, const int level, double depth_mean, double depth_min) :
-    id(next_id), kf(kf), fn_ref(fn), px_ref(px), level_ref(level), px_cur(px), level_cur(level),
+    id(next_id++), kf(kf), fn_ref(fn), px_ref(px), level_ref(level),
     a(10),
     b(10),
     mu(1.0/depth_mean),
