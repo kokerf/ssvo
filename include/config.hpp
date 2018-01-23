@@ -65,6 +65,8 @@ public:
 
     static int minConnectionObservations(){return getInstance().mapping_min_connection_observations;}
 
+    static int minCornersPerKeyFrame(){return getInstance().mapping_min_corners;}
+
     static int alignTopLevel(){return getInstance().align_top_level;}
 
     static int alignPatchSize(){return getInstance().align_patch_size;}
@@ -138,6 +140,7 @@ private:
         //! map
         mapping_scale = (double)fs["Mapping.scale"];
         mapping_min_connection_observations = (int)fs["Mapping.min_connection_observations"];
+        mapping_min_corners = (int)fs["Mapping.min_corners"];
 
         //! Align
         align_top_level = (int)fs["Align.top_level"];
@@ -209,6 +212,7 @@ private:
     //! map
     double mapping_scale;
     int mapping_min_connection_observations;
+    int mapping_min_corners;
 
     //! Align
     int align_top_level;

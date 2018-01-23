@@ -115,6 +115,7 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback 
 {
     options_.max_kfs = 5;
     options_.max_seeds_buffer = 20;
+    options_.max_features = Config::minCornersPerKeyFrame();
     options_.max_epl_length = 1000;
     options_.epl_dist2_threshold = 16 * Config::pixelUnSigma2();
     options_.seed_converge_threshold = 1.0/200.0;
@@ -271,7 +272,7 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &kf, const Frame::Ptr &frame)
     }
 
     Corners new_corners;
-    fast_detector_->detect(kf->images(), new_corners, old_corners, 150);
+    fast_detector_->detect(kf->images(), new_corners, old_corners, options_.max_features);
 
     if(new_corners.empty())
         return 0;
