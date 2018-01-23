@@ -50,6 +50,8 @@ private:
 
     void showImage(Stage stage);
 
+    void drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst);
+
 private:
 
     Stage stage_;
@@ -72,6 +74,10 @@ private:
     KeyFrame::Ptr reference_keyframe_;
 
     double time_;
+
+    std::list<double > frame_timestamp_buffer_;
+    std::list<Sophus::SE3d> frame_pose_buffer_;
+    std::list<KeyFrame::Ptr> reference_keyframe_buffer_;
 };
 
 }// namespce ssvo

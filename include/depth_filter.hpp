@@ -17,8 +17,6 @@ public:
 
     typedef std::function<void (const Seed::Ptr&)> Callback;
 
-    void drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst);
-
     void trackFrame(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur);
 
     void insertFrame(const Frame::Ptr &frame);
@@ -32,8 +30,6 @@ public:
     void startMainThread();
 
     void stopMainThread();
-
-    void setMap(const Map::Ptr &map);
 
     static Ptr create(const FastDetector::Ptr &fast_detector, const Callback &callback, bool report = false, bool verbose = false)
     { return Ptr(new DepthFilter(fast_detector, callback, report, verbose)); }
@@ -67,6 +63,7 @@ private:
 
     struct Option{
         int max_kfs; //! max keyframes for seeds tracking(exclude current keyframe)
+        int max_seeds_buffer;
         double max_epl_length;
         double epl_dist2_threshold;
         double seed_converge_threshold;

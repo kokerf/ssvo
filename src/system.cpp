@@ -197,15 +197,14 @@ bool System::createNewKeyFrame()
     //! check distance
     bool c1 = true;
     double median_depth = std::numeric_limits<double>::max();
-    double min_depth = std::numeric_limits<double>::max();
-    current_frame_->getSceneDepth(median_depth, min_depth);
     for(const auto &ovlp_kf : overlap_kfs)
     {
         SE3d T_cur_from_ref = current_frame_->Tcw() * ovlp_kf.first->pose();
         Vector3d tran = T_cur_from_ref.translation();
         double dist1 = tran.dot(tran);
-        double dist2 = 0.2 * (T_cur_from_ref.rotationMatrix() - Matrix3d::Identity()).norm();
-        if(dist1 + dist2 < 0.12 * median_depth)
+//        double dist2 = 0.2 * (T_cur_from_ref.rotationMatrix() - Matrix3d::Identity()).norm();
+//        std::cout << "d1: " << dist1 << ". d2: " << dist2 << std::endl;
+        if(dist1  < 0.12 * median_depth)
         {
             c1 = false;
             break;
@@ -243,22 +242,30 @@ bool System::createNewKeyFrame()
 
     LOG(INFO) << "[System] Max overlap: " << max_overlap << " min disaprity " << disparities.front() << ", average ";
 
+//    int all_features = current_frame_->featureNumber() + current_frame_->seedNumber();
     bool c2 = disparities.front() > 100;//options_.min_disparity;
-    bool c3 = current_frame_->N() < reference_keyframe_->N() * 0.5;
+    bool c3 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * 0.7;
+    bool c4 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * 0.9;
 
     //! create new keyFrame
-    if(c1 || c2 || c3)
+    if((c4 && (c1 || c2)) || c3)
     {
         //! create new keyframe
         KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
         for(const Feature::Ptr &ft : fts)
         {
+            if(ft->mpt_->isBad())
+            {
+                current_frame_->removeFeature(ft);
+                continue;
+            }
+
             ft->mpt_->addObservation(new_keyframe, ft);
             ft->mpt_->updateViewAndDepth();
         }
         new_keyframe->updateConnections();
         reference_keyframe_ = new_keyframe;
-//        LOG(ERROR) << "C: (" << c1 << ", " << c2 << ", " << c3 << ") cur_n: " << current_frame_->N() << " ck: " << current_keyframe_->N();
+//        LOG(ERROR) << "C: (" << c1 << ", " << c2 << ", " << c3 << ") cur_n: " << current_frame_->N() << " ck: " << reference_keyframe_->N();
         return true;
     }
         //! change reference keyframe
@@ -307,7 +314,7 @@ void System::showImage(Stage stage)
     cv::Mat image;
     if(STAGE_NORMAL_FRAME == stage)
     {
-        depth_filter_->drowTrackedPoints(current_frame_, image);
+        drowTrackedPoints(current_frame_, image);
     }
     else if(STAGE_INITALIZE == stage)
     {
@@ -316,6 +323,44 @@ void System::showImage(Stage stage)
 
     cv::imshow("SSVO Current Image", image);
     cv::waitKey(time_);
+}
+
+void System::drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
+{
+    //! draw features
+    const cv::Mat src = frame->getImage(0);
+    std::vector<Feature::Ptr> fts;
+    frame->getFeatures(fts);
+    cv::cvtColor(src, dst, CV_GRAY2RGB);
+    int font_face = 1;
+    double font_scale = 0.5;
+    for(const Feature::Ptr &ft : fts)
+    {
+        Vector2d ft_px = ft->px_;
+        cv::Point2f px(ft_px[0], ft_px[1]);
+        cv::Scalar color(0, 255, 0);
+        cv::circle(dst, px, 2, color, -1);
+
+        string id_str = std::to_string((frame->Tcw()*ft->mpt_->pose()).norm());//ft->mpt_->getFoundRatio());//
+        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
+    }
+
+    //! draw seeds
+    std::vector<Feature::Ptr> seed_fts;
+    frame->getSeeds(seed_fts);
+    for(const Feature::Ptr &ft : seed_fts)
+    {
+        Seed::Ptr seed = ft->seed_;
+        cv::Point2f px(ft->px_[0], ft->px_[1]);
+        double convergence = seed->z_range/std::sqrt(seed->sigma2);
+        double scale = MIN(convergence, 256.0) / 256.0;
+        cv::Scalar color(255*scale, 0, 255*(1-scale));
+        cv::circle(dst, px, 2, color, -1);
+
+//        string id_str = std::to_string();
+//        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
+    }
+
 }
 
 }

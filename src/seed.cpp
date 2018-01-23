@@ -48,6 +48,8 @@ double Seed::computeVar(const SE3d &T_cur_ref, const double z, const double delt
     Vector3d xyz_r(fn_ref*z);
     Vector3d f_c(T_cur_ref * xyz_r);
     Vector3d f_r(f_c-t);
+    f_c /= f_c[2];
+    f_r /= f_r[2];
 
     double t_norm = t.norm();
     double f_c_norm = f_c.norm();
@@ -55,7 +57,7 @@ double Seed::computeVar(const SE3d &T_cur_ref, const double z, const double delt
 
 //    double alpha = acos(f_r.dot(-t)/f_r_norm/t_norm);
 
-    double epslion = atan(0.5*delta/f_c_norm/f_c[2])*2.0;
+    double epslion = atan(0.5*delta/f_c_norm)*2.0;
 //    epslion  = 0.0021867665614925609;
     double beta = acos(f_c.dot(t)/(f_c_norm*t_norm));
     double gamma = acos(f_c.dot(f_r)/(f_c_norm*f_r_norm));

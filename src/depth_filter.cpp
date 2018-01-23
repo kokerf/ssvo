@@ -113,7 +113,8 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback 
     filter_thread_(nullptr), track_thread_enabled_(true)
 
 {
-    options_.max_kfs = 3;
+    options_.max_kfs = 5;
+    options_.max_seeds_buffer = 20;
     options_.max_epl_length = 1000;
     options_.epl_dist2_threshold = 16 * Config::pixelUnSigma2();
     options_.seed_converge_threshold = 1.0/200.0;
@@ -121,49 +122,6 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback 
     options_.align_epslion = 0.0001;
     options_.min_disparity = 100;
     options_.min_track_features = 50;
-}
-
-void DepthFilter::setMap(const Map::Ptr &map)
-{
-    map_ = map;
-}
-
-void DepthFilter::drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
-{
-    //! draw features
-    const cv::Mat src = frame->getImage(0);
-    std::vector<Feature::Ptr> fts;
-    frame->getFeatures(fts);
-    cv::cvtColor(src, dst, CV_GRAY2RGB);
-    int font_face = 1;
-    double font_scale = 0.5;
-    for(const Feature::Ptr &ft : fts)
-    {
-        Vector2d ft_px = ft->px_;
-        cv::Point2f px(ft_px[0], ft_px[1]);
-        cv::Scalar color(0, 255, 0);
-        cv::circle(dst, px, 2, color, -1);
-
-        string id_str = std::to_string((frame->Tcw()*ft->mpt_->pose()).norm());//ft->mpt_->getFoundRatio());//
-        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
-    }
-
-    //! draw seeds
-    std::vector<Feature::Ptr> seed_fts;
-    frame->getSeeds(seed_fts);
-    for(const Feature::Ptr &ft : seed_fts)
-    {
-        Seed::Ptr seed = ft->seed_;
-        cv::Point2f px(ft->px_[0], ft->px_[1]);
-        double convergence = seed->z_range/std::sqrt(seed->sigma2);
-        double scale = MIN(convergence, 256.0) / 256.0;
-        cv::Scalar color(255*scale, 0, 255*(1-scale));
-        cv::circle(dst, px, 2, color, -1);
-
-//        string id_str = std::to_string();
-//        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
-    }
-
 }
 
 void DepthFilter::enableTrackThread()
@@ -330,6 +288,9 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &kf, const Frame::Ptr &frame)
     }
     seeds_buffer_.emplace_back(kf, std::make_shared<Seeds>(new_seeds));
 
+    if(seeds_buffer_.size() > options_.max_seeds_buffer)
+        seeds_buffer_.pop_front();
+
     if(frame != nullptr && kf->frame_id_ == frame->id_)
     {
         for(const Seed::Ptr &seed : new_seeds)
@@ -405,6 +366,7 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
     }
 
     static double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
+//    static double px_error_normlized = Config::pixelUnSigma();
     int updated_count = 0;
     for(const auto &seed_map : seeds_map)
     {
@@ -430,7 +392,7 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
             if(utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->fn_ref, fn_cur, depth))
             {
                 double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
-//                tau = seed->computeVar(T_cur_from_ref, depth, options_.klt_epslion);
+//                double tau = seed->computeVar(T_cur_from_ref, depth, options_.klt_epslion*px_error_normlized);
 //                tau = tau + Config::pixelUnSigma();
                 seed->update(1.0/depth, tau*tau);
 
@@ -466,6 +428,7 @@ int DepthFilter::reprojectSeeds(const Frame::Ptr &frame)
     int project_count = 0;
     int matched_count = 0;
     static double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
+//    static double px_error_normlized = Config::pixelUnSigma();
     auto buffer_itr = seeds_buffer_.begin();
     for(;buffer_itr != seeds_buffer_.end();)
     {
@@ -519,7 +482,7 @@ int DepthFilter::reprojectSeeds(const Frame::Ptr &frame)
             }
 
             double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
-//            tau = seed->computeVar(T_cur_from_ref, depth, options_.align_epslion);
+//            double tau = seed->computeVar(T_cur_from_ref, depth, options_.align_epslion*px_error_normlized);
 //            tau = tau + Config::pixelUnSigma();
             seed->update(1.0/depth, tau*tau);
 

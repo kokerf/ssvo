@@ -281,7 +281,7 @@ bool MapPoint::getCloseViewObs(const Frame::Ptr &frame, KeyFrame::Ptr &keyframe,
     {
         std::lock_guard<std::mutex> lock(mutex_obs_);
         // TODO 这里可能还有问题，bad 的 mpt没有被删除？
-        LOG_ASSERT(!obs_.empty()) << "Map point is invalid!";
+        LOG_ASSERT(!obs_.empty()) << " Map point is invalid!";
         obs = obs_;
         obs_dir = obs_dir_;
     }

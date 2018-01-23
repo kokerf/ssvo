@@ -24,7 +24,7 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
     ref_frame_ = reference_frame;
     cur_frame_ = current_frame;
 
-    const size_t N = ref_frame_->N();
+    const size_t N = ref_frame_->featureNumber();
     LOG_ASSERT(N != 0) << " AlignSE3: Frame(" << reference_frame->id_ << ") " << " no features to track!";
 
     ref_feature_cache_.resize(NoChange, N);

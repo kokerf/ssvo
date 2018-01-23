@@ -48,7 +48,7 @@ public:
     bool isVisiable(const Vector3d &xyz_w, const int border = 0);
 
     //! Feature created by MapPoint
-    size_t N();
+    int featureNumber();
 
     std::unordered_map<MapPoint::Ptr, Feature::Ptr> features();
 
@@ -65,6 +65,8 @@ public:
     Feature::Ptr getFeatureByMapPoint(const MapPoint::Ptr &mpt);
 
     //! Feature created by Seed
+    int seedNumber();
+
     void getSeeds(std::vector<Feature::Ptr> &fts);
 
     bool addSeed(const Feature::Ptr &ft);

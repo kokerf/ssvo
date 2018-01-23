@@ -120,10 +120,10 @@ std::unordered_map<MapPoint::Ptr, Feature::Ptr> Frame::features()
     return mpt_fts_;
 }
 
-size_t Frame::N()
+int Frame::featureNumber()
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    return mpt_fts_.size();
+    return (int)mpt_fts_.size();
 }
 
 void Frame::getFeatures(std::vector<Feature::Ptr>& fts)
@@ -180,6 +180,12 @@ Feature::Ptr Frame::getFeatureByMapPoint(const MapPoint::Ptr &mpt)
         return it->second;
     else
         return nullptr;
+}
+
+int Frame::seedNumber()
+{
+    std::lock_guard<std::mutex> lock(mutex_seed_);
+    return (int)seed_fts_.size();
 }
 
 void Frame::getSeeds(std::vector<Feature::Ptr> &fts)
