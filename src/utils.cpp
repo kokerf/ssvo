@@ -121,7 +121,7 @@ void kltTrack(const ImgPyr &imgs_ref, const ImgPyr &imgs_cur, const cv::Size win
 
 }
 
-int Fundamental::findFundamentalMat(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, Matrix3d &F,
+bool Fundamental::findFundamentalMat(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, Matrix3d &F,
                                     std::vector<bool> &inliers, double sigma2, int max_iterations, const bool bE)
 {
     assert(fts_prev.size() == fts_next.size());
@@ -129,7 +129,7 @@ int Fundamental::findFundamentalMat(const std::vector<cv::Point2d>& fts_prev, co
     return runRANSAC(fts_prev, fts_next, F, inliers, sigma2, max_iterations, bE);
 }
 
-void Fundamental::run8point(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, Matrix3d& F, const bool bE)
+bool Fundamental::run8point(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, Matrix3d& F, const bool bE)
 {
     const int N = fts_prev.size();
     assert(N >= 8);
@@ -175,11 +175,14 @@ void Fundamental::run8point(const std::vector<cv::Point2d>& fts_prev, const std:
     F = U * W * V.transpose();
 
     double F22 = F(2, 2);
-    if(fabs(F22) > std::numeric_limits<double>::epsilon())
-        F /= F22;
+    if(isnan(F22))
+        return false;
+
+    F /= F22;
+    return true;
 }
 
-int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, Matrix3d& F,
+bool Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::vector<cv::Point2d>& fts_next, Matrix3d& F,
                            std::vector<bool> &inliers, const double sigma2, const int max_iterations, const bool bE)
 {
     const int N = fts_prev.size();
@@ -205,6 +208,7 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::
     Matrix3d F_temp;
     int max_inliers = 0;
     int niters = max_iters;
+    bool succeed = false;
     for(int iter = 0; iter < niters; iter++)
     {
         std::vector<int> points = total_points;
@@ -218,7 +222,10 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::
             points.pop_back();
         }
 
-        run8point(fts1, fts2, F_temp, bE);
+        succeed = run8point(fts1, fts2, F_temp, bE);
+
+        if(!succeed)
+            continue;
 
         int inliers_count = 0;
         std::vector<bool> inliers_temp(N, false);
@@ -259,6 +266,9 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::
 
     }//! iterations
 
+    if(!succeed)
+        return false;
+
     fts1.clear();
     fts2.clear();
     for(int n = 0; n < N; ++n)
@@ -270,9 +280,11 @@ int Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std::
         fts2.push_back(fts_next[n]);
     }
 
-    run8point(fts1, fts2, F, bE);
+    Matrix3d F1;
+    if(run8point(fts1, fts2, F1, bE))
+        F = F1;
 
-    return max_inliers;
+    return true;
 }
 
 bool triangulate(const Matrix3d& R_cr,  const Vector3d& t_cr, const Vector3d& fn_r, const Vector3d& fn_c, double &d_ref)

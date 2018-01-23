@@ -295,9 +295,13 @@ Initializer::Result Initializer::addImage(Frame::Ptr frame_cur)
     //! find fundamental matrix
     Matrix3d E;
     cand_cur_->createFts(); //! get undistorted points
-    int inliers_count = utils::Fundamental::findFundamentalMat(cand_ref_->fts, cand_cur_->fts, E, inliers_,
+    bool succeed = utils::Fundamental::findFundamentalMat(cand_ref_->fts, cand_cur_->fts, E, inliers_,
                                                                Config::pixelUnSigma2(), Config::initMaxRansacIters(), true);
+
+    std::cout << "E\n" << E << std::endl;
+
     cand_cur_->updateInliers(inliers_);
+    int inliers_count = std::count(inliers_.begin(), inliers_.end(), true);
     LOG_IF(INFO, verbose_) << "[INIT][3] Inliers after epipolar geometry check: " << inliers_count;
     if(inliers_count < Config::initMinInliers()) return FAILURE;
 
@@ -309,7 +313,7 @@ Initializer::Result Initializer::addImage(Frame::Ptr frame_cur)
     utils::Fundamental::decomposeEssentialMat(E, R1, R2, t);
 
     Matrix3d K = Matrix3d::Identity(3,3);
-    bool succeed = findBestRT(R1, R2, t, K, K, cand_ref_->fts, cand_cur_->fts, inliers_, p3ds_, T_);
+    succeed = findBestRT(R1, R2, t, K, K, cand_ref_->fts, cand_cur_->fts, inliers_, p3ds_, T_);
     if(!succeed) return FAILURE;
     cand_cur_->updateInliers(inliers_);
     LOG_IF(INFO, verbose_) << "[INIT][4] Inliers after cheirality check: " << std::count(inliers_.begin(), inliers_.end(), true);

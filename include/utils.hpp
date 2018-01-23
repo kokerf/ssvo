@@ -321,7 +321,7 @@ bool triangulate(const Matrix3d &R_cr,  const Vector3d &t_cr, const Vector3d &fn
 namespace Fundamental
 {
 
-int findFundamentalMat(const std::vector<cv::Point2d> &pts_prev, const std::vector<cv::Point2d> &pts_next,
+bool findFundamentalMat(const std::vector<cv::Point2d> &pts_prev, const std::vector<cv::Point2d> &pts_next,
                        Matrix3d &F, std::vector<bool> &inliers,
                        const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
 
@@ -331,12 +331,12 @@ double computeErrorSquared(const Vector3d &p1, const Vector3d &p2, const SE3d &T
 
 void Normalize(const std::vector<cv::Point2d>& pts, std::vector<cv::Point2d>& pts_norm, Matrix3d& T);
 
-void run8point(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next,
+bool run8point(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next,
                Matrix3d& F, const bool bE = false);
 
-int runRANSAC(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next,
-              Matrix3d& F, std::vector<bool> &inliers,
-              const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
+bool runRANSAC(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::Point2d>& pts_next,
+                Matrix3d& F, std::vector<bool> &inliers,
+                const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
 
 void decomposeEssentialMat(const Matrix3d& E, Matrix3d& R1, Matrix3d& R2, Vector3d& t);
 
