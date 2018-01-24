@@ -77,6 +77,10 @@ include_directories(${CERES_INCLUDE_DIRS})
 find_package(Pangolin 0.4 REQUIRED)
 include_directories(${Pangolin_INCLUDE_DIRS})
 
+# Pangolin
+find_package(DBoW3 REQUIRED)
+include_directories(${DBoW3_INCLUDE_DIRS})
+
 include_directories(
     ${PROJECT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/include
@@ -89,6 +93,7 @@ LIST(APPEND LINK_LIBS
     ${GLOG_LIBRARY}
     ${CERES_LIBRARIES}
     ${Pangolin_LIBRARIES}
+    ${DBoW3_LIBRARIES}
     ${PROJECT_SOURCE_DIR}/Thirdparty/fast/build/libfast.so
 )
 
@@ -146,6 +151,9 @@ target_link_libraries(test_triangulation  ${LINK_LIBS})
 
 add_executable(test_pattern test/test_parttern.cpp ${SOURCEFILES})
 target_link_libraries(test_pattern  ${LINK_LIBS})
+
+add_executable(test_dbow3 test/test_dbow3.cpp)
+target_link_libraries(test_dbow3  ${LINK_LIBS})
 
 ## -----------------------
 ## Build VO
