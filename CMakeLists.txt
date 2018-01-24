@@ -152,6 +152,9 @@ target_link_libraries(test_triangulation  ${LINK_LIBS})
 add_executable(test_pattern test/test_parttern.cpp ${SOURCEFILES})
 target_link_libraries(test_pattern  ${LINK_LIBS})
 
+add_executable(test_optimizer test/test_optimizer.cpp ${SOURCEFILES})
+target_link_libraries(test_optimizer  ${LINK_LIBS})
+
 add_executable(test_dbow3 test/test_dbow3.cpp)
 target_link_libraries(test_dbow3  ${LINK_LIBS})
 
