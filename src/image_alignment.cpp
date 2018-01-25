@@ -5,6 +5,47 @@
 namespace ssvo
 {
 
+//! min Sum { aI+b -J }
+void calculateLightAffine(const cv::Mat &I, const cv::Mat &J, float &a, float &b)
+{
+    const int N = I.rows;
+    const int patch_area = I.cols;
+    assert(N == J.rows);
+    assert(patch_area == J.cols);
+    assert(I.type() == J.type() && I.type() == CV_32FC1);
+
+    float sII = 0, sIJ = 0, sI = 0, sJ = 0;
+    int sw = 0;
+    for(int n = 0; n < N; ++n)
+    {
+        const float* I_ptr = I.ptr<float>(n);
+        const float* J_ptr = J.ptr<float>(n);
+
+        float res = 0;
+        float pII = 0, pIJ = 0, pI = 0, pJ = 0;
+        for(int i = 0; i < patch_area; ++i)
+        {
+            float diff = I_ptr[i] - J_ptr[i];
+            res += diff*diff;
+
+            pI += I_ptr[i];
+            pJ += J_ptr[i];
+            pII += I_ptr[i] * I_ptr[i];
+            pIJ += I_ptr[i] * J_ptr[i];
+        }
+
+        sI += pI;
+        sJ += pJ;
+        sII += pII;
+        sIJ += pIJ;
+        sw += patch_area;
+    }
+
+    a = (sw*sIJ - sI*sJ) / (sw*sII-sI*sI);
+    b = (sJ - a*sI)/sw;
+}
+
+
 //
 // Align SE3
 //
@@ -115,6 +156,8 @@ int AlignSE3::computeReferencePatches(int level)
 
         Matrix<double, PatchArea, 1> img, dx, dy;
         utils::interpolateMat<uchar, double, PatchSize>(ref_img, img, dx, dy, ref_px[0], ref_px[1]);
+        img.array() *= Frame::light_affine_a_;
+        img.array() += Frame::light_affine_b_;
         ref_patch_cache_.row(feature_counter) = img;
         jacbian_cache_.block(feature_counter * PatchArea, 0, PatchArea, 6) = fx * dx * J.row(0) + fy * dy * J.row(1);
 

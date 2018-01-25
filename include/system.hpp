@@ -48,6 +48,8 @@ private:
 
     void finishFrame();
 
+    void calcLightAffine();
+
     void showImage(Stage stage);
 
     void drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst);
@@ -72,6 +74,7 @@ private:
     Frame::Ptr last_frame_;
     Frame::Ptr current_frame_;
     KeyFrame::Ptr reference_keyframe_;
+    KeyFrame::Ptr last_keyframe_;
 
     double time_;
 

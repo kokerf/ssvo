@@ -112,6 +112,7 @@ System::Status System::initialize()
     current_frame_->setPose(kf1->pose());
     current_frame_->setRefKeyFrame(kf1);
     reference_keyframe_ = kf1;
+    last_keyframe_ = kf1;
 
     depth_filter_->createSeeds(kf0);
     depth_filter_->createSeeds(kf1, current_frame_);
@@ -161,14 +162,66 @@ System::Status System::tracking()
     }
 
     double t5 = (double)cv::getTickCount();
+    calcLightAffine();
+
+    double t6 = (double)cv::getTickCount();
     LOG(WARNING) << "[System] Time: " << (t1-t0)/cv::getTickFrequency() << " "
                                       << (t2-t1)/cv::getTickFrequency() << " "
                                       << (t3-t2)/cv::getTickFrequency() << " "
                                       << (t4-t3)/cv::getTickFrequency() << " "
-                                      << (t5-t4)/cv::getTickFrequency()
-                 << ", Total: " << (t5-t0)/cv::getTickFrequency();
+                                      << (t5-t4)/cv::getTickFrequency() << " "
+                                      << (t6-t5)/cv::getTickFrequency()
+                 << ", Total: " << (t6-t0)/cv::getTickFrequency();
 
     return STATUS_TRACKING_GOOD;
+}
+
+void System::calcLightAffine()
+{
+    std::vector<Feature::Ptr> fts_last;
+    last_frame_->getFeatures(fts_last);
+
+    const cv::Mat img_last = last_frame_->getImage(0);
+    const cv::Mat img_curr = current_frame_->getImage(0).clone() * 1.3;
+
+    const int size = 4;
+    const int patch_area = size*size;
+    const int N = (int)fts_last.size();
+    cv::Mat patch_buffer_last = cv::Mat::zeros(N, patch_area, CV_32FC1);
+    cv::Mat patch_buffer_curr = cv::Mat::zeros(N, patch_area, CV_32FC1);
+
+    int count = 0;
+    for(int i = 0; i < N; ++i)
+    {
+        const Feature::Ptr ft_last = fts_last[i];
+        const Feature::Ptr ft_curr = current_frame_->getFeatureByMapPoint(ft_last->mpt_);
+
+        if(ft_curr == nullptr)
+            continue;
+
+        utils::interpolateMat<uchar, float, size>(img_last, patch_buffer_last.ptr<float>(count), ft_last->px_[0], ft_last->px_[1]);
+        utils::interpolateMat<uchar, float, size>(img_curr, patch_buffer_curr.ptr<float>(count), ft_curr->px_[0], ft_curr->px_[1]);
+
+        count++;
+    }
+
+    patch_buffer_last.resize(count);
+    patch_buffer_curr.resize(count);
+
+    if(count < 20)
+    {
+        Frame::light_affine_a_ = 1;
+        Frame::light_affine_b_ = 0;
+        return;
+    }
+
+    float a=1;
+    float b=0;
+    calculateLightAffine(patch_buffer_last, patch_buffer_curr, a, b);
+    Frame::light_affine_a_ = a;
+    Frame::light_affine_b_ = b;
+
+//    std::cout << "a: " << a << " b: " << b << std::endl;
 }
 
 bool System::createNewKeyFrame()
@@ -197,19 +250,29 @@ bool System::createNewKeyFrame()
     //! check distance
     bool c1 = true;
     double median_depth = std::numeric_limits<double>::max();
-    for(const auto &ovlp_kf : overlap_kfs)
-    {
-        SE3d T_cur_from_ref = current_frame_->Tcw() * ovlp_kf.first->pose();
-        Vector3d tran = T_cur_from_ref.translation();
-        double dist1 = tran.dot(tran);
-//        double dist2 = 0.2 * (T_cur_from_ref.rotationMatrix() - Matrix3d::Identity()).norm();
-//        std::cout << "d1: " << dist1 << ". d2: " << dist2 << std::endl;
-        if(dist1  < 0.12 * median_depth)
-        {
-            c1 = false;
-            break;
-        }
-    }
+    double min_depth = std::numeric_limits<double>::max();
+    current_frame_->getSceneDepth(median_depth, min_depth);
+//    for(const auto &ovlp_kf : overlap_kfs)
+//    {
+//        SE3d T_cur_from_ref = current_frame_->Tcw() * ovlp_kf.first->pose();
+//        Vector3d tran = T_cur_from_ref.translation();
+//        double dist1 = tran.dot(tran);
+//        double dist2 = 0.1 * (T_cur_from_ref.rotationMatrix() - Matrix3d::Identity()).norm();
+//        double dist = dist1 + dist2;
+////        std::cout << "d1: " << dist1 << ". d2: " << dist2 << std::endl;
+//        if(dist  < 0.10 * median_depth)
+//        {
+//            c1 = false;
+//            break;
+//        }
+//    }
+
+    SE3d T_cur_from_ref = current_frame_->Tcw() * last_keyframe_->pose();
+    Vector3d tran = T_cur_from_ref.translation();
+    double dist1 = tran.dot(tran);
+    double dist2 = 0.01 * (T_cur_from_ref.rotationMatrix() - Matrix3d::Identity()).norm();
+    if(dist1+dist2  < 0.01 * median_depth)
+        c1 = false;
 
     //! check disparity
     std::list<float> disparities;
@@ -245,10 +308,10 @@ bool System::createNewKeyFrame()
 //    int all_features = current_frame_->featureNumber() + current_frame_->seedNumber();
     bool c2 = disparities.front() > 100;//options_.min_disparity;
     bool c3 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * 0.7;
-    bool c4 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * 0.9;
+//    bool c4 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * 0.9;
 
     //! create new keyFrame
-    if((c4 && (c1 || c2)) || c3)
+    if(c1 && (c2 || c3))
     {
         //! create new keyframe
         KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
@@ -265,6 +328,7 @@ bool System::createNewKeyFrame()
         }
         new_keyframe->updateConnections();
         reference_keyframe_ = new_keyframe;
+        last_keyframe_ = new_keyframe;
 //        LOG(ERROR) << "C: (" << c1 << ", " << c2 << ", " << c3 << ") cur_n: " << current_frame_->N() << " ck: " << reference_keyframe_->N();
         return true;
     }

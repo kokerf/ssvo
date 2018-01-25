@@ -10,6 +10,8 @@
 
 namespace ssvo {
 
+void calculateLightAffine(const cv::Mat &I, const cv::Mat &J, float &a, float &b);
+
 template <int Size, int Num>
 class Align{
 public:

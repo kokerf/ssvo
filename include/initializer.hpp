@@ -21,7 +21,7 @@ public:
     std::vector<cv::Point2d> fts;
     std::vector<int> level;
     std::vector<int64_t> idx;
-    static const int size;
+    static int size;
 
     void createFts();
     int getInliers(std::vector<bool> &inliers);

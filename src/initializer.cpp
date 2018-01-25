@@ -5,7 +5,7 @@
 
 namespace ssvo{
 
-const int FrameCandidate::size = 200;
+int FrameCandidate::size = 1000;
 
 FrameCandidate::FrameCandidate(const Frame::Ptr &frame) :
     frame(frame)
@@ -120,7 +120,9 @@ int FrameCandidate::checkTracking(const int min_idx, const int max_idx, const in
 
 Initializer::Initializer(const FastDetector::Ptr &fast_detector, bool verbose):
     fast_detector_(fast_detector), cand_ref_(nullptr), cand_cur_(nullptr), cand_last_(nullptr), finished_(false), verbose_(verbose)
-{};
+{
+    FrameCandidate::size = Config::initMinCorners();
+};
 
 
 void Initializer::reset()

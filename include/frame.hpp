@@ -129,6 +129,9 @@ public:
 
     SE3d optimal_Tcw_;//! for optimization
 
+    static float light_affine_a_;
+    static float light_affine_b_;
+
 protected:
 
     std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts_;

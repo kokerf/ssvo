@@ -10,6 +10,8 @@ namespace ssvo {
 
 uint64_t Frame::next_id_ = 0;
 const cv::Size Frame::optical_win_size_ = cv::Size(21,21);
+float Frame::light_affine_a_ = 1.0f;
+float Frame::light_affine_b_ = 0.0f;
 
 Frame::Frame(const cv::Mat &img, const double timestamp, const Camera::Ptr &cam) :
     id_(next_id_++), timestamp_(timestamp), cam_(cam), max_level_(Config::imageTopLevel())
