@@ -366,8 +366,8 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
         }
     }
 
-    static double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
-//    static double px_error_normlized = Config::pixelUnSigma();
+//    static double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
+    static double px_error_normlized = Config::pixelUnSigma();
     int updated_count = 0;
     for(const auto &seed_map : seeds_map)
     {
@@ -392,8 +392,8 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
             double depth = -1;
             if(utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->fn_ref, fn_cur, depth))
             {
-                double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
-//                double tau = seed->computeVar(T_cur_from_ref, depth, options_.klt_epslion*px_error_normlized);
+//                double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
+                double tau = seed->computeVar(T_cur_from_ref, depth, options_.klt_epslion*px_error_normlized);
 //                tau = tau + Config::pixelUnSigma();
                 seed->update(1.0/depth, tau*tau);
 
@@ -428,8 +428,8 @@ int DepthFilter::reprojectSeeds(const Frame::Ptr &frame)
 
     int project_count = 0;
     int matched_count = 0;
-    static double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
-//    static double px_error_normlized = Config::pixelUnSigma();
+//    static double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
+    static double px_error_normlized = Config::pixelUnSigma();
     auto buffer_itr = seeds_buffer_.begin();
     for(;buffer_itr != seeds_buffer_.end();)
     {
@@ -482,8 +482,8 @@ int DepthFilter::reprojectSeeds(const Frame::Ptr &frame)
                 continue;
             }
 
-            double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
-//            double tau = seed->computeVar(T_cur_from_ref, depth, options_.align_epslion*px_error_normlized);
+//            double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
+            double tau = seed->computeVar(T_cur_from_ref, depth, options_.align_epslion*px_error_normlized);
 //            tau = tau + Config::pixelUnSigma();
             seed->update(1.0/depth, tau*tau);
 

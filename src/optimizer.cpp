@@ -61,63 +61,10 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
     reportInfo(problem, summary, report, verbose);
 }
 
-void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool report, bool verbose)
-{
-    frame->optimal_Tcw_ = frame->Tcw();
-
-    ceres::Problem problem;
-    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
-    problem.AddParameterBlock(frame->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
-
-    double scale = Config::pixelUnSigma() * 2;
-    ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
-
-    std::vector<Feature::Ptr> fts;
-    frame->getFeatures(fts);
-    for(const Feature::Ptr &ft : fts)
-    {
-        MapPoint::Ptr mpt = ft->mpt_;
-        if(mpt == nullptr)
-            continue;
-
-        mpt->optimal_pose_ = mpt->pose();
-        ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);
-        problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), mpt->optimal_pose_.data());
-        problem.SetParameterBlockConstant(mpt->optimal_pose_.data());
-    }
-
-    ceres::Solver::Options options;
-    ceres::Solver::Summary summary;
-    options.linear_solver_type = ceres::DENSE_SCHUR;
-    options.minimizer_progress_to_stdout = report & verbose;
-    options.max_linear_solver_iterations = 20;
-
-    ceres::Solve(options, &problem, &summary);
-
-    //! update pose
-    frame->setTcw(frame->optimal_Tcw_);
-
-    //! Report
-    reportInfo(problem, summary, report, verbose);
-}
-
-bool mptOptimizeOrder(const MapPoint::Ptr &mpt1, const MapPoint::Ptr &mpt2)
-{
-    if(mpt1->type() < mpt1->type())
-        return true;
-    else if(mpt1->type() == mpt1->type())
-    {
-        if(mpt1->last_structure_optimal_ < mpt1->last_structure_optimal_)
-            return true;
-    }
-
-    return false;
-}
-
-void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, bool report, bool verbose)
+void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size, bool report, bool verbose)
 {
     double t0 = (double)cv::getTickCount();
-    std::set<KeyFrame::Ptr> local_keyframes = keyframe->getConnectedKeyFrames(10);
+    std::set<KeyFrame::Ptr> local_keyframes = keyframe->getConnectedKeyFrames(size);
     local_keyframes.insert(keyframe);
     std::unordered_set<MapPoint::Ptr> local_mapoints;
     std::list<KeyFrame::Ptr> fixed_keyframe;
@@ -230,6 +177,59 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
                          << " (" << (t1-t0)/cv::getTickFrequency() << "ms)";
 
     reportInfo(problem, summary, report, verbose);
+}
+
+void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool report, bool verbose)
+{
+    frame->optimal_Tcw_ = frame->Tcw();
+
+    ceres::Problem problem;
+    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
+    problem.AddParameterBlock(frame->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
+
+    double scale = Config::pixelUnSigma() * 2;
+    ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
+
+    std::vector<Feature::Ptr> fts;
+    frame->getFeatures(fts);
+    for(const Feature::Ptr &ft : fts)
+    {
+        MapPoint::Ptr mpt = ft->mpt_;
+        if(mpt == nullptr)
+            continue;
+
+        mpt->optimal_pose_ = mpt->pose();
+        ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);
+        problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+        problem.SetParameterBlockConstant(mpt->optimal_pose_.data());
+    }
+
+    ceres::Solver::Options options;
+    ceres::Solver::Summary summary;
+    options.linear_solver_type = ceres::DENSE_SCHUR;
+    options.minimizer_progress_to_stdout = report & verbose;
+    options.max_linear_solver_iterations = 20;
+
+    ceres::Solve(options, &problem, &summary);
+
+    //! update pose
+    frame->setTcw(frame->optimal_Tcw_);
+
+    //! Report
+    reportInfo(problem, summary, report, verbose);
+}
+
+bool mptOptimizeOrder(const MapPoint::Ptr &mpt1, const MapPoint::Ptr &mpt2)
+{
+    if(mpt1->type() < mpt1->type())
+        return true;
+    else if(mpt1->type() == mpt1->type())
+    {
+        if(mpt1->last_structure_optimal_ < mpt1->last_structure_optimal_)
+            return true;
+    }
+
+    return false;
 }
 
 void Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool report, bool verbose)

@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
 
     std::string image_name;
     double timestamp;
-    for(size_t i = 300; i < dataset.N; i++)
+    for(size_t i = 0; i < dataset.N; i++)
     {
         dataset.readItemByIndex(i, image_name, timestamp);
         LOG(INFO) << "=== Load Image " << i << ": " << image_name << ", time: " << std::fixed <<std::setprecision(7)<< timestamp << std::endl;
@@ -29,6 +29,7 @@ int main(int argc, char *argv[])
         vo.process(image, timestamp);
     }
 
+    vo.saveTrajectoryTUM("trajectory.txt");
     cv::waitKey(0);
 
     return 0;

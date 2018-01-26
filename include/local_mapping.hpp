@@ -24,6 +24,8 @@ public:
 
     void stopMainThread();
 
+    void addOptimalizeMapPoint(const MapPoint::Ptr &mpt);
+
     static LocalMapper::Ptr create(double fps, bool report = false, bool verbose = false)
     { return LocalMapper::Ptr(new LocalMapper(fps, report, verbose));}
 
@@ -41,6 +43,8 @@ private:
 
     int createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe);
 
+    void refineMapPoints(const int max_optimalize_num = -1);
+
     void checkCulling(const KeyFrame::Ptr &keyframe);
 
 public:
@@ -52,6 +56,8 @@ private:
     struct Option{
         double min_disparity;
         int min_redundant_observations;
+        bool enable_local_ba;
+        int num_loacl_ba_kfs;
     } options_;
 
     FastDetector::Ptr fast_detector_;
@@ -64,9 +70,12 @@ private:
 
     std::shared_ptr<std::thread> mapping_thread_;
 
+    std::list<MapPoint::Ptr> optimalize_candidate_mpts_;
+
     bool stop_require_;
     std::mutex mutex_stop_;
     std::mutex mutex_keyframe_;
+    std::mutex mutex_optimalize_mpts_;
     std::condition_variable cond_process_;
 
 };

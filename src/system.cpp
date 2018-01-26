@@ -158,7 +158,7 @@ System::Status System::tracking()
         mapper_->insertKeyFrame(reference_keyframe_);
         int new_seeds = depth_filter_->createSeeds(reference_keyframe_);
 
-        LOG(INFO) << "[System] New created depth dilter seeds: " << new_seeds;
+        LOG(INFO) << "[System] New created depth filter seeds: " << new_seeds;
     }
 
     double t5 = (double)cv::getTickCount();
@@ -172,6 +172,11 @@ System::Status System::tracking()
                                       << (t5-t4)/cv::getTickFrequency() << " "
                                       << (t6-t5)/cv::getTickFrequency()
                  << ", Total: " << (t6-t0)/cv::getTickFrequency();
+
+    //！ save frame pose
+    frame_timestamp_buffer_.push_back(current_frame_->timestamp_);
+    reference_keyframe_buffer_.push_back(current_frame_->getRefKeyFrame());
+    frame_pose_buffer_.push_back(current_frame_->getRefKeyFrame()->Tcw() * current_frame_->pose());
 
     return STATUS_TRACKING_GOOD;
 }
@@ -325,6 +330,7 @@ bool System::createNewKeyFrame()
 
             ft->mpt_->addObservation(new_keyframe, ft);
             ft->mpt_->updateViewAndDepth();
+            mapper_->addOptimalizeMapPoint(ft->mpt_);
         }
         new_keyframe->updateConnections();
         reference_keyframe_ = new_keyframe;
@@ -425,6 +431,29 @@ void System::drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
 //        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
     }
 
+}
+
+void System::saveTrajectoryTUM(const std::string &file_name)
+{
+    std::ofstream f;
+    f.open(file_name.c_str());
+    f << std::fixed;
+
+    std::list<double>::iterator frame_timestamp_ptr = frame_timestamp_buffer_.begin();
+    std::list<Sophus::SE3d>::iterator frame_pose_ptr = frame_pose_buffer_.begin();
+    std::list<KeyFrame::Ptr>::iterator reference_keyframe_ptr = reference_keyframe_buffer_.begin();
+    const std::list<double>::iterator frame_timestamp = frame_timestamp_buffer_.end();
+    for(; frame_timestamp_ptr!= frame_timestamp; frame_timestamp_ptr++, frame_pose_ptr++, reference_keyframe_ptr++)
+    {
+        Sophus::SE3d frame_pose = (*reference_keyframe_ptr)->Twc() * (*frame_pose_ptr);
+        Vector3d t = frame_pose.translation();
+        Quaterniond q = frame_pose.unit_quaternion();
+
+        f << std::setprecision(6) << *frame_timestamp_ptr << " "
+          << std::setprecision(9) << t[0] << " " << t[1] << " " << t[2] << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << std::endl;
+    }
+    f.close();
+    LOG(INFO) << " Trajectory saved!";
 }
 
 }

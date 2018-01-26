@@ -29,6 +29,8 @@ LocalMapper::LocalMapper(double fps, bool report, bool verbose) :
 
     options_.min_disparity = 100;
     options_.min_redundant_observations = 3;
+    options_.enable_local_ba = Config::enableLocalBA();
+    options_.num_loacl_ba_kfs = 10;
 }
 
 void LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
@@ -42,6 +44,7 @@ void LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
     map_->insertMapPoint(mpt);
     mpt->addObservation(seed->kf, ft);
     mpt->updateViewAndDepth();
+    addOptimalizeMapPoint(mpt);
 //    std::cout << " Create new seed as mpt: " << ft->mpt_->id_ << ", " << 1.0/seed->mu << ", kf: " << seed->kf->id_ << " his: ";
 //    for(const auto his : seed->history){ std::cout << "[" << his.first << "," << his.second << "]";}
 //    std::cout << std::endl;
@@ -73,6 +76,7 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
         map_->insertMapPoint(ft->mpt_);
         ft->mpt_->resetType(MapPoint::STABLE);
         ft->mpt_->updateViewAndDepth();
+        addOptimalizeMapPoint(ft->mpt_);
     }
 
     keyframe_ref->updateConnections();
@@ -125,7 +129,12 @@ void LocalMapper::run()
             {
                 new_features = createFeatureFromLocalMap(keyframe_cur);
                 LOG_IF(INFO, report_) << "[Mapping] create " << new_features << " new feature from local map.";
-                Optimizer::localBundleAdjustment(keyframe_cur, bad_mpts, report_, verbose_);
+
+                //! refine mpts
+//                refineMapPoints();
+
+                if(options_.enable_local_ba)
+                    Optimizer::localBundleAdjustment(keyframe_cur, bad_mpts, report_, verbose_);
             }
 
             for(const MapPoint::Ptr &mpt : bad_mpts)
@@ -168,7 +177,12 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
         {
             new_features = createFeatureFromLocalMap(keyframe);
             LOG_IF(INFO, report_) << "[Mapping] create " << new_features << " new feature from local map.";
-            Optimizer::localBundleAdjustment(keyframe, bad_mpts, report_, verbose_);
+
+            //! refine mpts
+//            refineMapPoints();
+
+            if(options_.enable_local_ba)
+                Optimizer::localBundleAdjustment(keyframe, bad_mpts, report_, verbose_);
         }
 
         for(const MapPoint::Ptr &mpt : bad_mpts)
@@ -293,6 +307,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
             ft->mpt_->addObservation(keyframe, ft);
             ft->mpt_->increaseVisible(2);
             ft->mpt_->increaseFound(2);
+            addOptimalizeMapPoint(ft->mpt_);
             created_count++;
             LOG_IF(INFO, verbose_) << " create new feature from mpt " << ft->mpt_->id_;
         }
@@ -393,6 +408,8 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
                 mpt_old->fusion(mpt_new);
                 map_->removeMapPoint(mpt_new);
 
+                addOptimalizeMapPoint(mpt_old);
+
                 LOG_IF(INFO, verbose_) << " Fusion mpt " << mpt_old->id_ << " with mpt " << mpt_new->id_;
 //                goto SHOW;
             }
@@ -461,6 +478,8 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
                 mpt_new->fusion(mpt_old);
                 map_->removeMapPoint(mpt_old);
 
+                addOptimalizeMapPoint(mpt_new);
+
                 LOG_IF(INFO, verbose_) << " Fusion mpt " << mpt_new->id_ << " with mpt " << mpt_old->id_;
 //                goto SHOW;
             }
@@ -506,7 +525,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
     }
 
     double t3 = (double)cv::getTickCount();
-    LOG_IF(WARNING, report_) << "[Mapping][*] New Featrue Time: "
+    LOG_IF(WARNING, report_) << "[Mapping][1] New Featrue Time: "
                              << (t1-t0)/cv::getTickFrequency() << " "
                              << (t2-t1)/cv::getTickFrequency() << " "
                              << (t3-t2)/cv::getTickFrequency() << " "
@@ -514,6 +533,48 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
                              << ", points matched: " << new_fts.size() << " with " << created_count << " created, " << fusion_count << " fusioned. ";
 
     return 0;
+}
+
+void LocalMapper::addOptimalizeMapPoint(const MapPoint::Ptr &mpt)
+{
+    std::unique_lock<std::mutex> lock(mutex_optimalize_mpts_);
+    optimalize_candidate_mpts_.push_back(mpt);
+}
+
+void LocalMapper::refineMapPoints(const int max_optimalize_num)
+{
+    std::unordered_set<MapPoint::Ptr> mpts_for_optimizing;
+    int optilize_num = 0;
+    int remain_num = 0;
+    {
+        std::unique_lock<std::mutex> lock(mutex_optimalize_mpts_);
+
+        optilize_num = max_optimalize_num == -1 ? (int)optimalize_candidate_mpts_.size() : max_optimalize_num;
+        for(int i = 0; i < max_optimalize_num && !optimalize_candidate_mpts_.empty(); ++i)
+        {
+            mpts_for_optimizing.insert(optimalize_candidate_mpts_.front());
+            optimalize_candidate_mpts_.pop_front();
+        }
+
+        std::list<MapPoint::Ptr>::iterator mpt_ptr = optimalize_candidate_mpts_.begin();
+        for(; mpt_ptr!=optimalize_candidate_mpts_.end(); mpt_ptr++)
+        {
+            if(mpts_for_optimizing.count(*mpt_ptr))
+            {
+                mpt_ptr = optimalize_candidate_mpts_.erase(mpt_ptr);
+            }
+        }
+        remain_num = (int)optimalize_candidate_mpts_.size();
+    }
+
+    double t0 = (double)cv::getTickCount();
+    for(const MapPoint::Ptr &mpt:mpts_for_optimizing)
+    {
+        Optimizer::refineMapPoint(mpt, 10);
+    }
+    double t1 = (double)cv::getTickCount();
+    LOG_IF(WARNING, report_) << "[Mapping][2] Refine MapPoint Time: " << (t1-t0)/cv::getTickFrequency()
+                             << ", mpts: " <<optilize_num << ", remained: " << remain_num;
 }
 
 void LocalMapper::checkCulling(const KeyFrame::Ptr &keyframe)

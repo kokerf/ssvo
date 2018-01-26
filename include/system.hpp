@@ -32,6 +32,8 @@ public:
 
     System(std::string config_file);
 
+    void saveTrajectoryTUM(const std::string &file_name);
+
     ~System();
 
     void process(const cv::Mat& image, const double timestamp);

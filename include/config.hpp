@@ -67,6 +67,8 @@ public:
 
     static int minCornersPerKeyFrame(){return getInstance().mapping_min_corners;}
 
+    static bool enableLocalBA(){return getInstance().mapping_local_ba;}
+
     static int alignTopLevel(){return getInstance().align_top_level;}
 
     static int alignPatchSize(){return getInstance().align_patch_size;}
@@ -141,6 +143,7 @@ private:
         mapping_scale = (double)fs["Mapping.scale"];
         mapping_min_connection_observations = (int)fs["Mapping.min_connection_observations"];
         mapping_min_corners = (int)fs["Mapping.min_corners"];
+        mapping_local_ba = (int)fs["Mapping.use_local_ba"];
 
         //! Align
         align_top_level = (int)fs["Align.top_level"];
@@ -213,6 +216,7 @@ private:
     double mapping_scale;
     int mapping_min_connection_observations;
     int mapping_min_corners;
+    int mapping_local_ba;
 
     //! Align
     int align_top_level;
