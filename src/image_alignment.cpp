@@ -57,6 +57,7 @@ AlignSE3::AlignSE3(bool verbose, bool visible) :
 bool AlignSE3::run(Frame::Ptr reference_frame,
                    Frame::Ptr current_frame,
                    int top_level,
+                   int bottom_level,
                    int max_iterations,
                    double epslion)
 {
@@ -67,6 +68,8 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
 
     const size_t N = ref_frame_->featureNumber();
     LOG_ASSERT(N != 0) << " AlignSE3: Frame(" << reference_frame->id_ << ") " << " no features to track!";
+    const int max_level = (int)cur_frame_->images().size() - 1;
+    LOG_ASSERT(max_level >= top_level && bottom_level >= 0 && bottom_level <= top_level) << " Error align level from top " << top_level << " to bottom " << bottom_level;
 
     ref_feature_cache_.resize(NoChange, N);
     ref_patch_cache_.resize(N, NoChange);
@@ -75,7 +78,7 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
     T_cur_from_ref_ = cur_frame_->Tcw() * ref_frame_->pose();
     LOG_IF(INFO, verbose_) << "T_cur_from_ref_ " << T_cur_from_ref_.log().transpose();
 
-    for(int l = top_level; l >= 0; l--)
+    for(int l = top_level; l >= bottom_level; l--)
     {
         const int n = computeReferencePatches(l);
 

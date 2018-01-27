@@ -40,7 +40,7 @@ public:
     AlignSE3(bool verbose=false, bool visible=false);
 
     bool run(Frame::Ptr reference_frame, Frame::Ptr current_frame,
-             int top_level, int max_iterations = 30, double epslion = 1E-5f);
+             int top_level, int bottom_level, int max_iterations = 30, double epslion = 1E-5f);
 
 private:
 

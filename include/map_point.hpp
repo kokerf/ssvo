@@ -15,9 +15,9 @@ class MapPoint : public std::enable_shared_from_this<MapPoint>
 public:
 
     enum Type{
-        BAD = -1,
         SEED = 0,
         STABLE = 1,
+        BAD = 2,
     };
 
     typedef std::shared_ptr<MapPoint> Ptr;

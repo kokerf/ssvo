@@ -59,6 +59,7 @@ private:
     struct Option{
         int border;
         int max_matches;
+        int max_track_kfs;
     } options_;
 
     Grid grid_;

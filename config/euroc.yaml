@@ -43,10 +43,12 @@ Mapping.min_corners: 200 # min corners per keyframe
 Mapping.use_local_ba: 1
 
 # Align
-Align.top_level: 3   # not big then Image.pyramid_levels
+Align.top_level: 3   # not big than Image.pyramid_levels
+Align.bottom_level: 0   # not smaller than 0
 Align.patch_size: 4
 
 # Tracking
+Tracking.max_local_kfs: 20
 Tracking.min_quality_fts: 50
 Tracking.max_quality_drop_fts: 40
 

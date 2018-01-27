@@ -133,7 +133,7 @@ System::Status System::tracking()
     current_frame_->setPose(last_frame_->pose());
     //! alignment by SE3
     AlignSE3 align;
-    align.run(last_frame_, current_frame_, Config::alignTopLevel(), 30, 1e-8);
+    align.run(last_frame_, current_frame_, Config::alignTopLevel(), Config::alignBottomLevel(), 30, 1e-8);
 
     //! track local map
     double t2 = (double)cv::getTickCount();

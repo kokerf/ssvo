@@ -23,7 +23,7 @@ public:
 
 //    static void localBundleAdjustmentWithInvDepth(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size=10, bool report=false, bool verbose=false);
 
-    static bool refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool report=false, bool verbose=false);
+    static void refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool report=false, bool verbose=false);
 
     static Vector2d reprojectionError(const ceres::Problem &problem, ceres::ResidualBlockId id);
 

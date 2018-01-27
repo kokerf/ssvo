@@ -539,13 +539,29 @@ void LocalMapper::addOptimalizeMapPoint(const MapPoint::Ptr &mpt)
     optimalize_candidate_mpts_.push_back(mpt);
 }
 
+bool mptOptimizeOrder(const MapPoint::Ptr &mpt1, const MapPoint::Ptr &mpt2)
+{
+    if(mpt1->type() < mpt1->type())
+        return true;
+    else if(mpt1->type() == mpt1->type())
+    {
+        if(mpt1->last_structure_optimal_ < mpt1->last_structure_optimal_)
+            return true;
+    }
+
+    return false;
+}
+
 void LocalMapper::refineMapPoints(const int max_optimalize_num)
 {
+    double t0 = (double)cv::getTickCount();
+    static uint64_t optimal_time = 0;
     std::unordered_set<MapPoint::Ptr> mpts_for_optimizing;
     int optilize_num = 0;
     int remain_num = 0;
     {
         std::unique_lock<std::mutex> lock(mutex_optimalize_mpts_);
+        optimalize_candidate_mpts_.sort(mptOptimizeOrder);
 
         optilize_num = max_optimalize_num == -1 ? (int)optimalize_candidate_mpts_.size() : max_optimalize_num;
         for(int i = 0; i < optilize_num && !optimalize_candidate_mpts_.empty(); ++i)
@@ -567,16 +583,41 @@ void LocalMapper::refineMapPoints(const int max_optimalize_num)
         remain_num = (int)optimalize_candidate_mpts_.size();
     }
 
-    double t0 = (double)cv::getTickCount();
+    std::set<KeyFrame::Ptr> changed_keyframes;
     for(const MapPoint::Ptr &mpt:mpts_for_optimizing)
     {
-        bool isGood = Optimizer::refineMapPoint(mpt, 10);
-        if(!isGood)
-            map_->removeMapPoint(mpt);
+        Optimizer::refineMapPoint(mpt, 10);
+
+        const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+        double max_residual = Config::pixelUnSigma2() * 2;
+        for(const auto &item : obs)
+        {
+            double residual = utils::reprojectError(item.second->fn_.head<2>(), item.first->Tcw(), mpt->pose());
+            if(residual < max_residual)
+                continue;
+
+            mpt->removeObservation(item.first);
+            changed_keyframes.insert(item.first);
+
+            if(mpt->type() == MapPoint::BAD)
+                map_->removeMapPoint(mpt);
+            else if(mpt->type() == MapPoint::SEED)
+                mpt->resetType(MapPoint::STABLE);
+
+            mpt->last_structure_optimal_ = optimal_time;
+        }
     }
+
+    optimal_time++;
+
+    for(const KeyFrame::Ptr &kf : changed_keyframes)
+    {
+        kf->updateConnections();
+    }
+
     double t1 = (double)cv::getTickCount();
-    LOG_IF(WARNING, report_) << "[Mapping][2] Refine MapPoint Time: " << (t1-t0)/cv::getTickFrequency()
-                             << ", mpts: " <<optilize_num << ", remained: " << remain_num;
+    LOG_IF(WARNING, report_) << "[Mapping][2] Refine MapPoint Time: " << (t1-t0)*1000/cv::getTickFrequency()
+                             << "ms, mpts: " << mpts_for_optimizing.size() << ", remained: " << remain_num;
 }
 
 void LocalMapper::checkCulling(const KeyFrame::Ptr &keyframe)

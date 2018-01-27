@@ -57,7 +57,7 @@ int main(int argc, char const *argv[])
     mpt->addObservation(kf1, ft1);
     mpt->addObservation(kf2, ft2);
     mpt->addObservation(kf3, ft3);
-    Eigen::Vector3d pose_noise(pose[0]+0.011, pose[1]-0.001, pose[2]+20);
+    Eigen::Vector3d pose_noise(pose[0]+0.011, pose[1]-0.001, pose[2]+2);
     mpt->setPose(pose_noise);
 
     double rpj_err_pre = 0;
@@ -65,7 +65,9 @@ int main(int argc, char const *argv[])
     rpj_err_pre += utils::reprojectError(ft2->fn_.head<2>(), kf2->Tcw(), mpt->pose());
     rpj_err_pre += utils::reprojectError(ft3->fn_.head<2>(), kf3->Tcw(), mpt->pose());
 
-    Optimizer::refineMapPoint(mpt, 10, true, true);
+    double t0 = (double)cv::getTickCount();
+    Optimizer::refineMapPoint(mpt, 10, false, false);
+    double t1 = (double)cv::getTickCount();
 
     double rpj_err_aft = 0;
     rpj_err_aft += utils::reprojectError(ft1->fn_.head<2>(), kf1->Tcw(), mpt->pose());
@@ -82,7 +84,8 @@ int main(int argc, char const *argv[])
     std::cout << "nose pose: " << pose_noise.transpose()
               << "\ntrue pose: " << pose.transpose()
               << "\nestm pose: " << mpt->pose().transpose() << std::endl;
-    std::cout << "Reproject Error changed from " << rpj_err_pre << " to " << rpj_err_aft << std::endl;
+    std::cout << "Reproject Error changed from " << rpj_err_pre << " to " << rpj_err_aft << " time: "
+              << (t1-t0)*1000/cv::getTickFrequency() << "ms" << std::endl;
 
     return 0;
 }

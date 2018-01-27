@@ -372,22 +372,10 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool report,
     reportInfo(problem, summary, report, verbose);
 }
 
-bool mptOptimizeOrder(const MapPoint::Ptr &mpt1, const MapPoint::Ptr &mpt2)
+void Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool report, bool verbose)
 {
-    if(mpt1->type() < mpt1->type())
-        return true;
-    else if(mpt1->type() == mpt1->type())
-    {
-        if(mpt1->last_structure_optimal_ < mpt1->last_structure_optimal_)
-            return true;
-    }
 
-    return false;
-}
-
-//#define INVERSE_PARAMETERS
-bool Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool report, bool verbose)
-{
+#if 0
     ceres::Problem problem;
     double scale = Config::pixelUnSigma() * 2;
     ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
@@ -396,9 +384,7 @@ bool Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool repo
     const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
     const KeyFrame::Ptr kf_ref = mpt->getReferenceKeyFrame();
 
-#ifndef INVERSE_PARAMETERS
     mpt->optimal_pose_ = mpt->pose();
-#endif
 
     for(const auto &obs_item : obs)
     {
@@ -406,24 +392,9 @@ bool Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool repo
         const Feature::Ptr &ft = obs_item.second;
         kf->optimal_Tcw_ = kf->Tcw();
 
-#ifdef INVERSE_PARAMETERS
-        const Vector3d pose_ref = kf->Tcw() * mpt->pose();
-        mpt->optimal_pose_ << pose_ref[0]/pose_ref[2], pose_ref[1]/pose_ref[2], 1.0/pose_ref[2];
-        if(kf == kf_ref)
-        {
-            ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
-            problem.AddParameterBlock(kf_ref->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
-            problem.SetParameterBlockConstant(kf_ref->optimal_Tcw_.data());
-            continue;
-        }
-        ceres::CostFunction *cost_function = ceres_slover::ReprojectionErrorSE3InvPoint::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);
-        problem.AddResidualBlock(cost_function, lossfunction, kf_ref->optimal_Tcw_.data(), kf->optimal_Tcw_.data(), mpt->optimal_pose_.data());
-        problem.SetParameterBlockConstant(kf->optimal_Tcw_.data());
-#else
         ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);
         problem.AddResidualBlock(cost_function, lossfunction, kf->optimal_Tcw_.data(), mpt->optimal_pose_.data());
         problem.SetParameterBlockConstant(kf->optimal_Tcw_.data());
-#endif
     }
 
     ceres::Solver::Options options;
@@ -434,39 +405,88 @@ bool Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool repo
 
     ceres::Solve(options, &problem, &summary);
 
-#ifdef INVERSE_PARAMETERS
-    const Vector3d new_pose_ref(mpt->optimal_pose_[0]/mpt->optimal_pose_[2], mpt->optimal_pose_[1]/mpt->optimal_pose_[2], 1.0/mpt->optimal_pose_[2]);
-    mpt->setPose(kf_ref->Twc() * new_pose_ref);
-#else
     mpt->setPose(mpt->optimal_pose_);
-#endif
 
-    std::set<KeyFrame::Ptr> changed_keyframes;
-    double max_residual = Config::pixelUnSigma2() * 2;
+    reportInfo(problem, summary, report, verbose);
+#else
 
-    bool isGood = true;
-    for(const auto &item : obs)
+    double t0 = (double)cv::getTickCount();
+    mpt->optimal_pose_ = mpt->pose();
+    Vector3d pose_last = mpt->optimal_pose_;
+    const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+    const size_t n_obs = obs.size();
+
+    Matrix3d A;
+    Vector3d b;
+    double init_chi2 = std::numeric_limits<double>::max();
+    double last_chi2 = std::numeric_limits<double>::max();
+    const double EPS = 1E-10;
+
+    const bool progress_out = report&verbose;
+    bool convergence = false;
+    int i = 0;
+    for(; i < max_iter; ++i)
     {
-        double residual = utils::reprojectError(item.second->fn_.head<2>(), item.first->Tcw(), mpt->pose());
-        if(residual < max_residual)
-            continue;
+        A.setZero();
+        b.setZero();
+        double new_chi2 = 0.0;
 
-        mpt->removeObservation(item.first);
-        changed_keyframes.insert(item.first);
-
-        if(mpt->type() == MapPoint::BAD)
+        //! compute res
+        for(const auto &obs_item : obs)
         {
-            isGood = false;
+            const SE3d Tcw = obs_item.first->Tcw();
+            const Vector2d fn = obs_item.second->fn_.head<2>();
+
+            const Vector3d point(Tcw * mpt->optimal_pose_);
+            const Vector2d resduial(point.head<2>()/point[2] - fn);
+
+            new_chi2 += resduial.squaredNorm();
+
+            Eigen::Matrix<double, 2, 3> Jacobain;
+
+            const double z_inv = 1.0 / point[2];
+            const double z_inv2 = z_inv*z_inv;
+            Jacobain << z_inv, 0.0, -point[0]*z_inv2, 0.0, z_inv, -point[1]*z_inv2;
+
+            Jacobain = Jacobain * Tcw.rotationMatrix();
+
+            A.noalias() += Jacobain.transpose() * Jacobain;
+            b.noalias() -= Jacobain.transpose() * resduial;
+        }
+
+        if(i == 0)  {init_chi2 = new_chi2;}
+
+        if(last_chi2 < new_chi2)
+        {
+            LOG_IF(INFO, progress_out) << "iter " << std::setw(2) << i << ": failure, chi2: " << std::scientific << std::setprecision(6) << new_chi2/n_obs;
+            mpt->setPose(pose_last);
+            return;
+        }
+
+        last_chi2 = new_chi2;
+
+        const Vector3d dp(A.ldlt().solve(b));
+
+        pose_last = mpt->optimal_pose_;
+        mpt->optimal_pose_.noalias() += dp;
+
+        LOG_IF(INFO, progress_out) << "iter " << std::setw(2) << i << ": success, chi2: " << std::scientific << std::setprecision(6) << new_chi2/n_obs << ", step: " << dp.transpose();
+
+        if(dp.norm() <= EPS)
+        {
+            convergence = true;
+            break;
         }
     }
 
-    for(const KeyFrame::Ptr &kf : changed_keyframes)
-    {
-        kf->updateConnections();
-    }
+    mpt->setPose(mpt->optimal_pose_);
+    double t1 = (double)cv::getTickCount();
+    LOG_IF(INFO, report) << std::scientific  << "[Optimizer] MapPoint " << mpt->id_
+                         << " Error(MSE) changed from " << std::scientific << init_chi2/n_obs << " to " << last_chi2/n_obs
+                         << ", time: " << std::fixed << (t1-t0)*1000/cv::getTickFrequency() << "ms, "
+                         << (convergence? "Convergence" : "Unconvergence");
 
-    reportInfo(problem, summary, report, verbose);
-    return isGood;
+#endif
 }
 
 Vector2d Optimizer::reprojectionError(const ceres::Problem& problem, ceres::ResidualBlockId id)

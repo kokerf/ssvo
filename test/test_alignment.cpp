@@ -318,7 +318,7 @@ int main(int argc, char *argv[])
     {
         frame1->setPose(Matrix3d::Identity(), Vector3d(0.0,0.0,0.0));
         AlignSE3 align(false, false);
-        align.run(frame0, frame1, 3, 30, 1e-6);
+        align.run(frame0, frame1, 3, 0, 30, 1e-6);
     }
     std::cout << "Time(ms): " << (cv::getTickCount()-t0)/cv::getTickFrequency() << std::endl;
 

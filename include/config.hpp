@@ -71,7 +71,11 @@ public:
 
     static int alignTopLevel(){return getInstance().align_top_level;}
 
+    static int alignBottomLevel(){return getInstance().align_bottom_level;}
+
     static int alignPatchSize(){return getInstance().align_patch_size;}
+
+    static int maxTrackKeyFrames(){return getInstance().max_local_kfs;}
 
     static int minQualityFts(){return getInstance().min_quality_fts;}
 
@@ -148,9 +152,12 @@ private:
         //! Align
         align_top_level = (int)fs["Align.top_level"];
         align_top_level = MIN(align_top_level, top_level);
+        align_bottom_level = (int)fs["Align.bottom_level"];
+        align_bottom_level - MAX(align_bottom_level, 0);
         align_patch_size = (int)fs["Align.patch_size"];
 
         //! Tracking
+        max_local_kfs = (int)fs["Tracking.max_local_kfs"];
         min_quality_fts = (int)fs["Tracking.min_quality_fts"];
         max_quality_drop_fts = (int)fs["Tracking.max_quality_drop_fts"];
 
@@ -220,9 +227,11 @@ private:
 
     //! Align
     int align_top_level;
+    int align_bottom_level;
     int align_patch_size;
 
     //! Tracking
+    int max_local_kfs;
     int min_quality_fts;
     int max_quality_drop_fts;
 
