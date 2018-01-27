@@ -45,6 +45,12 @@ bool MapPoint::isBad()
     return type_ == BAD;
 }
 
+KeyFrame::Ptr MapPoint::getReferenceKeyFrame()
+{
+    std::lock_guard<std::mutex> lock(mutex_obs_);
+    return refKF_;
+}
+
 void MapPoint::addObservation(const KeyFrame::Ptr &kf, const Feature::Ptr &ft)
 {
     LOG_ASSERT(kf && kf) << " Error input kf: " << kf << ", or ft: " << ft;

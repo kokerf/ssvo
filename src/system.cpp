@@ -149,6 +149,7 @@ System::Status System::tracking()
     double t3 = (double)cv::getTickCount();
     LOG(WARNING) << "[System] Motion-Only BA";
     Optimizer::motionOnlyBundleAdjustment(current_frame_, true);
+    mapper_->refineMapPoints(20);
     LOG(WARNING) << "[System] Finish Motion-Only BA";
     double t4 = (double)cv::getTickCount();
 

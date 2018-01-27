@@ -34,6 +34,8 @@ public:
 
     void resetType(Type type);
 
+    KeyFramePtr getReferenceKeyFrame();
+
     bool fusion(const MapPoint::Ptr &mpt);
 
     void addObservation(const KeyFramePtr &kf, const Feature::Ptr &ft);
@@ -98,6 +100,7 @@ public:
     static const double log_level_factor_;
 
     Vector3d optimal_pose_;
+    double optimal_inv_z_;
     uint64_t last_structure_optimal_;
 
 private:

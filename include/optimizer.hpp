@@ -21,7 +21,9 @@ public:
 
     static void localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size=10, bool report=false, bool verbose=false);
 
-    static void refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool report=false, bool verbose=false);
+//    static void localBundleAdjustmentWithInvDepth(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size=10, bool report=false, bool verbose=false);
+
+    static bool refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool report=false, bool verbose=false);
 
     static Vector2d reprojectionError(const ceres::Problem &problem, ceres::ResidualBlockId id);
 
@@ -145,6 +147,154 @@ private:
 
 }; // class ReprojectionErrorSE3
 
+class ReprojectionErrorSE3InvDepth : public ceres::SizedCostFunction<2, 7, 7, 1>
+{
+public:
+
+    ReprojectionErrorSE3InvDepth(double observed_x_ref, double observed_y_ref, double observed_x_cur, double observed_y_cur)
+        : observed_x_ref_(observed_x_ref), observed_y_ref_(observed_y_ref),
+          observed_x_cur_(observed_x_cur), observed_y_cur_(observed_y_cur) {}
+
+    virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
+    {
+
+        Eigen::Map<const Sophus::SE3d> T_ref(parameters[0]);
+        Eigen::Map<const Sophus::SE3d> T_cur(parameters[1]);
+        const double inv_z = parameters[2][0];
+
+        const Eigen::Vector3d p_ref(observed_x_ref_/inv_z, observed_y_ref_/inv_z, 1.0/inv_z);
+        const Sophus::SE3d T_cur_ref = T_cur * T_ref.inverse();
+        const Eigen::Vector3d p_cur = T_cur_ref * p_ref;
+
+        const double predicted_x =  p_cur[0] / p_cur[2];
+        const double predicted_y =  p_cur[1] / p_cur[2];
+        residuals[0] = predicted_x - observed_x_cur_;
+        residuals[1] = predicted_y - observed_y_cur_;
+
+        if(!jacobians) return true;
+        double* jacobian0 = jacobians[0];
+        double* jacobian1 = jacobians[1];
+        double* jacobian2 = jacobians[2];
+
+        //! The point observed is in the normalized plane
+        Eigen::Matrix<double, 2, 3, Eigen::RowMajor> Jproj;
+
+        const double z_inv = 1.0 / p_cur[2];
+        const double z_inv2 = z_inv*z_inv;
+        Jproj << z_inv, 0.0, -p_cur[0]*z_inv2,
+            0.0, z_inv, -p_cur[1]*z_inv2;
+
+        if(jacobian0 != nullptr)
+        {
+            Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor> > JRse3(jacobian0);
+            JRse3.setZero();
+            Eigen::Matrix<double, 2, 3, Eigen::RowMajor> JRP = Jproj*T_cur_ref.rotationMatrix();
+            JRse3.block<2,3>(0,0) = -JRP;
+            JRse3.block<2,3>(0,3) = JRP*Sophus::SO3d::hat(p_ref);
+        }
+        if(jacobian1 != nullptr)
+        {
+            Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor> > JCse3(jacobian1);
+            JCse3.setZero();
+            JCse3.block<2,3>(0,0) = Jproj;
+            JCse3.block<2,3>(0,3) = Jproj*Sophus::SO3d::hat(-p_cur);
+        }
+        if(jacobian2 != nullptr)
+        {
+//            Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > Jp(jacobian2);
+//            Eigen::Matrix3d Jpp(T_cur_ref.rotationMatrix());
+//            Jpp.col(2) = T_cur_ref.rotationMatrix() * (-p_ref);
+//            Jp.noalias() = Jproj * Jpp * p_ref[2];
+            Eigen::Map<Eigen::RowVector2d> Jp(jacobian2);
+            Jp = Jproj * T_cur_ref.rotationMatrix() * p_ref * (-1.0/inv_z);
+        }
+        return true;
+    }
+
+    static inline ceres::CostFunction *Create(double observed_x_ref, double observed_y_ref,
+                                              double observed_x_cur, double observed_y_cur) {
+        return (new ReprojectionErrorSE3InvDepth(observed_x_ref, observed_y_ref, observed_x_cur, observed_y_cur));
+    }
+
+private:
+
+    double observed_x_ref_;
+    double observed_y_ref_;
+    double observed_x_cur_;
+    double observed_y_cur_;
+
+};
+
+class ReprojectionErrorSE3InvPoint : public ceres::SizedCostFunction<2, 7, 7, 3>
+{
+public:
+
+    ReprojectionErrorSE3InvPoint(double observed_x, double observed_y)
+        : observed_x_(observed_x), observed_y_(observed_y){}
+
+    virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
+    {
+        Eigen::Map<const Sophus::SE3d> T_ref(parameters[0]);
+        Eigen::Map<const Sophus::SE3d> T_cur(parameters[1]);
+        Eigen::Map<const Eigen::Vector3d> inv_p(parameters[2]);
+        Sophus::SE3d T_cur_ref = T_cur * T_ref.inverse();
+
+        const Eigen::Vector3d p_ref(inv_p[0] / inv_p[2], inv_p[1] / inv_p[2], 1.0 / inv_p[2]);
+        const Eigen::Vector3d p_cur = T_cur_ref * p_ref;
+
+        const double predicted_x =  p_cur[0] / p_cur[2];
+        const double predicted_y =  p_cur[1] / p_cur[2];
+        residuals[0] = predicted_x - observed_x_;
+        residuals[1] = predicted_y - observed_y_;
+
+        if(!jacobians) return true;
+        double* jacobian0 = jacobians[0];
+        double* jacobian1 = jacobians[1];
+        double* jacobian2 = jacobians[2];
+
+        //! The point observed is in the normalized plane
+        Eigen::Matrix<double, 2, 3, Eigen::RowMajor> Jproj;
+
+        const double z_inv = 1.0 / p_cur[2];
+        const double z_inv2 = z_inv*z_inv;
+        Jproj << z_inv, 0.0, -p_cur[0]*z_inv2,
+            0.0, z_inv, -p_cur[1]*z_inv2;
+
+        if(jacobian0 != nullptr)
+        {
+            Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor> > JRse3(jacobian0);
+            JRse3.setZero();
+            Eigen::Matrix<double, 2, 3, Eigen::RowMajor> JRP = Jproj*T_cur_ref.rotationMatrix();
+            JRse3.block<2,3>(0,0) = -JRP;
+            JRse3.block<2,3>(0,3) = JRP*Sophus::SO3d::hat(p_ref);
+        }
+        if(jacobian1 != nullptr)
+        {
+            Eigen::Map<Eigen::Matrix<double, 2, 7, Eigen::RowMajor> > JCse3(jacobian1);
+            JCse3.setZero();
+            JCse3.block<2,3>(0,0) = Jproj;
+            JCse3.block<2,3>(0,3) = Jproj*Sophus::SO3d::hat(-p_cur);
+        }
+        if(jacobian2 != nullptr)
+        {
+            Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor> > Jp(jacobian2);
+            Eigen::Matrix3d Jpp(T_cur_ref.rotationMatrix());
+            Jpp.col(2) = T_cur_ref.rotationMatrix() * (-p_ref);
+            Jp.noalias() = Jproj * Jpp * p_ref[2];
+        }
+        return true;
+    }
+
+    static inline ceres::CostFunction *Create(double observed_x, double observed_y) {
+        return (new ReprojectionErrorSE3InvPoint(observed_x, observed_y));
+    }
+
+private:
+
+    double observed_x_;
+    double observed_y_;
+
+};
 
 
 }//! namespace ceres

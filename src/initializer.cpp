@@ -300,8 +300,6 @@ Initializer::Result Initializer::addImage(Frame::Ptr frame_cur)
     bool succeed = utils::Fundamental::findFundamentalMat(cand_ref_->fts, cand_cur_->fts, E, inliers_,
                                                                Config::pixelUnSigma2(), Config::initMaxRansacIters(), true);
 
-    std::cout << "E\n" << E << std::endl;
-
     cand_cur_->updateInliers(inliers_);
     int inliers_count = std::count(inliers_.begin(), inliers_.end(), true);
     LOG_IF(INFO, verbose_) << "[INIT][3] Inliers after epipolar geometry check: " << inliers_count;

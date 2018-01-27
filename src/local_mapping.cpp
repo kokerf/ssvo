@@ -130,11 +130,10 @@ void LocalMapper::run()
                 new_features = createFeatureFromLocalMap(keyframe_cur);
                 LOG_IF(INFO, report_) << "[Mapping] create " << new_features << " new feature from local map.";
 
-                //! refine mpts
-//                refineMapPoints();
-
                 if(options_.enable_local_ba)
-                    Optimizer::localBundleAdjustment(keyframe_cur, bad_mpts, report_, verbose_);
+                    Optimizer::localBundleAdjustment(keyframe_cur, bad_mpts, options_.num_loacl_ba_kfs, report_, verbose_);
+                else
+                    Optimizer::motionOnlyBundleAdjustment(keyframe_cur, true);
             }
 
             for(const MapPoint::Ptr &mpt : bad_mpts)
@@ -178,11 +177,10 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
             new_features = createFeatureFromLocalMap(keyframe);
             LOG_IF(INFO, report_) << "[Mapping] create " << new_features << " new feature from local map.";
 
-            //! refine mpts
-//            refineMapPoints();
-
             if(options_.enable_local_ba)
-                Optimizer::localBundleAdjustment(keyframe, bad_mpts, report_, verbose_);
+                Optimizer::localBundleAdjustment(keyframe, bad_mpts, options_.num_loacl_ba_kfs, report_, verbose_);
+            else
+                Optimizer::motionOnlyBundleAdjustment(keyframe, true);
         }
 
         for(const MapPoint::Ptr &mpt : bad_mpts)
@@ -550,9 +548,11 @@ void LocalMapper::refineMapPoints(const int max_optimalize_num)
         std::unique_lock<std::mutex> lock(mutex_optimalize_mpts_);
 
         optilize_num = max_optimalize_num == -1 ? (int)optimalize_candidate_mpts_.size() : max_optimalize_num;
-        for(int i = 0; i < max_optimalize_num && !optimalize_candidate_mpts_.empty(); ++i)
+        for(int i = 0; i < optilize_num && !optimalize_candidate_mpts_.empty(); ++i)
         {
-            mpts_for_optimizing.insert(optimalize_candidate_mpts_.front());
+            if(!optimalize_candidate_mpts_.front()->isBad())
+                mpts_for_optimizing.insert(optimalize_candidate_mpts_.front());
+
             optimalize_candidate_mpts_.pop_front();
         }
 
@@ -570,7 +570,9 @@ void LocalMapper::refineMapPoints(const int max_optimalize_num)
     double t0 = (double)cv::getTickCount();
     for(const MapPoint::Ptr &mpt:mpts_for_optimizing)
     {
-        Optimizer::refineMapPoint(mpt, 10);
+        bool isGood = Optimizer::refineMapPoint(mpt, 10);
+        if(!isGood)
+            map_->removeMapPoint(mpt);
     }
     double t1 = (double)cv::getTickCount();
     LOG_IF(WARNING, report_) << "[Mapping][2] Refine MapPoint Time: " << (t1-t0)/cv::getTickFrequency()

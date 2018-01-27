@@ -24,22 +24,29 @@ int main(int argc, char const *argv[])
     cv::Mat DistCoef = Config::cameraDistCoef();
 
     Camera::Ptr cam = Camera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef);
+    std::cout << "K: \n" << K << std::endl;
+    K.at<double>(0,0) += 0.5;
+    K.at<double>(0,2) -= 0.5;
+    K.at<double>(1,1) += 1.5;
+    K.at<double>(1,2) += 1.0;
+    std::cout << "K with noise: \n" << K << std::endl;
+    Camera::Ptr cam_err = Camera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef);
     cv::Mat img = cv::Mat(width, height, CV_8UC1);
 
-    KeyFrame::Ptr kf1 = KeyFrame::create(Frame::create(img, 0, cam));
-    KeyFrame::Ptr kf2 = KeyFrame::create(Frame::create(img, 0, cam));
-    KeyFrame::Ptr kf3 = KeyFrame::create(Frame::create(img, 0, cam));
+    KeyFrame::Ptr kf1 = KeyFrame::create(Frame::create(img, 0, cam_err));
+    KeyFrame::Ptr kf2 = KeyFrame::create(Frame::create(img, 0, cam_err));
+    KeyFrame::Ptr kf3 = KeyFrame::create(Frame::create(img, 0, cam_err));
 
     kf1->setPose(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.0,0.0,0.0));
     kf2->setPose(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.1,0.0,0.0));
     kf3->setPose(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.2,0.0,0.0));
 
-    Eigen::Vector3d pose(0.1, 0.3, 3);
+    Eigen::Vector3d pose(10, 3, 30);
     MapPoint::Ptr mpt = MapPoint::create(pose);
 
-    Eigen::Vector2d px1 = kf1->cam_->project(kf1->Tcw() * pose);
-    Eigen::Vector2d px2 = kf1->cam_->project(kf2->Tcw() * pose);
-    Eigen::Vector2d px3 = kf1->cam_->project(kf3->Tcw() * pose);
+    Eigen::Vector2d px1 = cam->project(kf1->Tcw() * pose);
+    Eigen::Vector2d px2 = cam->project(kf2->Tcw() * pose);
+    Eigen::Vector2d px3 = cam->project(kf3->Tcw() * pose);
     std::cout << "px1: " << px1.transpose() << std::endl;
     std::cout << "px2: " << px2.transpose() << std::endl;
     std::cout << "px3: " << px3.transpose() << std::endl;
@@ -50,7 +57,8 @@ int main(int argc, char const *argv[])
     mpt->addObservation(kf1, ft1);
     mpt->addObservation(kf2, ft2);
     mpt->addObservation(kf3, ft3);
-    mpt->setPose(pose[0]+0.001, pose[1]-0.001, pose[2]+0.05);
+    Eigen::Vector3d pose_noise(pose[0]+0.011, pose[1]-0.001, pose[2]+20);
+    mpt->setPose(pose_noise);
 
     double rpj_err_pre = 0;
     rpj_err_pre += utils::reprojectError(ft1->fn_.head<2>(), kf1->Tcw(), mpt->pose());
@@ -71,6 +79,9 @@ int main(int argc, char const *argv[])
     std::cout << "px2: " << px21.transpose() << std::endl;
     std::cout << "px3: " << px31.transpose() << std::endl;
 
+    std::cout << "nose pose: " << pose_noise.transpose()
+              << "\ntrue pose: " << pose.transpose()
+              << "\nestm pose: " << mpt->pose().transpose() << std::endl;
     std::cout << "Reproject Error changed from " << rpj_err_pre << " to " << rpj_err_aft << std::endl;
 
     return 0;

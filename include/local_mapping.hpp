@@ -26,6 +26,8 @@ public:
 
     void addOptimalizeMapPoint(const MapPoint::Ptr &mpt);
 
+    void refineMapPoints(const int max_optimalize_num = -1);
+
     static LocalMapper::Ptr create(double fps, bool report = false, bool verbose = false)
     { return LocalMapper::Ptr(new LocalMapper(fps, report, verbose));}
 
@@ -42,8 +44,6 @@ private:
     KeyFrame::Ptr checkNewKeyFrame();
 
     int createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe);
-
-    void refineMapPoints(const int max_optimalize_num = -1);
 
     void checkCulling(const KeyFrame::Ptr &keyframe);
 
