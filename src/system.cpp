@@ -147,17 +147,19 @@ System::Status System::tracking()
 
     //! motion-only BA
     double t3 = (double)cv::getTickCount();
-    LOG(WARNING) << "[System] Motion-Only BA";
+    LOG(WARNING) << "[System] Struct refine & Motion-Only BA";
+    mapper_->refineMapPoints(30);
     Optimizer::motionOnlyBundleAdjustment(current_frame_, true);
-    mapper_->refineMapPoints(20);
-    LOG(WARNING) << "[System] Finish Motion-Only BA";
+    LOG(WARNING) << "[System] Finish Struct refine & Motion-Only BA";
     double t4 = (double)cv::getTickCount();
 
     depth_filter_->insertFrame(current_frame_);
     if(createNewKeyFrame())
     {
+//        depth_filter_->getSeedsForMapping(reference_keyframe_, current_frame_);
         mapper_->insertKeyFrame(reference_keyframe_);
-        int new_seeds = depth_filter_->createSeeds(reference_keyframe_);
+        int new_seeds = depth_filter_->createSeeds(reference_keyframe_, current_frame_);
+        depth_filter_->perprocessSeeds(reference_keyframe_);
 
         LOG(INFO) << "[System] New created depth filter seeds: " << new_seeds;
     }
@@ -423,7 +425,7 @@ void System::drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
     {
         Seed::Ptr seed = ft->seed_;
         cv::Point2f px(ft->px_[0], ft->px_[1]);
-        double convergence = seed->z_range/std::sqrt(seed->sigma2);
+        double convergence = 0;
         double scale = MIN(convergence, 256.0) / 256.0;
         cv::Scalar color(255*scale, 0, 255*(1-scale));
         cv::circle(dst, px, 2, color, -1);

@@ -43,6 +43,8 @@ private:
 
     KeyFrame::Ptr checkNewKeyFrame();
 
+    int createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe);
+
     int createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe);
 
     void checkCulling(const KeyFrame::Ptr &keyframe);

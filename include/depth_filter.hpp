@@ -21,7 +21,11 @@ public:
 
     void insertFrame(const Frame::Ptr &frame);
 
-    int createSeeds(const KeyFrame::Ptr &kf, const Frame::Ptr &frame = nullptr);
+    int getSeedsForMapping(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame);
+
+    int createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame = nullptr);
+
+    void perprocessSeeds(const KeyFrame::Ptr &keyframe);
 
     void enableTrackThread();
 
@@ -67,9 +71,9 @@ private:
         int max_features;
         double max_epl_length;
         double epl_dist2_threshold;
-        double seed_converge_threshold;
         double klt_epslion;
         double align_epslion;
+        double px_error_normlized;
         double min_disparity;
         double min_track_features;
     } options_;
@@ -79,6 +83,7 @@ private:
     Map::Ptr map_;
 
     std::deque<Frame::Ptr> frames_buffer_;
+    std::deque<Frame::Ptr> passed_frames_buffer_;
     std::deque<std::pair<KeyFrame::Ptr, std::shared_ptr<Seeds> > > seeds_buffer_;
     Seeds tracked_seeds_;
 

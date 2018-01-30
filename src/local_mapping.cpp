@@ -38,7 +38,7 @@ void LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
     //! create new feature
     // TODO add_observation 不用，需不需要找一下其他关键帧是否观测改点，增加约束
     // TODO 把这部分放入一个队列，在单独线程进行处理
-    MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->mu));
+    MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->getInvDepth()));
     Feature::Ptr ft = Feature::create(seed->px_ref, seed->fn_ref, seed->level_ref, mpt);
     seed->kf->addFeature(ft);
     map_->insertMapPoint(mpt);
@@ -124,11 +124,13 @@ void LocalMapper::run()
         if(keyframe_cur)
         {
             std::list<MapPoint::Ptr> bad_mpts;
-            int new_features = 0;
+            int new_seed_features = 0;
+            int new_local_features = 0;
             if(map_->kfs_.size() > 2)
             {
-                new_features = createFeatureFromLocalMap(keyframe_cur);
-                LOG_IF(INFO, report_) << "[Mapping] create " << new_features << " new feature from local map.";
+                new_seed_features = createFeatureFromSeedFeature(keyframe_cur);
+                new_local_features = createFeatureFromLocalMap(keyframe_cur);
+                LOG_IF(INFO, report_) << "[Mapping] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
 
                 if(options_.enable_local_ba)
                     Optimizer::localBundleAdjustment(keyframe_cur, bad_mpts, options_.num_loacl_ba_kfs, report_, verbose_);
@@ -171,11 +173,13 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
     else
     {
         std::list<MapPoint::Ptr> bad_mpts;
-        int new_features = 0;
+        int new_seed_features = 0;
+        int new_local_features = 0;
         if(map_->kfs_.size() > 2)
         {
-            new_features = createFeatureFromLocalMap(keyframe);
-            LOG_IF(INFO, report_) << "[Mapping] create " << new_features << " new feature from local map.";
+            new_seed_features = createFeatureFromSeedFeature(keyframe);
+            new_local_features = createFeatureFromLocalMap(keyframe);
+            LOG_IF(INFO, report_) << "[Mapping] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
 
             if(options_.enable_local_ba)
                 Optimizer::localBundleAdjustment(keyframe, bad_mpts, options_.num_loacl_ba_kfs, report_, verbose_);
@@ -190,6 +194,33 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
 
 //        checkCulling();
     }
+}
+
+int LocalMapper::createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe)
+{
+    std::vector<Feature::Ptr> seeds;
+    keyframe->getSeeds(seeds);
+
+    for(const Feature::Ptr & ft_seed : seeds)
+    {
+        const Seed::Ptr &seed = ft_seed->seed_;
+        MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->getInvDepth()));
+
+        Feature::Ptr ft_ref = Feature::create(seed->px_ref, seed->fn_ref, seed->level_ref, mpt);
+        Feature::Ptr ft_cur = Feature::create(ft_seed->px_, keyframe->cam_->lift(ft_seed->px_), ft_seed->level_, mpt);
+        seed->kf->addFeature(ft_ref);
+        keyframe->addFeature(ft_cur);
+        keyframe->removeSeed(seed);
+
+        map_->insertMapPoint(mpt);
+        mpt->addObservation(seed->kf, ft_ref);
+        mpt->addObservation(keyframe, ft_cur);
+
+        mpt->updateViewAndDepth();
+        addOptimalizeMapPoint(mpt);
+    }
+
+    return (int) seeds.size();
 }
 
 int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
@@ -314,6 +345,10 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
         {
             MapPoint::Ptr mpt_new = ft->mpt_;
             MapPoint::Ptr mpt_old = old_fts[id]->mpt_;
+
+            if(mpt_new == mpt_old) //! rarely happen
+                continue;
+
             const std::map<KeyFrame::Ptr, Feature::Ptr> obs_new = mpt_new->getObservations();
             const std::map<KeyFrame::Ptr, Feature::Ptr> obs_old = mpt_old->getObservations();
 
@@ -530,7 +565,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
                              << " old points: " << mpts_cur.size() << " new projected: " << project_count << "(" << candidate_mpts.size() << ")"
                              << ", points matched: " << new_fts.size() << " with " << created_count << " created, " << fusion_count << " fusioned. ";
 
-    return 0;
+    return created_count;
 }
 
 void LocalMapper::addOptimalizeMapPoint(const MapPoint::Ptr &mpt)

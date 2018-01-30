@@ -6,6 +6,7 @@ namespace ssvo
 {
 
 uint64_t Seed::next_id = 0;
+const double Seed::convergence_rate = 1.0/200.0;
 
 //! =================================================================================================
 //! Seed
@@ -70,6 +71,7 @@ double Seed::computeVar(const SE3d &T_cur_ref, const double z, const double delt
 
 void Seed::update(const double x, const double tau2)
 {
+    std::lock_guard<std::mutex> lock(mutex_seed_);
     double norm_scale = sqrt(sigma2 + tau2);
     if(std::isnan(norm_scale))
         return;
@@ -92,7 +94,25 @@ void Seed::update(const double x, const double tau2)
     a = (e-f)/(f-e/f);
     b = a*(1.0f-f)/f;
 
-    history.emplace_back(x, 1.0/mu);
+    history.emplace_back(1.0/mu, sigma2);
+}
+
+bool Seed::checkConvergence()
+{
+    std::lock_guard<std::mutex> lock(mutex_seed_);
+    return sigma2 / z_range < convergence_rate;
+}
+
+double Seed::getInvDepth()
+{
+    std::lock_guard<std::mutex> lock(mutex_seed_);
+    return mu;
+}
+
+double Seed::getVariance()
+{
+    std::lock_guard<std::mutex> lock(mutex_seed_);
+    return sigma2;
 }
 
 }
