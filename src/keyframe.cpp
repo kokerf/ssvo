@@ -10,7 +10,7 @@ KeyFrame::KeyFrame(const Frame::Ptr frame):
     Frame(frame->images(), next_id_++, frame->timestamp_, frame->cam_), frame_id_(frame->id_)
 {
     mpt_fts_ = frame->features();
-
+    setRefKeyFrame(frame->getRefKeyFrame());
     setPose(frame->pose());
 }
 void KeyFrame::updateConnections()
