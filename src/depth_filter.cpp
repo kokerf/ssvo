@@ -107,8 +107,8 @@ void showAffine(const cv::Mat &src, const Vector2d &px_ref, const Matrix2d &A_re
 
 //! =================================================================================================
 //! DepthFilter
-DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback &callback, bool report, bool verbose) :
-    seed_coverged_callback_(callback), fast_detector_(fast_detector),
+DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const LocalMapper::Ptr &mapper, bool report, bool verbose) :
+    fast_detector_(fast_detector), mapper_(mapper),
     report_(report), verbose_(report&&verbose),
     filter_thread_(nullptr), track_thread_enabled_(true)
 
@@ -140,6 +140,9 @@ void DepthFilter::startMainThread()
 {
     if(filter_thread_ == nullptr)
         filter_thread_ = std::make_shared<std::thread>(std::bind(&DepthFilter::run, this));
+
+    if(filter_thread_sub_ == nullptr)
+        filter_thread_sub_ = std::make_shared<std::thread>(std::bind(&DepthFilter::run_sub, this));
 }
 
 void DepthFilter::stopMainThread()
@@ -150,6 +153,13 @@ void DepthFilter::stopMainThread()
         if(filter_thread_->joinable())
             filter_thread_->join();
         filter_thread_.reset();
+    }
+
+    if(filter_thread_sub_)
+    {
+        if(filter_thread_sub_->joinable())
+            filter_thread_sub_->join();
+        filter_thread_sub_.reset();
     }
 }
 
@@ -175,7 +185,7 @@ void DepthFilter::run()
             double t0 = (double)cv::getTickCount();
             int updated_count = updateSeeds(frame_cur);
             double t1 = (double)cv::getTickCount();
-            int  project_count = reprojectSeeds(frame_cur);
+            int  project_count = reprojectAllSeeds(frame_cur);
             double t2 = (double)cv::getTickCount();
             LOG_IF(WARNING, report_) << "[DepthFilter][2] Frame: " << frame_cur->id_
                                      << ", Seeds after updated: " << updated_count
@@ -187,15 +197,25 @@ void DepthFilter::run()
     }
 }
 
+void DepthFilter::run_sub()
+{
+    while(!isRequiredStop())
+    {
+        if(!perprocessSeeds(keyframe_new_))
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+}
+
 Frame::Ptr DepthFilter::checkNewFrame()
 {
-
+    static Frame::Ptr frame_last;
     std::unique_lock<std::mutex> lock(mutex_frame_);
-    cond_process_.wait_for(lock, std::chrono::milliseconds(1));
+    cond_process_main_.wait_for(lock, std::chrono::milliseconds(3));
     if(frames_buffer_.empty())
         return nullptr;
 
     Frame::Ptr frame = frames_buffer_.front();
+    passed_frames_buffer_.push_front(frame);
     frames_buffer_.pop_front();
     return frame;
 }
@@ -231,7 +251,7 @@ void DepthFilter::insertFrame(const Frame::Ptr &frame)
         double t0 = (double)cv::getTickCount();
         int updated_count = updateSeeds(frame);
         double t1 = (double)cv::getTickCount();
-        int  project_count = reprojectSeeds(frame);
+        int  project_count = reprojectAllSeeds(frame);
         double t2 = (double)cv::getTickCount();
         LOG_IF(WARNING, report_) << "[DepthFilter][2] Frame: " << frame->id_
                                  << ", Seeds after updated: " << updated_count
@@ -243,29 +263,47 @@ void DepthFilter::insertFrame(const Frame::Ptr &frame)
     {
         std::unique_lock<std::mutex> lock(mutex_frame_);
         frames_buffer_.push_back(frame);
-        cond_process_.notify_one();
+        cond_process_main_.notify_one();
     }
 }
 
-int DepthFilter::getSeedsForMapping(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame)
+void DepthFilter::insertKeyFrame(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame)
 {
-    LOG_ASSERT(keyframe) << "KeyFrame is null!";
-    LOG_ASSERT(frame) << "Frame is null!";
-
-    updateSeeds(frame);
-
-    std::vector<Feature::Ptr> seeds;
-    frame->getSeeds(seeds);
-    for(const Feature::Ptr & ft_seed : seeds)
+    int new_seeds = createSeeds(keyframe, frame);
+    mapper_->insertKeyFrame(keyframe);
+    LOG(INFO) << "[DepthFilter] New created depth filter seeds: " << new_seeds;
+    if(filter_thread_sub_ == nullptr)
     {
-        const Seed::Ptr &seed = ft_seed->seed_;
-        keyframe->addSeed(ft_seed);
-        frame->removeSeed(seed);
-        earseSeed(seed->kf, seed);
+//        perprocessSeeds(keyframe);
+    }
+    else
+    {
+        std::unique_lock<std::mutex> lock(mutex_seeds_);
+        keyframe_new_ = keyframe;
+        cond_process_sub_.notify_one();
     }
 
-    return (int) seeds.size();
 }
+
+//int DepthFilter::getSeedsForMapping(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame)
+//{
+//    LOG_ASSERT(keyframe) << "KeyFrame is null!";
+//    LOG_ASSERT(frame) << "Frame is null!";
+//
+//    updateSeeds(frame);
+//
+//    std::vector<Feature::Ptr> seeds;
+//    frame->getSeeds(seeds);
+//    for(const Feature::Ptr & ft_seed : seeds)
+//    {
+//        const Seed::Ptr &seed = ft_seed->seed_;
+//        keyframe->addSeed(ft_seed);
+//        frame->removeSeed(seed);
+//        earseSeed(seed->kf, seed);
+//    }
+//
+//    return (int) seeds.size();
+//}
 
 int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame)
 {
@@ -343,10 +381,10 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &fr
     return (int)new_seeds.size();
 }
 
-void DepthFilter::perprocessSeeds(const KeyFrame::Ptr &keyframe)
+bool DepthFilter::perprocessSeeds(const KeyFrame::Ptr &keyframe)
 {
-    if(seeds_buffer_.back().first != keyframe)
-        return;
+    if(seeds_buffer_.empty() || seeds_buffer_.back().first != keyframe)
+        return false;
 
     KeyFrame::Ptr reference_keyframe = keyframe->getRefKeyFrame();
 
@@ -364,6 +402,9 @@ void DepthFilter::perprocessSeeds(const KeyFrame::Ptr &keyframe)
         passed_frames_buffer_.pop_front();
     }
 
+    if(frame_buffer.empty())
+        return false;
+
     int project_count = 0;
     int matched_count = 0;
     for(const Frame::Ptr &frame : frame_buffer)
@@ -372,60 +413,15 @@ void DepthFilter::perprocessSeeds(const KeyFrame::Ptr &keyframe)
 
         Vector2d px_matched;
         int level_matched;
-        int matched_count_cur = 0;
-        auto seed_itr = new_seeds.begin();
-        for(; seed_itr != new_seeds.end(); )
-        {
-            const Seed::Ptr &seed = *seed_itr;
+        int matched_count_cur = reprojectSeeds(keyframe, new_seeds, frame);
 
-            project_count++;
-            bool matched = findEpipolarMatch(seed, keyframe, frame, T_cur_from_ref, px_matched, level_matched);
-            if(!matched)
-            {
-                seed_itr++;
-                continue;
-            }
-
-            //! check distance to epl, incase of the aligen draft
-            Vector2d fn_matched = frame->cam_->lift(px_matched).head<2>();
-            double dist2 = utils::Fundamental::computeErrorSquared(keyframe->pose().translation(), seed->fn_ref/seed->getInvDepth(), T_cur_from_ref, fn_matched);
-            if(dist2 > options_.epl_dist2_threshold)
-            {
-                seed_itr++;
-                continue;
-            }
-
-            double depth = -1;
-            const Vector3d fn_cur = keyframe->cam_->lift(px_matched);
-            bool succeed = utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->fn_ref, fn_cur, depth);
-            if(!succeed)
-            {
-                seed_itr++;
-                continue;
-            }
-
-//            double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
-            double tau = seed->computeVar(T_cur_from_ref, depth, options_.align_epslion*options_.px_error_normlized);
-//            tau = tau + Config::pixelUnSigma();
-            seed->update(1.0/depth, tau*tau);
-
-            //! check converge
-            if(seed->checkConvergence())
-            {
-                seed_coverged_callback_(seed);
-                seed_itr = new_seeds.erase(seed_itr);
-                continue;
-            }
-
-            matched_count++;
-            matched_count_cur++;
-            seed_itr++;
-        }
-
+        matched_count+=matched_count_cur;
         if(matched_count_cur == 0)
             break;
     }
-    LOG(ERROR) << "[DepthFilter] [*] perprocess, repj " << project_count << ", match " << matched_count;
+    LOG(ERROR) << "[DepthFilter] [*] perprocess, matched " << matched_count;
+
+    return true;
 }
 
 int DepthFilter::trackSeeds(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur) const
@@ -523,7 +519,7 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
                 //! check converge
                 if(seed->checkConvergence())
                 {
-                    seed_coverged_callback_(seed);
+                    createFeatureFromSeed(seed);
                     earseSeed(seed->kf, seed);
                     frame->removeSeed(seed);
                     continue;
@@ -537,7 +533,75 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
     return updated_count;
 }
 
-int DepthFilter::reprojectSeeds(const Frame::Ptr &frame)
+int DepthFilter::reprojectSeeds(const KeyFrame::Ptr& keyframe, Seeds &seeds, const Frame::Ptr &frame)
+{
+    SE3d T_cur_from_ref = frame->Tcw() * keyframe->pose();
+    SE3d T_ref_from_cur = T_cur_from_ref.inverse();
+
+    int project_count = 0;
+    int matched_count = 0;
+    Vector2d px_matched;
+    int level_matched;
+    auto seed_itr = seeds.begin();
+    for(; seed_itr != seeds.end();)
+    {
+        const Seed::Ptr &seed = *seed_itr;
+        if(frame->seed_tracked_.count(seed))
+        {
+            seed_itr++;
+            continue;
+        }
+
+        project_count++;
+        bool matched = findEpipolarMatch(seed, keyframe, frame, T_cur_from_ref, px_matched, level_matched);
+        if(!matched)
+        {
+            seed_itr++;
+            continue;
+        }
+
+        //! check distance to epl, incase of the aligen draft
+        Vector2d fn_matched = frame->cam_->lift(px_matched).head<2>();
+        double dist2 = utils::Fundamental::computeErrorSquared(keyframe->pose().translation(), seed->fn_ref/seed->getInvDepth(), T_cur_from_ref, fn_matched);
+        if(dist2 > options_.epl_dist2_threshold)
+        {
+            seed_itr++;
+            continue;
+        }
+
+        double depth = -1;
+        const Vector3d fn_cur = frame->cam_->lift(px_matched);
+        bool succeed = utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->fn_ref, fn_cur, depth);
+        if(!succeed)
+        {
+            seed_itr++;
+            continue;
+        }
+
+//            double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
+        double tau = seed->computeVar(T_cur_from_ref, depth, options_.align_epslion*options_.px_error_normlized);
+//            tau = tau + Config::pixelUnSigma();
+        seed->update(1.0/depth, tau*tau);
+
+        //! check converge
+        if(seed->checkConvergence())
+        {
+            createFeatureFromSeed(seed);
+            seed_itr = seeds.erase(seed_itr);
+            continue;
+        }
+
+        //! update px
+        Feature::Ptr new_ft = Feature::create(px_matched, level_matched, seed);
+        frame->addSeed(new_ft);
+        matched_count++;
+        seed_itr++;
+    }
+
+    return matched_count;
+}
+
+int DepthFilter::reprojectAllSeeds(const Frame::Ptr &frame)
 {
     //! get new seeds for track
     std::set<KeyFrame::Ptr> candidate_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_kfs);
@@ -545,84 +609,24 @@ int DepthFilter::reprojectSeeds(const Frame::Ptr &frame)
 
     std::vector<Feature::Ptr> seed_fts;
     frame->getSeeds(seed_fts);
-    std::set<Seed::Ptr> seed_tracking;
+    frame->seed_tracked_.clear();
     for(const Feature::Ptr &ft : seed_fts)
-        seed_tracking.insert(ft->seed_);
+        frame->seed_tracked_.insert(ft->seed_);
 
-    int project_count = 0;
     int matched_count = 0;
-//    static double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
     auto buffer_itr = seeds_buffer_.begin();
     for(;buffer_itr != seeds_buffer_.end();)
     {
         KeyFrame::Ptr keyframe = buffer_itr->first;
-        if(!candidate_keyframes.count(keyframe))
+        if(!candidate_keyframes.count(keyframe) || keyframe->frame_id_ == frame->id_)
         {
             buffer_itr++;
             continue;
         }
 
-        SE3d T_cur_from_ref = frame->Tcw() * keyframe->pose();
-        SE3d T_ref_from_cur = T_cur_from_ref.inverse();
         Seeds &seeds = *buffer_itr->second;
 
-        Vector2d px_matched;
-        int level_matched;
-        auto seed_itr = seeds.begin();
-        for(; seed_itr != seeds.end();)
-        {
-            const Seed::Ptr &seed = *seed_itr;
-            if(seed_tracking.count(seed))
-            {
-                seed_itr++;
-                continue;
-            }
-
-            project_count++;
-            bool matched = findEpipolarMatch(seed, keyframe, frame, T_cur_from_ref, px_matched, level_matched);
-            if(!matched)
-            {
-                seed_itr++;
-                continue;
-            }
-
-            //! check distance to epl, incase of the aligen draft
-            Vector2d fn_matched = frame->cam_->lift(px_matched).head<2>();
-            double dist2 = utils::Fundamental::computeErrorSquared(keyframe->pose().translation(), seed->fn_ref/seed->getInvDepth(), T_cur_from_ref, fn_matched);
-            if(dist2 > options_.epl_dist2_threshold)
-            {
-                seed_itr++;
-                continue;
-            }
-
-            double depth = -1;
-            const Vector3d fn_cur = frame->cam_->lift(px_matched);
-            bool succeed = utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->fn_ref, fn_cur, depth);
-            if(!succeed)
-            {
-                seed_itr++;
-                continue;
-            }
-
-//            double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
-            double tau = seed->computeVar(T_cur_from_ref, depth, options_.align_epslion*options_.px_error_normlized);
-//            tau = tau + Config::pixelUnSigma();
-            seed->update(1.0/depth, tau*tau);
-
-            //! check converge
-            if(seed->checkConvergence())
-            {
-                seed_coverged_callback_(seed);
-                seed_itr = seeds.erase(seed_itr);
-                continue;
-            }
-
-            //! update px
-            Feature::Ptr new_ft = Feature::create(px_matched, level_matched, seed);
-            frame->addSeed(new_ft);
-            matched_count++;
-            seed_itr++;
-        }
+        matched_count += reprojectSeeds(keyframe, seeds, frame);
 
         if(seeds.empty())
             buffer_itr = seeds_buffer_.erase(buffer_itr);
@@ -631,6 +635,23 @@ int DepthFilter::reprojectSeeds(const Frame::Ptr &frame)
     }
 
     return matched_count;
+}
+
+void DepthFilter::createFeatureFromSeed(const Seed::Ptr &seed)
+{
+    //! create new feature
+    // TODO add_observation 不用，需不需要找一下其他关键帧是否观测改点，增加约束
+    // TODO 把这部分放入一个队列，在单独线程进行处理
+    MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->getInvDepth()));
+    Feature::Ptr ft = Feature::create(seed->px_ref, seed->fn_ref, seed->level_ref, mpt);
+    seed->kf->addFeature(ft);
+    mapper_->map_->insertMapPoint(mpt);
+    mpt->addObservation(seed->kf, ft);
+    mpt->updateViewAndDepth();
+    mapper_->addOptimalizeMapPoint(mpt);
+    std::cout << " Create new seed as mpt: " << ft->mpt_->id_ << ", " << 1.0/seed->getInvDepth() << ", kf: " << seed->kf->id_ << " his: ";
+    for(const auto his : seed->history){ std::cout << "[" << his.first << "," << his.second << "]";}
+    std::cout << std::endl;
 }
 
 bool DepthFilter::earseSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed)

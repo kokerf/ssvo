@@ -5,6 +5,7 @@
 #include "map.hpp"
 #include "seed.hpp"
 #include "feature_detector.hpp"
+#include "local_mapping.hpp"
 
 namespace ssvo
 {
@@ -15,17 +16,17 @@ public:
 
     typedef std::shared_ptr<DepthFilter> Ptr;
 
-    typedef std::function<void (const Seed::Ptr&)> Callback;
+//    typedef std::function<void (const Seed::Ptr&)> Callback;
 
     void trackFrame(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur);
 
     void insertFrame(const Frame::Ptr &frame);
 
-    int getSeedsForMapping(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame);
+    void insertKeyFrame(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame);
 
-    int createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame = nullptr);
+//    int getSeedsForMapping(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame);
 
-    void perprocessSeeds(const KeyFrame::Ptr &keyframe);
+    bool perprocessSeeds(const KeyFrame::Ptr &keyframe);
 
     void enableTrackThread();
 
@@ -35,16 +36,18 @@ public:
 
     void stopMainThread();
 
-    static Ptr create(const FastDetector::Ptr &fast_detector, const Callback &callback, bool report = false, bool verbose = false)
-    { return Ptr(new DepthFilter(fast_detector, callback, report, verbose)); }
+    static Ptr create(const FastDetector::Ptr &fast_detector, const LocalMapper::Ptr &mapper, bool report = false, bool verbose = false)
+    { return Ptr(new DepthFilter(fast_detector, mapper, report, verbose)); }
 
 private:
 
-    DepthFilter(const FastDetector::Ptr &fast_detector, const Callback &callback, bool report, bool verbose);
+    DepthFilter(const FastDetector::Ptr &fast_detector, const LocalMapper::Ptr &mapper, bool report, bool verbose);
 
-    Callback seed_coverged_callback_;
+//    SeedCallback seed_coverged_callback_;
 
     void run();
+
+    void run_sub();
 
     void setStop();
 
@@ -52,11 +55,17 @@ private:
 
     Frame::Ptr checkNewFrame();
 
+    int createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame = nullptr);
+
     int trackSeeds(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur) const;
 
     int updateSeeds(const Frame::Ptr &frame);
 
-    int reprojectSeeds(const Frame::Ptr &frame);
+    int reprojectAllSeeds(const Frame::Ptr &frame);
+
+    int reprojectSeeds(const KeyFrame::Ptr& keyframe, Seeds& seeds, const Frame::Ptr &frame);
+
+    void createFeatureFromSeed(const Seed::Ptr &seed);
 
     bool earseSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed);
 
@@ -79,25 +88,27 @@ private:
     } options_;
 
     FastDetector::Ptr fast_detector_;
-
-    Map::Ptr map_;
+    LocalMapper::Ptr mapper_;
 
     std::deque<Frame::Ptr> frames_buffer_;
     std::deque<Frame::Ptr> passed_frames_buffer_;
     std::deque<std::pair<KeyFrame::Ptr, std::shared_ptr<Seeds> > > seeds_buffer_;
-    Seeds tracked_seeds_;
+    KeyFrame::Ptr keyframe_new_;
 
     const bool report_;
     const bool verbose_;
 
     //! main thread
     std::shared_ptr<std::thread> filter_thread_;
+    std::shared_ptr<std::thread> filter_thread_sub_;
 
     bool stop_require_;
     std::mutex mutex_stop_;
     std::mutex mutex_frame_;
+    std::mutex mutex_seeds_;
     //! track thread
-    std::condition_variable cond_process_;
+    std::condition_variable cond_process_main_;
+    std::condition_variable cond_process_sub_;
     std::future<int> seeds_track_future_;
     bool track_thread_enabled_;
 

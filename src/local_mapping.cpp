@@ -33,23 +33,6 @@ LocalMapper::LocalMapper(double fps, bool report, bool verbose) :
     options_.num_loacl_ba_kfs = 10;
 }
 
-void LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
-{
-    //! create new feature
-    // TODO add_observation 不用，需不需要找一下其他关键帧是否观测改点，增加约束
-    // TODO 把这部分放入一个队列，在单独线程进行处理
-    MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->getInvDepth()));
-    Feature::Ptr ft = Feature::create(seed->px_ref, seed->fn_ref, seed->level_ref, mpt);
-    seed->kf->addFeature(ft);
-    map_->insertMapPoint(mpt);
-    mpt->addObservation(seed->kf, ft);
-    mpt->updateViewAndDepth();
-    addOptimalizeMapPoint(mpt);
-//    std::cout << " Create new seed as mpt: " << ft->mpt_->id_ << ", " << 1.0/seed->mu << ", kf: " << seed->kf->id_ << " his: ";
-//    for(const auto his : seed->history){ std::cout << "[" << his.first << "," << his.second << "]";}
-//    std::cout << std::endl;
-}
-
 void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur)
 {
     map_->clear();
@@ -163,7 +146,10 @@ KeyFrame::Ptr LocalMapper::checkNewKeyFrame()
 
 void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
 {
-    map_->insertKeyFrame(keyframe);
+    //! incase add the same keyframe twice
+    if(!map_->insertKeyFrame(keyframe))
+        return;;
+
     if(mapping_thread_ != nullptr)
     {
         std::unique_lock<std::mutex> lock(mutex_keyframe_);

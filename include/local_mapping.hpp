@@ -4,7 +4,6 @@
 #include <future>
 #include "global.hpp"
 #include "map.hpp"
-#include "depth_filter.hpp"
 
 namespace ssvo{
 
@@ -17,8 +16,6 @@ public:
     void createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur);
 
     void insertKeyFrame(const KeyFrame::Ptr &keyframe);
-
-    void createFeatureFromSeed(const Seed::Ptr &seed);
 
     void startMainThread();
 

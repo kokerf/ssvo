@@ -8,10 +8,12 @@
 namespace ssvo{
 
 class LocalMapper;
+class DepthFilter;
 
 class Map: public noncopyable
 {
     friend class LocalMapper;
+    friend class DepthFilter;
 
 public:
     typedef std::shared_ptr<Map> Ptr;
@@ -30,7 +32,7 @@ private:
 
     void clear();
 
-    void insertKeyFrame(const KeyFrame::Ptr &kf);
+    bool insertKeyFrame(const KeyFrame::Ptr &kf);
 
     void removeKeyFrame(const KeyFrame::Ptr &kf);
 

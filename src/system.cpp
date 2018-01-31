@@ -36,12 +36,12 @@ System::System(std::string config_file) :
     feature_tracker_ = FeatureTracker::create(width, height, grid_size, image_border, true);
     initializer_ = Initializer::create(fast_detector_, true);
     mapper_ = LocalMapper::create(fps, true, false);
-    DepthFilter::Callback depth_fliter_callback = std::bind(&LocalMapper::createFeatureFromSeed, mapper_, std::placeholders::_1);
-    depth_filter_ = DepthFilter::create(fast_detector_, depth_fliter_callback, true);
+//    DepthFilter::Callback depth_fliter_callback = std::bind(&LocalMapper::createFeatureFromSeed, mapper_, std::placeholders::_1);
+    depth_filter_ = DepthFilter::create(fast_detector_, mapper_, true);
     viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));
 
     mapper_->startMainThread();
-    //    depth_filter_->startMainThread();
+//    depth_filter_->startMainThread();
 
     time_ = 1000.0/fps;
 }
@@ -114,8 +114,7 @@ System::Status System::initialize()
     reference_keyframe_ = kf1;
     last_keyframe_ = kf1;
 
-    depth_filter_->createSeeds(kf0);
-    depth_filter_->createSeeds(kf1, current_frame_);
+    depth_filter_->insertKeyFrame(kf1, current_frame_);
 
     initializer_->reset();
 
@@ -157,11 +156,7 @@ System::Status System::tracking()
     if(createNewKeyFrame())
     {
 //        depth_filter_->getSeedsForMapping(reference_keyframe_, current_frame_);
-        mapper_->insertKeyFrame(reference_keyframe_);
-        int new_seeds = depth_filter_->createSeeds(reference_keyframe_, current_frame_);
-        depth_filter_->perprocessSeeds(reference_keyframe_);
-
-        LOG(INFO) << "[System] New created depth filter seeds: " << new_seeds;
+        depth_filter_->insertKeyFrame(reference_keyframe_, current_frame_);
     }
 
     double t5 = (double)cv::getTickCount();

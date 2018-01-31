@@ -13,7 +13,7 @@ const double Seed::convergence_rate = 1.0/200.0;
 Seed::Seed(const KeyFrame::Ptr &kf, const Vector2d &px, const Vector3d &fn, const int level, double depth_mean, double depth_min) :
     id(next_id++), kf(kf), fn_ref(fn), px_ref(px), level_ref(level),
     a(10),
-    b(10),
+    b(5),
     mu(1.0/depth_mean),
     z_range(1.0/depth_min),
     sigma2(z_range*z_range)

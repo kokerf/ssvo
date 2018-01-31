@@ -126,11 +126,12 @@ public:
 
     const int max_level_;
     static const cv::Size optical_win_size_;
+    static float light_affine_a_;
+    static float light_affine_b_;
 
     SE3d optimal_Tcw_;//! for optimization
 
-    static float light_affine_a_;
-    static float light_affine_b_;
+    std::set<Seed::Ptr> seed_tracked_;
 
 protected:
 

@@ -25,6 +25,8 @@ public:
 
     const static double convergence_rate;
 
+    std::list<std::pair<double, double> > history;
+
     double computeTau(const SE3d &T_ref_cur, const Vector3d& f, const double z, const double px_error_angle);
     double computeVar(const SE3d &T_cur_ref, const double z, const double delta);
     void update(const double x, const double tau2);
@@ -42,8 +44,6 @@ private:
     double z_range;                         //!< Max range of the possible depth.
     double sigma2;                          //!< Variance of normal distribution.
     Matrix2d patch_cov;                     //!< Patch covariance in reference image.
-
-    std::list<std::pair<double, double> > history;
 
     std::mutex mutex_seed_;
 

@@ -9,6 +9,7 @@
 #include "feature_detector.hpp"
 #include "feature_tracker.hpp"
 #include "local_mapping.hpp"
+#include "depth_filter.hpp"
 #include "viewer.hpp"
 
 namespace ssvo {

@@ -10,10 +10,10 @@ void Map::clear()
     mpts_.clear();
 }
 
-void Map::insertKeyFrame(const KeyFrame::Ptr &kf)
+bool Map::insertKeyFrame(const KeyFrame::Ptr &kf)
 {
     std::lock_guard<std::mutex> lock(mutex_kf_);
-    kfs_.emplace(kf->id_, kf);
+    return kfs_.emplace(kf->id_, kf).second;
 }
 
 void Map::removeKeyFrame(const KeyFrame::Ptr &kf)
