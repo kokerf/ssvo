@@ -41,7 +41,7 @@ System::System(std::string config_file) :
     viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));
 
     mapper_->startMainThread();
-//    depth_filter_->startMainThread();
+    depth_filter_->startMainThread();
 
     time_ = 1000.0/fps;
 }

@@ -62,6 +62,8 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
         addOptimalizeMapPoint(ft->mpt_);
     }
 
+    keyframe_ref->setRefKeyFrame(keyframe_cur);
+    keyframe_cur->setRefKeyFrame(keyframe_ref);
     keyframe_ref->updateConnections();
     keyframe_cur->updateConnections();
     insertKeyFrame(keyframe_ref);

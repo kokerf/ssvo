@@ -140,9 +140,6 @@ void DepthFilter::startMainThread()
 {
     if(filter_thread_ == nullptr)
         filter_thread_ = std::make_shared<std::thread>(std::bind(&DepthFilter::run, this));
-
-    if(filter_thread_sub_ == nullptr)
-        filter_thread_sub_ = std::make_shared<std::thread>(std::bind(&DepthFilter::run_sub, this));
 }
 
 void DepthFilter::stopMainThread()
@@ -153,13 +150,6 @@ void DepthFilter::stopMainThread()
         if(filter_thread_->joinable())
             filter_thread_->join();
         filter_thread_.reset();
-    }
-
-    if(filter_thread_sub_)
-    {
-        if(filter_thread_sub_->joinable())
-            filter_thread_sub_->join();
-        filter_thread_sub_.reset();
     }
 }
 
@@ -197,15 +187,6 @@ void DepthFilter::run()
     }
 }
 
-void DepthFilter::run_sub()
-{
-    while(!isRequiredStop())
-    {
-        if(!perprocessSeeds(keyframe_new_))
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
-    }
-}
-
 Frame::Ptr DepthFilter::checkNewFrame()
 {
     static Frame::Ptr frame_last;
@@ -215,7 +196,6 @@ Frame::Ptr DepthFilter::checkNewFrame()
         return nullptr;
 
     Frame::Ptr frame = frames_buffer_.front();
-    passed_frames_buffer_.push_front(frame);
     frames_buffer_.pop_front();
     return frame;
 }
@@ -236,8 +216,6 @@ void DepthFilter::trackFrame(const Frame::Ptr &frame_last, const Frame::Ptr &fra
 void DepthFilter::insertFrame(const Frame::Ptr &frame)
 {
     LOG_ASSERT(frame != nullptr) << "[DepthFilter] Error input! Frame should not be null!";
-
-    passed_frames_buffer_.push_back(frame);
 
     if(track_thread_enabled_)
     {
@@ -271,18 +249,8 @@ void DepthFilter::insertKeyFrame(const KeyFrame::Ptr &keyframe, const Frame::Ptr
 {
     int new_seeds = createSeeds(keyframe, frame);
     mapper_->insertKeyFrame(keyframe);
+    perprocessSeeds(keyframe);
     LOG(INFO) << "[DepthFilter] New created depth filter seeds: " << new_seeds;
-    if(filter_thread_sub_ == nullptr)
-    {
-//        perprocessSeeds(keyframe);
-    }
-    else
-    {
-        std::unique_lock<std::mutex> lock(mutex_seeds_);
-        keyframe_new_ = keyframe;
-        cond_process_sub_.notify_one();
-    }
-
 }
 
 //int DepthFilter::getSeedsForMapping(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame)
@@ -357,10 +325,13 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &fr
         const Vector3d fn(keyframe->cam_->lift(px));
         new_seeds.emplace_back(Seed::create(keyframe, px, fn, corner.level, depth_mean, depth_min));
     }
-    seeds_buffer_.emplace_back(keyframe, std::make_shared<Seeds>(new_seeds));
 
-    if(seeds_buffer_.size() > options_.max_seeds_buffer)
-        seeds_buffer_.pop_front();
+    {
+        std::unique_lock<std::mutex> lock(mutex_seeds_);
+        seeds_buffer_.emplace_back(keyframe, std::make_shared<Seeds>(new_seeds));
+        if(seeds_buffer_.size() > options_.max_seeds_buffer)
+            seeds_buffer_.pop_front();
+    }
 
     if(frame != nullptr)
     {
@@ -371,12 +342,12 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &fr
         }
     }
 
-    std::string info;
-    for(const auto &it : seeds_buffer_)
-    {
-        info += "[" +  std::to_string(it.first->id_) + ", " + std::to_string(it.second->size()) + "], ";
-    }
-    LOG(ERROR) << info;
+//    std::string info;
+//    for(const auto &it : seeds_buffer_)
+//    {
+//        info += "[" +  std::to_string(it.first->id_) + ", " + std::to_string(it.second->size()) + "], ";
+//    }
+//    LOG(ERROR) << info;
 
     return (int)new_seeds.size();
 }
@@ -387,33 +358,21 @@ bool DepthFilter::perprocessSeeds(const KeyFrame::Ptr &keyframe)
         return false;
 
     KeyFrame::Ptr reference_keyframe = keyframe->getRefKeyFrame();
+    std::set<KeyFrame::Ptr> connect_keyframes = reference_keyframe->getConnectedKeyFrames(2);
+    connect_keyframes.insert(reference_keyframe);
 
     Seeds &new_seeds = *seeds_buffer_.back().second;
 
-    std::list<Frame::Ptr> frame_buffer;
-    while(!passed_frames_buffer_.empty())
-    {
-        if(keyframe->frame_id_ <= passed_frames_buffer_.front()->id_)
-            break;
-
-        if(frame_buffer.size() < 20)
-            frame_buffer.push_front(passed_frames_buffer_.front());
-
-        passed_frames_buffer_.pop_front();
-    }
-
-    if(frame_buffer.empty())
+    if(connect_keyframes.empty())
         return false;
 
     int project_count = 0;
     int matched_count = 0;
-    for(const Frame::Ptr &frame : frame_buffer)
+    for(const KeyFrame::Ptr &kf : connect_keyframes)
     {
-        const SE3d T_cur_from_ref = frame->Tcw() * keyframe->pose();
-
         Vector2d px_matched;
         int level_matched;
-        int matched_count_cur = reprojectSeeds(keyframe, new_seeds, frame);
+        int matched_count_cur = reprojectSeeds(keyframe, new_seeds, kf);
 
         matched_count+=matched_count_cur;
         if(matched_count_cur == 0)
@@ -649,9 +608,9 @@ void DepthFilter::createFeatureFromSeed(const Seed::Ptr &seed)
     mpt->addObservation(seed->kf, ft);
     mpt->updateViewAndDepth();
     mapper_->addOptimalizeMapPoint(mpt);
-    std::cout << " Create new seed as mpt: " << ft->mpt_->id_ << ", " << 1.0/seed->getInvDepth() << ", kf: " << seed->kf->id_ << " his: ";
-    for(const auto his : seed->history){ std::cout << "[" << his.first << "," << his.second << "]";}
-    std::cout << std::endl;
+//    std::cout << " Create new seed as mpt: " << ft->mpt_->id_ << ", " << 1.0/seed->getInvDepth() << ", kf: " << seed->kf->id_ << " his: ";
+//    for(const auto his : seed->history){ std::cout << "[" << his.first << "," << his.second << "]";}
+//    std::cout << std::endl;
 }
 
 bool DepthFilter::earseSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed)

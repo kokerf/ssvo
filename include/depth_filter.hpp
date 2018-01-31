@@ -47,8 +47,6 @@ private:
 
     void run();
 
-    void run_sub();
-
     void setStop();
 
     bool isRequiredStop();
@@ -93,14 +91,12 @@ private:
     std::deque<Frame::Ptr> frames_buffer_;
     std::deque<Frame::Ptr> passed_frames_buffer_;
     std::deque<std::pair<KeyFrame::Ptr, std::shared_ptr<Seeds> > > seeds_buffer_;
-    KeyFrame::Ptr keyframe_new_;
 
     const bool report_;
     const bool verbose_;
 
     //! main thread
     std::shared_ptr<std::thread> filter_thread_;
-    std::shared_ptr<std::thread> filter_thread_sub_;
 
     bool stop_require_;
     std::mutex mutex_stop_;
