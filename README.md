@@ -2,7 +2,7 @@
 
 Semi-direct sparse odometry
 
-### 1.Prerequisites
+### 1. Prerequisites
 
 #### 1.1 [OpenCV](http://opencv.org)
 OpenCV 3.1.0 is used in this code.
@@ -29,3 +29,14 @@ This code use Pangolin to display the map reconstructed. When install, just foll
 
 #### 1.7 [DBow3](https://github.com/kokerf/DBow3)
 After build and install, copy the file `FindDBoW3.cmake` to the directory `cmake_modules`
+
+### 2. Usages & Evalution
+the Euroc Dataset is used for evalution. In the project directory, run the demo by the following commond
+```shell
+./bin/monoVO ./config/euroc.yaml dataset_image_path dataset_csv_file
+```
+for example, the dataset `MH_01_easy`'s directory is in `/home`, just run
+```shell
+./bin/monoVO ./config/euroc.yaml ~/MH_01_easy/cam0/data ~/MH_01_easy/cam0/data.csv
+```
+finally, there will be a `trajectory.txt` saved, and you can use the [evo](https://github.com/MichaelGrupp/evo) to evaluate.
