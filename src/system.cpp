@@ -174,7 +174,7 @@ System::Status System::tracking()
     //！ save frame pose
     frame_timestamp_buffer_.push_back(current_frame_->timestamp_);
     reference_keyframe_buffer_.push_back(current_frame_->getRefKeyFrame());
-    frame_pose_buffer_.push_back(current_frame_->getRefKeyFrame()->Tcw() * current_frame_->pose());
+    frame_pose_buffer_.push_back(current_frame_->pose());//current_frame_->getRefKeyFrame()->Tcw() * current_frame_->pose());
 
     return STATUS_TRACKING_GOOD;
 }
@@ -443,7 +443,7 @@ void System::saveTrajectoryTUM(const std::string &file_name)
     const std::list<double>::iterator frame_timestamp = frame_timestamp_buffer_.end();
     for(; frame_timestamp_ptr!= frame_timestamp; frame_timestamp_ptr++, frame_pose_ptr++, reference_keyframe_ptr++)
     {
-        Sophus::SE3d frame_pose = (*reference_keyframe_ptr)->Twc() * (*frame_pose_ptr);
+        Sophus::SE3d frame_pose = (*frame_pose_ptr);//(*reference_keyframe_ptr)->Twc() * (*frame_pose_ptr);
         Vector3d t = frame_pose.translation();
         Quaterniond q = frame_pose.unit_quaternion();
 
