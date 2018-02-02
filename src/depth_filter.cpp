@@ -354,14 +354,20 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &fr
 
 bool DepthFilter::perprocessSeeds(const KeyFrame::Ptr &keyframe)
 {
-    if(seeds_buffer_.empty() || seeds_buffer_.back().first != keyframe)
-        return false;
+    std::shared_ptr<Seeds> new_seeds_ptr;
+    {
+        std::unique_lock<std::mutex> lock(mutex_seeds_);
+        if(seeds_buffer_.empty() || seeds_buffer_.back().first != keyframe)
+            return false;
+
+        new_seeds_ptr = seeds_buffer_.back().second;
+    }
 
     KeyFrame::Ptr reference_keyframe = keyframe->getRefKeyFrame();
     std::set<KeyFrame::Ptr> connect_keyframes = reference_keyframe->getConnectedKeyFrames(2);
     connect_keyframes.insert(reference_keyframe);
 
-    Seeds &new_seeds = *seeds_buffer_.back().second;
+    Seeds &new_seeds = *new_seeds_ptr;
 
     if(connect_keyframes.empty())
         return false;
@@ -572,9 +578,14 @@ int DepthFilter::reprojectAllSeeds(const Frame::Ptr &frame)
     for(const Feature::Ptr &ft : seed_fts)
         frame->seed_tracked_.insert(ft->seed_);
 
+    std::deque<std::pair<KeyFrame::Ptr, std::shared_ptr<Seeds> > > seeds_buffer;
+    {
+        std::unique_lock<std::mutex> lock(mutex_seeds_);
+        seeds_buffer = seeds_buffer_;
+    }
     int matched_count = 0;
-    auto buffer_itr = seeds_buffer_.begin();
-    for(;buffer_itr != seeds_buffer_.end();)
+    auto buffer_itr = seeds_buffer.begin();
+    for(;buffer_itr != seeds_buffer.end();)
     {
         KeyFrame::Ptr keyframe = buffer_itr->first;
         if(!candidate_keyframes.count(keyframe) || keyframe->frame_id_ == frame->id_)
@@ -587,10 +598,19 @@ int DepthFilter::reprojectAllSeeds(const Frame::Ptr &frame)
 
         matched_count += reprojectSeeds(keyframe, seeds, frame);
 
-        if(seeds.empty())
-            buffer_itr = seeds_buffer_.erase(buffer_itr);
-        else
-            buffer_itr++;
+        buffer_itr++;
+    }
+
+    //! check if empty
+    {
+        std::unique_lock<std::mutex> lock(mutex_seeds_);
+        for(auto it = seeds_buffer_.begin(); it != seeds_buffer_.end();)
+        {
+            if(it->second->empty())
+                it = seeds_buffer_.erase(it);
+            else
+                it++;
+        }
     }
 
     return matched_count;
@@ -616,6 +636,7 @@ void DepthFilter::createFeatureFromSeed(const Seed::Ptr &seed)
 bool DepthFilter::earseSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed)
 {
     //! earse seed
+    std::unique_lock<std::mutex> lock(mutex_seeds_);
     auto buffer_itr = seeds_buffer_.begin();
     for(; buffer_itr != seeds_buffer_.end(); buffer_itr++)
     {
