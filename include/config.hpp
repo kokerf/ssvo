@@ -153,7 +153,7 @@ private:
         align_top_level = (int)fs["Align.top_level"];
         align_top_level = MIN(align_top_level, top_level);
         align_bottom_level = (int)fs["Align.bottom_level"];
-        align_bottom_level - MAX(align_bottom_level, 0);
+        align_bottom_level = MAX(align_bottom_level, 0);
         align_patch_size = (int)fs["Align.patch_size"];
 
         //! Tracking
