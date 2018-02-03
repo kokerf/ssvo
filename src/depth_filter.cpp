@@ -206,7 +206,7 @@ void DepthFilter::run()
 
             dfltTrace->writeToFile();
 
-            LOG_IF(WARNING, report_) << "[DepthFilter][2] Frame: " << frame_cur->id_
+            LOG_IF(WARNING, report_) << "[Filter][2] Frame: " << frame_cur->id_
                                      << ", Seeds after updated: " << updated_count
                                      << ", new reprojected: " << project_count;
         }
@@ -238,20 +238,20 @@ void DepthFilter::trackFrame(const Frame::Ptr &frame_last, const Frame::Ptr &fra
     {
         int tracked_count = trackSeeds(frame_last, frame_cur);
         dfltTrace->log("num_tracked", tracked_count);
-        LOG_IF(WARNING, report_) << "[DepthFilter][1] Frame: " << frame_cur->id_ << ", Tracking seeds: " << tracked_count;
+        LOG_IF(WARNING, report_) << "[Filter][1] Frame: " << frame_cur->id_ << ", Tracking seeds: " << tracked_count;
     }
 }
 
 void DepthFilter::insertFrame(const Frame::Ptr &frame)
 {
-    LOG_ASSERT(frame != nullptr) << "[DepthFilter] Error input! Frame should not be null!";
+    LOG_ASSERT(frame != nullptr) << "[Filter] Error input! Frame should not be null!";
 
     if(track_thread_enabled_)
     {
         seeds_track_future_.wait();
         int tracked_count = seeds_track_future_.get();
         dfltTrace->log("num_tracked", tracked_count);
-        LOG_IF(WARNING, report_) << "[DepthFilter][1] Frame: " << frame->id_ << ", Tracking seeds: " << tracked_count;
+        LOG_IF(WARNING, report_) << "[Filter][1] Frame: " << frame->id_ << ", Tracking seeds: " << tracked_count;
     }
 
     if(filter_thread_ == nullptr)
@@ -272,7 +272,7 @@ void DepthFilter::insertFrame(const Frame::Ptr &frame)
 
         dfltTrace->writeToFile();
 
-        LOG_IF(WARNING, report_) << "[DepthFilter][2] Frame: " << frame->id_
+        LOG_IF(WARNING, report_) << "[Filter][2] Frame: " << frame->id_
                                  << ", Seeds after updated: " << updated_count
                                  << ", new reprojected: " << project_count;
     }
@@ -289,7 +289,7 @@ void DepthFilter::insertKeyFrame(const KeyFrame::Ptr &keyframe, const Frame::Ptr
     int new_seeds = createSeeds(keyframe, frame);
     mapper_->insertKeyFrame(keyframe);
     perprocessSeeds(keyframe);
-    LOG(INFO) << "[DepthFilter] New created depth filter seeds: " << new_seeds;
+    LOG(INFO) << "[Filter] New created depth filter seeds: " << new_seeds;
 }
 
 //int DepthFilter::getSeedsForMapping(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame)
@@ -411,19 +411,18 @@ bool DepthFilter::perprocessSeeds(const KeyFrame::Ptr &keyframe)
     if(connect_keyframes.empty())
         return false;
 
-    int project_count = 0;
+//    int project_count = 0;
     int matched_count = 0;
     for(const KeyFrame::Ptr &kf : connect_keyframes)
     {
         Vector2d px_matched;
-        int level_matched;
         int matched_count_cur = reprojectSeeds(keyframe, new_seeds, kf);
 
         matched_count+=matched_count_cur;
         if(matched_count_cur == 0)
             break;
     }
-    LOG(ERROR) << "[DepthFilter] [*] perprocess, matched " << matched_count;
+    LOG_IF(WARNING, report_) << "[Filter][*] perprocess, matched " << matched_count;
 
     return true;
 }
@@ -501,7 +500,7 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
         KeyFrame::Ptr kf = seed_map.first;
         const std::deque<Feature::Ptr> &seeds_deque = seed_map.second;
         const SE3d T_cur_from_ref = frame->Tcw() * kf->pose();
-        const SE3d T_ref_from_cur = T_cur_from_ref.inverse();
+//        const SE3d T_ref_from_cur = T_cur_from_ref.inverse();
         for(const Feature::Ptr &ft : seeds_deque)
         {
             const Vector3d fn_cur = frame->cam_->lift(ft->px_);
@@ -544,7 +543,7 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
 int DepthFilter::reprojectSeeds(const KeyFrame::Ptr& keyframe, Seeds &seeds, const Frame::Ptr &frame)
 {
     SE3d T_cur_from_ref = frame->Tcw() * keyframe->pose();
-    SE3d T_ref_from_cur = T_cur_from_ref.inverse();
+//    SE3d T_ref_from_cur = T_cur_from_ref.inverse();
 
     int project_count = 0;
     int matched_count = 0;

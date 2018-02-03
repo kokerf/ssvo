@@ -86,7 +86,7 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
     insertKeyFrame(keyframe_ref);
     insertKeyFrame(keyframe_cur);
 
-    LOG_IF(INFO, report_) << "[Mapping] Creating inital map with " << map_->MapPointsInMap() << " map points";
+    LOG_IF(INFO, report_) << "[Mapper] Creating inital map with " << map_->MapPointsInMap() << " map points";
 }
 
 void LocalMapper::startMainThread()
@@ -135,7 +135,7 @@ void LocalMapper::run()
                 mapTrace->startTimer("reproj");
                 new_local_features = createFeatureFromLocalMap(keyframe_cur);
                 mapTrace->stopTimer("reproj");
-                LOG_IF(INFO, report_) << "[Mapping] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
+                LOG_IF(INFO, report_) << "[Mapper] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
 
                 mapTrace->startTimer("local_ba");
                 if(options_.enable_local_ba)
@@ -198,7 +198,7 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
             mapTrace->startTimer("reproj");
             new_local_features = createFeatureFromLocalMap(keyframe);
             mapTrace->stopTimer("reproj");
-            LOG_IF(INFO, report_) << "[Mapping] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
+            LOG_IF(INFO, report_) << "[Mapper] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
 
             mapTrace->startTimer("local_ba");
             if(options_.enable_local_ba)
@@ -578,7 +578,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
 
     mapTrace->log("num_reproj", created_count);
     mapTrace->log("num_fusion", fusion_count);
-    LOG_IF(WARNING, report_) << "[Mapping][1] old points: " << mpts_cur.size() << " new projected: " << project_count << "(" << candidate_mpts.size() << ")"
+    LOG_IF(WARNING, report_) << "[Mapper][1] old points: " << mpts_cur.size() << " new projected: " << project_count << "(" << candidate_mpts.size() << ")"
                              << ", points matched: " << new_fts.size() << " with " << created_count << " created, " << fusion_count << " fusioned. ";
 
     return created_count;
@@ -667,7 +667,7 @@ int LocalMapper::refineMapPoints(const int max_optimalize_num)
     }
 
     double t1 = (double)cv::getTickCount();
-    LOG_IF(WARNING, report_) << "[Mapping][2] Refine MapPoint Time: " << (t1-t0)*1000/cv::getTickFrequency()
+    LOG_IF(WARNING, report_) << "[Mapper][2] Refine MapPoint Time: " << (t1-t0)*1000/cv::getTickFrequency()
                              << "ms, mpts: " << mpts_for_optimizing.size() << ", remained: " << remain_num;
 
     return (int)mpts_for_optimizing.size();

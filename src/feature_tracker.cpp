@@ -28,12 +28,9 @@ FeatureTracker::~FeatureTracker()
 
 int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
 {
-    LOG_IF(INFO, verbose_) << "[FtTrack][*] -- Reproject Local Map --";
     double t0 = (double)cv::getTickCount();
 
     resetGrid();
-
-    LOG_IF(INFO, verbose_) << "[FtTrack][1] -- Get Candidate KeyFrame --";
 
     std::set<KeyFrame::Ptr> connected_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_track_kfs);
     connected_keyframes.insert(frame->getRefKeyFrame());
@@ -79,9 +76,6 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
         }
     }
 
-
-
-    LOG_IF(INFO, verbose_) << "[FtTrack][2] -- Reproject Map Points --";
     double t1 = (double)cv::getTickCount();
     std::unordered_set<MapPoint::Ptr> local_mpts;
     for(const KeyFrame::Ptr &kf : local_keyframes)
@@ -105,7 +99,6 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
         }
     }
 
-    LOG_IF(INFO, verbose_) << "[FtTrack][3] -- Tracking Map Points --";
     double t2 = (double)cv::getTickCount();
     int matches = 0;
     total_project_ = 0;
@@ -118,7 +111,7 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     }
 
     double t3 = (double)cv::getTickCount();
-    LOG_IF(WARNING, report_) << "[FtTrack][*] Time: "
+    LOG_IF(WARNING, report_) << "[ Match][*] Time: "
                            << (t1-t0)/cv::getTickFrequency() << " "
                            << (t2-t1)/cv::getTickFrequency() << " "
                            << (t3-t2)/cv::getTickFrequency() << " "
