@@ -3,10 +3,13 @@
 #include "optimizer.hpp"
 #include "image_alignment.hpp"
 #include "feature_alignment.hpp"
+#include "time_tracing.hpp"
 
 namespace ssvo{
 
 std::string Config::FileName;
+
+TimeTracing::Ptr sysTrace = nullptr;
 
 System::System(std::string config_file) :
     stage_(STAGE_INITALIZE), status_(STATUS_INITAL_RESET),
@@ -44,10 +47,29 @@ System::System(std::string config_file) :
     depth_filter_->startMainThread();
 
     time_ = 1000.0/fps;
+
+    //! LOG and timer for system;
+    TimeTracing::TraceNames time_names;
+    time_names.push_back("total");
+    time_names.push_back("img_align");
+    time_names.push_back("feature_reproj");
+    time_names.push_back("motion_ba");
+    time_names.push_back("struct_ba");
+    time_names.push_back("light_affine");
+    time_names.push_back("per_depth_filter");
+
+    TimeTracing::TraceNames log_names;
+    log_names.push_back("frame_id");
+    log_names.push_back("num_feature_reproj");
+    log_names.push_back("stage");
+
+    sysTrace.reset(new TimeTracing("ssvo_trace_system", "/tmp", time_names, log_names));
 }
 
 System::~System()
 {
+    sysTrace.reset();
+
     viewer_->setStop();
     depth_filter_->stopMainThread();
     mapper_->stopMainThread();
@@ -57,6 +79,7 @@ System::~System()
 
 void System::process(const cv::Mat &image, const double timestamp)
 {
+    sysTrace->startTimer("total");
     //! get gray image
     double t0 = (double)cv::getTickCount();
     rgb_ = image;
@@ -68,6 +91,7 @@ void System::process(const cv::Mat &image, const double timestamp)
     current_frame_->setRefKeyFrame(reference_keyframe_);
     double t1 = (double)cv::getTickCount();
     LOG(WARNING) << "[System] Frame " << current_frame_->id_ << " create time: " << (t1-t0)/cv::getTickFrequency();
+    sysTrace->log("frame_id", current_frame_->id_);
 
     if(STAGE_NORMAL_FRAME == stage_)
     {
@@ -124,20 +148,21 @@ System::Status System::initialize()
 System::Status System::tracking()
 {
     //! track seeds
-    double t0 = (double)cv::getTickCount();
     depth_filter_->trackFrame(last_frame_, current_frame_);
-    double t1 = (double)cv::getTickCount();
 
     // TODO 先验信息怎么设置？
     current_frame_->setPose(last_frame_->pose());
     //! alignment by SE3
     AlignSE3 align;
+    sysTrace->startTimer("img_align");
     align.run(last_frame_, current_frame_, Config::alignTopLevel(), Config::alignBottomLevel(), 30, 1e-8);
+    sysTrace->stopTimer("img_align");
 
     //! track local map
-    double t2 = (double)cv::getTickCount();
-    LOG(WARNING) << "[System] Tracking local map";
+    sysTrace->startTimer("feature_reproj");
     int matches = feature_tracker_->reprojectLoaclMap(current_frame_);
+    sysTrace->stopTimer("feature_reproj");
+    sysTrace->log("num_feature_reproj", matches);
     LOG(WARNING) << "[System] Track with " << matches << " points";
 
     // TODO tracking status
@@ -145,31 +170,25 @@ System::Status System::tracking()
 //        return STATUS_TRACKING_BAD;
 
     //! motion-only BA
-    double t3 = (double)cv::getTickCount();
-    LOG(WARNING) << "[System] Struct refine & Motion-Only BA";
+    sysTrace->startTimer("struct_ba");
     mapper_->refineMapPoints(30);
+    sysTrace->stopTimer("struct_ba");
+    sysTrace->startTimer("motion_ba");
     Optimizer::motionOnlyBundleAdjustment(current_frame_, true);
-    LOG(WARNING) << "[System] Finish Struct refine & Motion-Only BA";
-    double t4 = (double)cv::getTickCount();
+    sysTrace->stopTimer("motion_ba");
 
     depth_filter_->insertFrame(current_frame_);
     if(createNewKeyFrame())
     {
 //        depth_filter_->getSeedsForMapping(reference_keyframe_, current_frame_);
+        sysTrace->startTimer("per_depth_filter");
         depth_filter_->insertKeyFrame(reference_keyframe_, current_frame_);
+        sysTrace->stopTimer("per_depth_filter");
     }
 
-    double t5 = (double)cv::getTickCount();
+    sysTrace->startTimer("light_affine");
     calcLightAffine();
-
-    double t6 = (double)cv::getTickCount();
-    LOG(WARNING) << "[System] Time: " << (t1-t0)/cv::getTickFrequency() << " "
-                                      << (t2-t1)/cv::getTickFrequency() << " "
-                                      << (t3-t2)/cv::getTickFrequency() << " "
-                                      << (t4-t3)/cv::getTickFrequency() << " "
-                                      << (t5-t4)/cv::getTickFrequency() << " "
-                                      << (t6-t5)/cv::getTickFrequency()
-                 << ", Total: " << (t6-t0)/cv::getTickFrequency();
+    sysTrace->stopTimer("light_affine");
 
     //！ save frame pose
     frame_timestamp_buffer_.push_back(current_frame_->timestamp_);
@@ -370,6 +389,11 @@ void System::finishFrame()
 
     //! display
     viewer_->setCurrentFrame(current_frame_);
+
+    sysTrace->log("stage", stage_);
+    sysTrace->stopTimer("total");
+    sysTrace->writeToFile();
+
     showImage(last_stage);
 }
 

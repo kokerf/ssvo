@@ -5,7 +5,9 @@ project(ssvo)
 ## User's option
 ## -----------------------
 set(DEBUG_OUTPUT TRUE)
-message(STATUS "Imformation output: " ${DEBUG_OUTPUT})
+set(BUILD_TEST FALSE)
+message(STATUS "Imformation output: "  ${DEBUG_OUTPUT})
+message(STATUS "Build Test: "            ${BUILD_TEST})
 
 # Definitions
 if(DEBUG_OUTPUT)
@@ -40,7 +42,7 @@ else()
     message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
 endif()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O0 -march=native")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O3 -march=native")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -mmmx -msse -msse -msse2 -msse3 -mssse3")
 
 ## -----------------------
@@ -66,7 +68,7 @@ FIND_PACKAGE(Sophus REQUIRED)
 include_directories(${Sophus_INCLUDE_DIRS})
 
 # glog
-find_package(glog 0.3.5 REQUIRED)
+find_package(Glog 0.3.5 REQUIRED)
 #include_directories(${GLOG_INCLUDE_DIR})
 
 # Ceres
@@ -128,6 +130,7 @@ LIST(APPEND SOURCEFILES
 ## -----------------------
 ## Build test
 ## -----------------------
+if(BUILD_TEST)
 add_executable(test_feature_detector test/test_feature_detector.cpp ${SOURCEFILES})
 target_link_libraries(test_feature_detector ${LINK_LIBS})
 
@@ -157,6 +160,10 @@ target_link_libraries(test_optimizer  ${LINK_LIBS})
 
 add_executable(test_dbow3 test/test_dbow3.cpp)
 target_link_libraries(test_dbow3  ${LINK_LIBS})
+
+add_executable(test_timer test/test_timer.cpp)
+target_link_libraries(test_timer)
+endif()
 
 ## -----------------------
 ## Build VO
