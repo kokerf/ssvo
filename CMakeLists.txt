@@ -4,10 +4,12 @@ project(ssvo)
 ## -----------------------
 ## User's option
 ## -----------------------
-set(DEBUG_OUTPUT TRUE)
-set(BUILD_TEST FALSE)
-message(STATUS "Imformation output: "  ${DEBUG_OUTPUT})
-message(STATUS "Build Test: "            ${BUILD_TEST})
+set(DEBUG_OUTPUT  TRUE)
+set(BUILD_TEST   FALSE)
+set(DBOW_ENABLE  FALSE)
+message(STATUS "Info Output : "  ${DEBUG_OUTPUT})
+message(STATUS "Build Test  : "    ${BUILD_TEST})
+message(STATUS "DBoW Enable : "   ${DBOW_ENABLE})
 
 # Definitions
 if(DEBUG_OUTPUT)
@@ -21,7 +23,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-message(STATUS "Build type: " ${CMAKE_BUILD_TYPE})
+message(STATUS "Build Type  : " ${CMAKE_BUILD_TYPE})
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
@@ -79,9 +81,11 @@ include_directories(${CERES_INCLUDE_DIRS})
 find_package(Pangolin 0.4 REQUIRED)
 include_directories(${Pangolin_INCLUDE_DIRS})
 
-# Pangolin
+# DBoW3
+if(DBOW_ENABLE)
 find_package(DBoW3 REQUIRED)
 include_directories(${DBoW3_INCLUDE_DIRS})
+endif()
 
 include_directories(
     ${PROJECT_SOURCE_DIR}
@@ -158,12 +162,15 @@ target_link_libraries(test_pattern  ${LINK_LIBS})
 add_executable(test_optimizer test/test_optimizer.cpp ${SOURCEFILES})
 target_link_libraries(test_optimizer  ${LINK_LIBS})
 
-add_executable(test_dbow3 test/test_dbow3.cpp)
-target_link_libraries(test_dbow3  ${LINK_LIBS})
-
 add_executable(test_timer test/test_timer.cpp)
 target_link_libraries(test_timer)
+
+if(DBOW_ENABLE)
+add_executable(test_dbow3 test/test_dbow3.cpp)
+target_link_libraries(test_dbow3  ${LINK_LIBS})
 endif()
+
+endif(BUILD_TEST)
 
 ## -----------------------
 ## Build VO
