@@ -69,6 +69,8 @@ public:
 
     static bool enableLocalBA(){return getInstance().mapping_local_ba;}
 
+    static bool maxLocalBAKeyFrames(){return getInstance().mapping_max_local_ba_kfs;}
+
     static int alignTopLevel(){return getInstance().align_top_level;}
 
     static int alignBottomLevel(){return getInstance().align_bottom_level;}
@@ -80,6 +82,10 @@ public:
     static int minQualityFts(){return getInstance().min_quality_fts;}
 
     static int maxQualityDropFts(){return getInstance().max_quality_drop_fts;}
+
+    static int maxSeedsBuffer(){return getInstance().max_seeds_buffer;}
+
+    static int maxPerprocessKeyFrames(){return getInstance().max_perprocess_kfs;}
 
 private:
     static Config& getInstance()
@@ -148,6 +154,7 @@ private:
         mapping_min_connection_observations = (int)fs["Mapping.min_connection_observations"];
         mapping_min_corners = (int)fs["Mapping.min_corners"];
         mapping_local_ba = (int)fs["Mapping.use_local_ba"];
+        mapping_max_local_ba_kfs = (int)fs["Mapping.max_local_ba_kfs"];
 
         //! Align
         align_top_level = (int)fs["Align.top_level"];
@@ -160,6 +167,9 @@ private:
         max_local_kfs = (int)fs["Tracking.max_local_kfs"];
         min_quality_fts = (int)fs["Tracking.min_quality_fts"];
         max_quality_drop_fts = (int)fs["Tracking.max_quality_drop_fts"];
+
+        max_seeds_buffer = (int)fs["DepthFilter.max_seeds_buffer"];
+        max_perprocess_kfs = (int)fs["DepthFilter.max_perprocess_kfs"];
 
         //! glog
         if(!fs["Glog.alsologtostderr"].empty())
@@ -224,6 +234,7 @@ private:
     int mapping_min_connection_observations;
     int mapping_min_corners;
     int mapping_local_ba;
+    int mapping_max_local_ba_kfs;
 
     //! Align
     int align_top_level;
@@ -235,6 +246,9 @@ private:
     int min_quality_fts;
     int max_quality_drop_fts;
 
+    //! DepthFilter
+    int max_seeds_buffer;
+    int max_perprocess_kfs;
 };
 
 }

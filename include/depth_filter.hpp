@@ -36,6 +36,8 @@ public:
 
     void stopMainThread();
 
+    void logSeedsInfo();
+
     static Ptr create(const FastDetector::Ptr &fast_detector, const LocalMapper::Ptr &mapper, bool report = false, bool verbose = false)
     { return Ptr(new DepthFilter(fast_detector, mapper, report, verbose)); }
 
@@ -76,13 +78,12 @@ private:
         int max_kfs; //! max keyframes for seeds tracking(exclude current keyframe)
         int max_seeds_buffer;
         int max_features;
+        double max_perprocess_kfs;
         double max_epl_length;
         double epl_dist2_threshold;
         double klt_epslion;
         double align_epslion;
         double px_error_normlized;
-        double min_disparity;
-        double min_track_features;
     } options_;
 
     FastDetector::Ptr fast_detector_;
@@ -91,6 +92,7 @@ private:
     std::deque<Frame::Ptr> frames_buffer_;
     std::deque<Frame::Ptr> passed_frames_buffer_;
     std::deque<std::pair<KeyFrame::Ptr, std::shared_ptr<Seeds> > > seeds_buffer_;
+    std::map<uint64_t, std::tuple<int, int> > seeds_convergence_rate_;
 
     const bool report_;
     const bool verbose_;

@@ -48,6 +48,9 @@ System::System(std::string config_file) :
 
     time_ = 1000.0/fps;
 
+    options_.min_kf_disparity = 100;//MIN(Config::imageHeight(), Config::imageWidth())/5;
+    options_.min_ref_track_rate = 0.7;
+
     //! LOG and timer for system;
     TimeTracing::TraceNames time_names;
     time_names.push_back("total");
@@ -328,8 +331,8 @@ bool System::createNewKeyFrame()
     LOG(INFO) << "[System] Max overlap: " << max_overlap << " min disaprity " << disparities.front() << ", average ";
 
 //    int all_features = current_frame_->featureNumber() + current_frame_->seedNumber();
-    bool c2 = disparities.front() > 100;//options_.min_disparity;
-    bool c3 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * 0.7;
+    bool c2 = disparities.front() > options_.min_kf_disparity;
+    bool c3 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * options_.min_ref_track_rate;
 //    bool c4 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * 0.9;
 
     //! create new keyFrame

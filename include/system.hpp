@@ -59,6 +59,12 @@ private:
 
 private:
 
+    struct Option{
+        double min_kf_disparity;
+        double min_ref_track_rate;
+
+    } options_;
+
     Stage stage_;
     Status status_;
 

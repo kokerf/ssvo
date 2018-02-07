@@ -117,14 +117,13 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const LocalMapp
 
 {
     options_.max_kfs = 5;
-    options_.max_seeds_buffer = 20;
+    options_.max_seeds_buffer = Config::maxSeedsBuffer();
     options_.max_features = Config::minCornersPerKeyFrame();
     options_.max_epl_length = 1000;
     options_.epl_dist2_threshold = 16 * Config::pixelUnSigma2();
     options_.klt_epslion = 0.0001;
     options_.align_epslion = 0.0001;
-    options_.min_disparity = 100;
-    options_.min_track_features = 50;
+    options_.max_perprocess_kfs = Config::maxPerprocessKeyFrames();
 
     options_.px_error_normlized = Config::pixelUnSigma();
 
@@ -212,6 +211,38 @@ void DepthFilter::run()
         }
 
     }
+}
+
+void DepthFilter::logSeedsInfo()
+{
+    std::unique_lock<std::mutex> lock(mutex_seeds_);
+    std::list<std::tuple<uint64_t, int, int>> seeds_info;
+    for(const auto it : seeds_buffer_)
+    {
+        auto rate_itr = seeds_convergence_rate_.find(it.first->id_);
+        if(rate_itr!=seeds_convergence_rate_.end())
+            std::get<1>(rate_itr->second) = it.second->size();
+    }
+
+    for(const auto it : seeds_convergence_rate_)
+    {
+        seeds_info.emplace_back(it.first, std::get<0>(it.second), std::get<1>(it.second));
+    }
+
+    seeds_info.sort([](const std::tuple<uint64_t, int, int> &a, const std::tuple<uint64_t, int, int> &b){
+      return std::get<0>(a) < std::get<0>(b);
+    });
+
+    std::ofstream f;
+    f.open("/tmp/ssvo_seeds_rate.txt");
+
+    for(const auto &it : seeds_info)
+    {
+        f << std::get<0>(it) << " " << std::get<1>(it) << " " << std::get<2>(it) << " " << 1.0*std::get<2>(it)/std::get<1>(it)<< "\n";
+    }
+    f.flush();
+
+    f.close();
 }
 
 Frame::Ptr DepthFilter::checkNewFrame()
@@ -367,9 +398,15 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &fr
 
     {
         std::unique_lock<std::mutex> lock(mutex_seeds_);
+        seeds_convergence_rate_.emplace(keyframe->id_, std::make_tuple(new_seeds.size(), 0));
         seeds_buffer_.emplace_back(keyframe, std::make_shared<Seeds>(new_seeds));
         if(seeds_buffer_.size() > options_.max_seeds_buffer)
+        {
+            auto rate_itr = seeds_convergence_rate_.find(seeds_buffer_.front().first->id_);
+            if(rate_itr!=seeds_convergence_rate_.end())
+                std::get<1>(rate_itr->second) = seeds_buffer_.front().second->size();
             seeds_buffer_.pop_front();
+        }
     }
 
     if(frame != nullptr)
