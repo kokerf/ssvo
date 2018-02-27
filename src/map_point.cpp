@@ -27,16 +27,23 @@ void MapPoint::resetType(MapPoint::Type type)
 
 void MapPoint::setBad()
 {
-    std::lock_guard<std::mutex> lock(mutex_obs_);
-    type_ = BAD;
+    std::unordered_map<KeyFramePtr, Feature::Ptr> obs;
+    {
+        std::lock_guard<std::mutex> lock(mutex_obs_);
+        type_ = BAD;
+        obs = obs_;
+    }
 
-    for(const auto &it : obs_)
+    for(const auto &it : obs)
         it.first->removeFeature(it.second);
 
-    for(const auto &it : obs_)
+    for(const auto &it : obs)
         it.first->updateConnections();
 
-    obs_.clear();
+    {
+        std::lock_guard<std::mutex> lock(mutex_obs_);
+        obs_.clear();
+    }
 }
 
 bool MapPoint::isBad()
@@ -279,13 +286,12 @@ double MapPoint::getFoundRatio()
 
 bool MapPoint::getCloseViewObs(const Frame::Ptr &frame, KeyFrame::Ptr &keyframe, int &level)
 {
-    if(isBad())
-        return false;
-
     std::unordered_map<KeyFramePtr, Feature::Ptr> obs;
     Vector3d obs_dir;
     {
         std::lock_guard<std::mutex> lock(mutex_obs_);
+        if(type_ == BAD)
+            return false;
         // TODO 这里可能还有问题，bad 的 mpt没有被删除？
         LOG_ASSERT(!obs_.empty()) << " Map point is invalid!";
         obs = obs_;

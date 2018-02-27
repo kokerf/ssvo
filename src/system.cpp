@@ -39,8 +39,8 @@ System::System(std::string config_file) :
     feature_tracker_ = FeatureTracker::create(width, height, grid_size, image_border, true);
     initializer_ = Initializer::create(fast_detector_, true);
     mapper_ = LocalMapper::create(fps, true, false);
-//    DepthFilter::Callback depth_fliter_callback = std::bind(&LocalMapper::createFeatureFromSeed, mapper_, std::placeholders::_1);
-    depth_filter_ = DepthFilter::create(fast_detector_, mapper_, true);
+    DepthFilter::Callback depth_fliter_callback = std::bind(&LocalMapper::createFeatureFromSeed, mapper_, std::placeholders::_1);
+    depth_filter_ = DepthFilter::create(fast_detector_, depth_fliter_callback, true);
     viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));
 
     mapper_->startMainThread();
@@ -185,6 +185,7 @@ System::Status System::tracking()
     {
 //        depth_filter_->getSeedsForMapping(reference_keyframe_, current_frame_);
         sysTrace->startTimer("per_depth_filter");
+        mapper_->insertKeyFrame(reference_keyframe_);
         depth_filter_->insertKeyFrame(reference_keyframe_, current_frame_);
         sysTrace->stopTimer("per_depth_filter");
     }

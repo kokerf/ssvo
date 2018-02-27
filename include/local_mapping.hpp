@@ -25,6 +25,8 @@ public:
 
     int refineMapPoints(const int max_optimalize_num = -1);
 
+    void createFeatureFromSeed(const Seed::Ptr &seed);
+
     static LocalMapper::Ptr create(double fps, bool report = false, bool verbose = false)
     { return LocalMapper::Ptr(new LocalMapper(fps, report, verbose));}
 
@@ -39,6 +41,8 @@ private:
     bool isRequiredStop();
 
     KeyFrame::Ptr checkNewKeyFrame();
+
+    void finishLastKeyFrame();
 
     int createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe);
 
@@ -62,6 +66,7 @@ private:
     FastDetector::Ptr fast_detector_;
 
     std::deque<KeyFrame::Ptr> keyframes_buffer_;
+    KeyFrame::Ptr keyframe_last_;
 
     const int delay_;
     const bool report_;

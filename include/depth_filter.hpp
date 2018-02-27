@@ -16,7 +16,7 @@ public:
 
     typedef std::shared_ptr<DepthFilter> Ptr;
 
-//    typedef std::function<void (const Seed::Ptr&)> Callback;
+    typedef std::function<void (const Seed::Ptr&)> Callback;
 
     void trackFrame(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur);
 
@@ -26,7 +26,7 @@ public:
 
 //    int getSeedsForMapping(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame);
 
-    bool perprocessSeeds(const KeyFrame::Ptr &keyframe);
+    int updateByConnectedKeyFrames(const KeyFrame::Ptr &keyframe, int num = 2);
 
     void enableTrackThread();
 
@@ -38,14 +38,14 @@ public:
 
     void logSeedsInfo();
 
-    static Ptr create(const FastDetector::Ptr &fast_detector, const LocalMapper::Ptr &mapper, bool report = false, bool verbose = false)
-    { return Ptr(new DepthFilter(fast_detector, mapper, report, verbose)); }
+    static Ptr create(const FastDetector::Ptr &fast_detector, const Callback &callback, bool report = false, bool verbose = false)
+    { return Ptr(new DepthFilter(fast_detector, callback, report, verbose)); }
 
 private:
 
-    DepthFilter(const FastDetector::Ptr &fast_detector, const LocalMapper::Ptr &mapper, bool report, bool verbose);
+    DepthFilter(const FastDetector::Ptr &fast_detector, const Callback &callback, bool report, bool verbose);
 
-//    SeedCallback seed_coverged_callback_;
+    Callback seed_coverged_callback_;
 
     void run();
 
@@ -63,11 +63,7 @@ private:
 
     int reprojectAllSeeds(const Frame::Ptr &frame);
 
-    int reprojectSeeds(const KeyFrame::Ptr& keyframe, Seeds& seeds, const Frame::Ptr &frame);
-
-    void createFeatureFromSeed(const Seed::Ptr &seed);
-
-    bool earseSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed);
+    int reprojectSeeds(const KeyFrame::Ptr& keyframe, const Frame::Ptr &frame, double epl_err, double px_error, bool created = true);
 
     bool findEpipolarMatch(const Seed::Ptr &seed, const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame,
                            const SE3d &T_cur_from_ref, Vector2d &px_matched, int &level_matched);
@@ -87,12 +83,9 @@ private:
     } options_;
 
     FastDetector::Ptr fast_detector_;
-    LocalMapper::Ptr mapper_;
 
     std::deque<Frame::Ptr> frames_buffer_;
-    std::deque<Frame::Ptr> passed_frames_buffer_;
-    std::deque<std::pair<KeyFrame::Ptr, std::shared_ptr<Seeds> > > seeds_buffer_;
-    std::map<uint64_t, std::tuple<int, int> > seeds_convergence_rate_;
+//    std::map<uint64_t, std::tuple<int, int> > seeds_convergence_rate_;
 
     const bool report_;
     const bool verbose_;
@@ -103,7 +96,6 @@ private:
     bool stop_require_;
     std::mutex mutex_stop_;
     std::mutex mutex_frame_;
-    std::mutex mutex_seeds_;
     //! track thread
     std::condition_variable cond_process_main_;
     std::condition_variable cond_process_sub_;

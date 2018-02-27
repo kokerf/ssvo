@@ -190,6 +190,9 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
         return -1;
 
     const Feature::Ptr ft_ref = mpt->findObservation(kf_ref);
+    if(!ft_ref)
+        return -1;
+
     const Vector3d obs_ref_dir(kf_ref->pose().translation() - mpt->pose());
     const SE3d T_cur_from_ref = frame->Tcw() * kf_ref->pose();
 

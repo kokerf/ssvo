@@ -6,6 +6,7 @@
 #include "utils.hpp"
 #include "optimizer.hpp"
 #include "time_tracing.hpp"
+#include "depth_filter.hpp"
 
 namespace ssvo{
 
@@ -155,6 +156,8 @@ void LocalMapper::run()
 
             mapTrace->stopTimer("total");
             mapTrace->writeToFile();
+
+            keyframe_last_ = keyframe_cur;
         }
     }
 }
@@ -216,7 +219,31 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
 //        checkCulling();
         mapTrace->stopTimer("total");
         mapTrace->writeToFile();
+
+        keyframe_last_ = keyframe;
     }
+}
+
+void LocalMapper::finishLastKeyFrame()
+{
+//    DepthFilter::updateByConnectedKeyFrames(keyframe_last_, 3);
+}
+
+void LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
+{
+    //! create new feature
+    // TODO add_observation 不用，需不需要找一下其他关键帧是否观测改点，增加约束
+    // TODO 把这部分放入一个队列，在单独线程进行处理
+    MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->getInvDepth()));
+    Feature::Ptr ft = Feature::create(seed->px_ref, seed->fn_ref, seed->level_ref, mpt);
+    seed->kf->addFeature(ft);
+    map_->insertMapPoint(mpt);
+    mpt->addObservation(seed->kf, ft);
+    mpt->updateViewAndDepth();
+    addOptimalizeMapPoint(mpt);
+//    std::cout << " Create new seed as mpt: " << ft->mpt_->id_ << ", " << 1.0/seed->getInvDepth() << ", kf: " << seed->kf->id_ << " his: ";
+//    for(const auto his : seed->history){ std::cout << "[" << his.first << "," << his.second << "]";}
+//    std::cout << std::endl;
 }
 
 int LocalMapper::createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe)
