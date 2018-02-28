@@ -318,7 +318,7 @@ void DepthFilter::insertFrame(const Frame::Ptr &frame)
 void DepthFilter::insertKeyFrame(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame)
 {
     int new_seeds = createSeeds(keyframe, frame);
-//    perprocessSeeds(keyframe);
+    updateByConnectedKeyFrames(keyframe, 3);
     LOG(INFO) << "[Filter] New created depth filter seeds: " << new_seeds;
 }
 
@@ -577,6 +577,8 @@ int DepthFilter::reprojectSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr 
         const Seed::Ptr &seed = ft->seed_;
         if(frame->seed_tracked_.count(seed))
             continue;
+
+        frame->seed_tracked_.insert(seed);
 
         project_count++;
         bool matched = findEpipolarMatch(seed, keyframe, frame, T_cur_from_ref, px_matched, level_matched);

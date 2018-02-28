@@ -90,8 +90,8 @@ class ReprojectionErrorSE3 : public ceres::SizedCostFunction<2, 7, 3>
 {
 public:
 
-    ReprojectionErrorSE3(double observed_x, double observed_y)
-        : observed_x_(observed_x), observed_y_(observed_y) {}
+    ReprojectionErrorSE3(double observed_x, double observed_y, double weight)
+        : observed_x_(observed_x), observed_y_(observed_y), weight_(weight) {}
 
     virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
     {
@@ -107,6 +107,9 @@ public:
         residuals[0] = predicted_x - observed_x_;
         residuals[1] = predicted_y - observed_y_;
 
+        residuals[0] *= weight_;
+        residuals[1] *= weight_;
+
         if(!jacobians) return true;
         double* jacobian0 = jacobians[0];
         double* jacobian1 = jacobians[1];
@@ -118,6 +121,8 @@ public:
         const double z_inv2 = z_inv*z_inv;
         jacobian << z_inv, 0.0, -p1[0]*z_inv2,
                     0.0, z_inv, -p1[1]*z_inv2;
+
+        jacobian.array() *= weight_;
 
         if(jacobian0 != nullptr)
         {
@@ -135,15 +140,15 @@ public:
         return true;
     }
 
-    static inline ceres::CostFunction *Create(const double observed_x,
-                                       const double observed_y) {
-        return (new ReprojectionErrorSE3(observed_x, observed_y));
+    static inline ceres::CostFunction *Create(const double observed_x, const double observed_y, const double weight = 1.0) {
+        return (new ReprojectionErrorSE3(observed_x, observed_y, weight));
     }
 
 private:
 
     double observed_x_;
     double observed_y_;
+    double weight_;
 
 }; // class ReprojectionErrorSE3
 
