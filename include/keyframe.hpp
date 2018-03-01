@@ -19,7 +19,7 @@ public:
 
     void setBad();
 
-    std::set<KeyFrame::Ptr> getConnectedKeyFrames(int num=-1);
+    std::set<KeyFrame::Ptr> getConnectedKeyFrames(int num=-1, int min_fts = 0);
 
     std::set<KeyFrame::Ptr> getSubConnectedKeyFrames(int num=-1);
 

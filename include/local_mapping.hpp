@@ -59,8 +59,8 @@ private:
     struct Option{
         double min_disparity;
         int min_redundant_observations;
-        bool enable_local_ba;
         int num_loacl_ba_kfs;
+        int min_kfs_connected_fts;
     } options_;
 
     FastDetector::Ptr fast_detector_;

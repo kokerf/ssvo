@@ -57,7 +57,6 @@ System::System(std::string config_file) :
     time_names.push_back("img_align");
     time_names.push_back("feature_reproj");
     time_names.push_back("motion_ba");
-    time_names.push_back("struct_ba");
     time_names.push_back("light_affine");
     time_names.push_back("per_depth_filter");
 
@@ -173,9 +172,6 @@ System::Status System::tracking()
 //        return STATUS_TRACKING_BAD;
 
     //! motion-only BA
-    sysTrace->startTimer("struct_ba");
-    mapper_->refineMapPoints(30);
-    sysTrace->stopTimer("struct_ba");
     sysTrace->startTimer("motion_ba");
     Optimizer::motionOnlyBundleAdjustment(current_frame_, true);
     sysTrace->stopTimer("motion_ba");
@@ -351,7 +347,7 @@ bool System::createNewKeyFrame()
 
             ft->mpt_->addObservation(new_keyframe, ft);
             ft->mpt_->updateViewAndDepth();
-            mapper_->addOptimalizeMapPoint(ft->mpt_);
+//            mapper_->addOptimalizeMapPoint(ft->mpt_);
         }
         new_keyframe->updateConnections();
         reference_keyframe_ = new_keyframe;

@@ -33,8 +33,8 @@ LocalMapper::LocalMapper(double fps, bool report, bool verbose) :
 
     options_.min_disparity = 100;
     options_.min_redundant_observations = 3;
-    options_.num_loacl_ba_kfs = Config::maxLocalBAKeyFrames();
-    options_.enable_local_ba = (options_.num_loacl_ba_kfs > 1);
+    options_.num_loacl_ba_kfs = MAX(Config::maxLocalBAKeyFrames(), 1);
+    options_.min_kfs_connected_fts = Config::minLocalBAConnectedFts();
 
     //! LOG and timer for system;
     TimeTracing::TraceNames time_names;
@@ -77,7 +77,7 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
         map_->insertMapPoint(ft->mpt_);
         ft->mpt_->resetType(MapPoint::STABLE);
         ft->mpt_->updateViewAndDepth();
-        addOptimalizeMapPoint(ft->mpt_);
+//        addOptimalizeMapPoint(ft->mpt_);
     }
 
     keyframe_ref->setRefKeyFrame(keyframe_cur);
@@ -139,11 +139,7 @@ void LocalMapper::run()
                 LOG_IF(INFO, report_) << "[Mapper] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
 
                 mapTrace->startTimer("local_ba");
-                if(options_.enable_local_ba)
-                    Optimizer::localBundleAdjustment(keyframe_cur, bad_mpts, options_.num_loacl_ba_kfs, report_, verbose_);
-                else
-                    Optimizer::motionOnlyBundleAdjustment(keyframe_cur, true);
-
+                Optimizer::localBundleAdjustment(keyframe_cur, bad_mpts, options_.num_loacl_ba_kfs, options_.min_kfs_connected_fts, report_, verbose_);
                 mapTrace->stopTimer("local_ba");
             }
 
@@ -204,10 +200,7 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
             LOG_IF(INFO, report_) << "[Mapper] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
 
             mapTrace->startTimer("local_ba");
-            if(options_.enable_local_ba)
-                Optimizer::localBundleAdjustment(keyframe, bad_mpts, options_.num_loacl_ba_kfs, report_, verbose_);
-            else
-                Optimizer::motionOnlyBundleAdjustment(keyframe, true);
+            Optimizer::localBundleAdjustment(keyframe, bad_mpts, options_.num_loacl_ba_kfs, options_.min_kfs_connected_fts, report_, verbose_);
             mapTrace->stopTimer("local_ba");
         }
 
@@ -240,7 +233,7 @@ void LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
     map_->insertMapPoint(mpt);
     mpt->addObservation(seed->kf, ft);
     mpt->updateViewAndDepth();
-    addOptimalizeMapPoint(mpt);
+//    addOptimalizeMapPoint(mpt);
 //    std::cout << " Create new seed as mpt: " << ft->mpt_->id_ << ", " << 1.0/seed->getInvDepth() << ", kf: " << seed->kf->id_ << " his: ";
 //    for(const auto his : seed->history){ std::cout << "[" << his.first << "," << his.second << "]";}
 //    std::cout << std::endl;
@@ -267,7 +260,7 @@ int LocalMapper::createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe)
         mpt->addObservation(keyframe, ft_cur);
 
         mpt->updateViewAndDepth();
-        addOptimalizeMapPoint(mpt);
+//        addOptimalizeMapPoint(mpt);
     }
 
     return (int) seeds.size();
@@ -372,7 +365,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
             ft->mpt_->addObservation(keyframe, ft);
             ft->mpt_->increaseVisible(2);
             ft->mpt_->increaseFound(2);
-            addOptimalizeMapPoint(ft->mpt_);
+//            addOptimalizeMapPoint(ft->mpt_);
             created_count++;
             LOG_IF(INFO, verbose_) << " create new feature from mpt " << ft->mpt_->id_;
         }
@@ -477,7 +470,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
                 mpt_old->fusion(mpt_new);
                 map_->removeMapPoint(mpt_new);
 
-                addOptimalizeMapPoint(mpt_old);
+//                addOptimalizeMapPoint(mpt_old);
 
                 LOG_IF(INFO, verbose_) << " Fusion mpt " << mpt_old->id_ << " with mpt " << mpt_new->id_;
 //                goto SHOW;
@@ -547,7 +540,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
                 mpt_new->fusion(mpt_old);
                 map_->removeMapPoint(mpt_old);
 
-                addOptimalizeMapPoint(mpt_new);
+//                addOptimalizeMapPoint(mpt_new);
 
                 LOG_IF(INFO, verbose_) << " Fusion mpt " << mpt_new->id_ << " with mpt " << mpt_old->id_;
 //                goto SHOW;

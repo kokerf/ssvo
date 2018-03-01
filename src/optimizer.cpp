@@ -61,10 +61,11 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
     reportInfo(problem, summary, report, verbose);
 }
 
-void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size, bool report, bool verbose)
+void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size, int min_shared_fts, bool report, bool verbose)
 {
     double t0 = (double)cv::getTickCount();
-    std::set<KeyFrame::Ptr> actived_keyframes = keyframe->getConnectedKeyFrames(size);
+    size = size > 0 ? size-1 : 0;
+    std::set<KeyFrame::Ptr> actived_keyframes = keyframe->getConnectedKeyFrames(size, min_shared_fts);
     actived_keyframes.insert(keyframe);
     std::unordered_set<MapPoint::Ptr> local_mappoints;
     std::list<KeyFrame::Ptr> fixed_keyframe;

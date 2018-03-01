@@ -90,18 +90,18 @@ void KeyFrame::updateConnections()
     }
 }
 
-std::set<KeyFrame::Ptr> KeyFrame::getConnectedKeyFrames(int num)
+std::set<KeyFrame::Ptr> KeyFrame::getConnectedKeyFrames(int num, int min_fts)
 {
     std::lock_guard<std::mutex> lock(mutex_connection_);
 
     std::set<KeyFrame::Ptr> connected_keyframes;
     if(num == -1) num = (int) orderedConnectedKeyFrames_.size();
+
     int count = 0;
-    for(const auto &ordered_keyframe : orderedConnectedKeyFrames_)
+    const auto end = orderedConnectedKeyFrames_.rend();
+    for(auto it = orderedConnectedKeyFrames_.rbegin(); it != end && it->first >= min_fts && count < num; it++, count++)
     {
-        connected_keyframes.insert(ordered_keyframe.second);
-        if(++count >= num)
-            break;
+        connected_keyframes.insert(it->second);
     }
 
     return connected_keyframes;
