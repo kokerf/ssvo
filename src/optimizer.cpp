@@ -109,7 +109,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
             problem.SetParameterBlockConstant(kf->optimal_Tcw_.data());
     }
 
-    double scale = Config::pixelUnSigma() * 2;
+    double scale = Config::imagePixelUnSigma() * 2;
     ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
     for(const MapPoint::Ptr &mpt : local_mappoints)
     {
@@ -140,7 +140,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
 
     //! update mpts & remove mappoint with large error
     std::set<KeyFrame::Ptr> changed_keyframes;
-    static const double max_residual = Config::pixelUnSigma2() * std::sqrt(3.81);
+    static const double max_residual = Config::imagePixelUnSigma2() * std::sqrt(3.81);
     for(const MapPoint::Ptr &mpt : local_mappoints)
     {
         const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
@@ -340,7 +340,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool report,
     ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
     problem.AddParameterBlock(frame->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
 
-    static const double scale = Config::pixelUnSigma() * std::sqrt(3.81);
+    static const double scale = Config::imagePixelUnSigma() * std::sqrt(3.81);
     ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
 
     std::vector<Feature::Ptr> fts;

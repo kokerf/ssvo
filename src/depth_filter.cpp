@@ -119,12 +119,12 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback 
     options_.max_kfs = 5;
     options_.max_features = Config::minCornersPerKeyFrame();
     options_.max_epl_length = 1000;
-    options_.epl_dist2_threshold = 16 * Config::pixelUnSigma2();
+    options_.epl_dist2_threshold = 16 * Config::imagePixelUnSigma2();
     options_.klt_epslion = 0.0001;
     options_.align_epslion = 0.0001;
     options_.max_perprocess_kfs = Config::maxPerprocessKeyFrames();
 
-    options_.px_error_normlized = Config::pixelUnSigma();
+    options_.px_error_normlized = Config::imagePixelUnSigma();
 
     //! LOG and timer for system;
     TimeTracing::TraceNames time_names;

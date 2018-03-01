@@ -19,11 +19,19 @@ public:
 
     static cv::Mat cameraDistCoef(){return getInstance().DistCoef;}
 
-    static int imageWidth(){return getInstance().width;}
+    static int imageWidth(){return getInstance().image_width;}
 
-    static int imageHeight(){return getInstance().height;}
+    static int imageHeight(){return getInstance().image_height;}
 
-    static int imageTopLevel(){return getInstance().top_level;}
+    static int imageTopLevel(){return getInstance().image_top_level;}
+
+    static double imagePixelSigma(){return getInstance().image_sigma;}
+
+    static double imagePixelSigma2(){return getInstance().image_sigma2;}
+
+    static double imagePixelUnSigma(){return getInstance().image_unsigma;}
+
+    static double imagePixelUnSigma2(){return getInstance().image_unsigma2;}
 
     static double cameraFps(){return getInstance().fps;}
 
@@ -36,14 +44,6 @@ public:
     static int initMinDisparity(){return getInstance().init_min_disparity;}
 
     static int initMinInliers(){return getInstance().init_min_inliers;}
-
-    static double pixelSigma(){return getInstance().init_sigma;}
-
-    static double pixelSigma2(){return getInstance().init_sigma2;}
-
-    static double pixelUnSigma(){return getInstance().init_unsigma;}
-
-    static double pixelUnSigma2(){return getInstance().init_unsigma2;}
 
     static int initMaxRansacIters(){return getInstance().init_max_iters;}
 
@@ -67,9 +67,7 @@ public:
 
     static int minCornersPerKeyFrame(){return getInstance().mapping_min_corners;}
 
-    static bool enableLocalBA(){return getInstance().mapping_local_ba;}
-
-    static bool maxLocalBAKeyFrames(){return getInstance().mapping_max_local_ba_kfs;}
+    static int maxLocalBAKeyFrames(){return getInstance().mapping_max_local_ba_kfs;}
 
     static int alignTopLevel(){return getInstance().align_top_level;}
 
@@ -122,9 +120,13 @@ private:
         DistCoef.at<double>(2) = p1;
         DistCoef.at<double>(3) = p2;
 
-        width = (int)fs["Image.width"];
-        height = (int)fs["Image.height"];
-        top_level = (int)fs["Image.pyramid_levels"];
+        image_width = (int)fs["Image.width"];
+        image_height = (int)fs["Image.height"];
+        image_top_level = (int)fs["Image.pyramid_levels"];
+        image_sigma = (double)fs["Initializer.sigma"];
+        image_sigma2 = image_sigma*image_sigma;
+        image_unsigma2 = image_sigma2 / (fx > fy ? fy*fy : fx*fx);
+        image_unsigma = sqrt(image_unsigma2);
         fps = (double)fs["Camera.fps"];
         unit_plane_pixel_length = 2.0 / (fx*fx+fy*fy);
 
@@ -142,23 +144,17 @@ private:
         init_min_tracked = (int)fs["Initializer.min_tracked"];
         init_min_disparity = (int)fs["Initializer.min_disparity"];
         init_min_inliers = (int)fs["Initializer.min_inliers"];
-        init_sigma = (double)fs["Initializer.sigma"];
-        init_sigma2 = init_sigma*init_sigma;
-        double focal_length2 = fx > fy ? fy*fy : fx*fx;
-        init_unsigma2 = init_sigma2 / focal_length2;
-        init_unsigma = sqrt(init_unsigma2);
         init_max_iters = (int)fs["Initializer.ransac_max_iters"];
 
         //! map
         mapping_scale = (double)fs["Mapping.scale"];
         mapping_min_connection_observations = (int)fs["Mapping.min_connection_observations"];
         mapping_min_corners = (int)fs["Mapping.min_corners"];
-        mapping_local_ba = (int)fs["Mapping.use_local_ba"];
         mapping_max_local_ba_kfs = (int)fs["Mapping.max_local_ba_kfs"];
 
         //! Align
         align_top_level = (int)fs["Align.top_level"];
-        align_top_level = MIN(align_top_level, top_level);
+        align_top_level = MIN(align_top_level, image_top_level);
         align_bottom_level = (int)fs["Align.bottom_level"];
         align_bottom_level = MAX(align_bottom_level, 0);
         align_patch_size = (int)fs["Align.patch_size"];
@@ -203,9 +199,13 @@ private:
     double k1, k2, p1, p2;
     cv::Mat K;
     cv::Mat DistCoef;
-    int width;
-    int height;
-    int top_level;
+    int image_width;
+    int image_height;
+    int image_top_level;
+    double image_sigma;
+    double image_sigma2;
+    double image_unsigma;
+    double image_unsigma2;
     double fps;
     double unit_plane_pixel_length;
 
@@ -223,17 +223,12 @@ private:
     int init_min_tracked;
     int init_min_disparity;
     int init_min_inliers;
-    double init_sigma;
-    double init_sigma2;
-    double init_unsigma;
-    double init_unsigma2;
     int init_max_iters;
 
     //! map
     double mapping_scale;
     int mapping_min_connection_observations;
     int mapping_min_corners;
-    int mapping_local_ba;
     int mapping_max_local_ba_kfs;
 
     //! Align

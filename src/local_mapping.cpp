@@ -33,8 +33,8 @@ LocalMapper::LocalMapper(double fps, bool report, bool verbose) :
 
     options_.min_disparity = 100;
     options_.min_redundant_observations = 3;
-    options_.enable_local_ba = Config::enableLocalBA();
-    options_.num_loacl_ba_kfs = 10;
+    options_.num_loacl_ba_kfs = Config::maxLocalBAKeyFrames();
+    options_.enable_local_ba = (options_.num_loacl_ba_kfs > 1);
 
     //! LOG and timer for system;
     TimeTracing::TraceNames time_names;
@@ -657,7 +657,7 @@ int LocalMapper::refineMapPoints(const int max_optimalize_num)
         Optimizer::refineMapPoint(mpt, 10);
 
         const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
-        double max_residual = Config::pixelUnSigma2() * 2;
+        double max_residual = Config::imagePixelUnSigma2() * 2;
         for(const auto &item : obs)
         {
             double residual = utils::reprojectError(item.second->fn_.head<2>(), item.first->Tcw(), mpt->pose());
