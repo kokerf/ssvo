@@ -117,7 +117,6 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback 
 
 {
     options_.max_kfs = 5;
-    options_.max_seeds_buffer = Config::maxSeedsBuffer();
     options_.max_features = Config::minCornersPerKeyFrame();
     options_.max_epl_length = 1000;
     options_.epl_dist2_threshold = 16 * Config::pixelUnSigma2();

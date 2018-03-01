@@ -94,17 +94,69 @@ std::set<KeyFrame::Ptr> KeyFrame::getConnectedKeyFrames(int num)
 {
     std::lock_guard<std::mutex> lock(mutex_connection_);
 
-    std::set<KeyFrame::Ptr> kfs;
+    std::set<KeyFrame::Ptr> connected_keyframes;
     if(num == -1) num = (int) orderedConnectedKeyFrames_.size();
     int count = 0;
     for(const auto &ordered_keyframe : orderedConnectedKeyFrames_)
     {
-        kfs.insert(ordered_keyframe.second);
+        connected_keyframes.insert(ordered_keyframe.second);
         if(++count >= num)
             break;
     }
 
-    return kfs;
+    return connected_keyframes;
+}
+
+std::set<KeyFrame::Ptr> KeyFrame::getSubConnectedKeyFrames(int num)
+{
+    std::set<KeyFrame::Ptr> connected_keyframes = getConnectedKeyFrames(num);
+
+    if(connected_keyframes.size() >= num)
+        return connected_keyframes;
+
+    std::map<KeyFrame::Ptr, int> candidate_keyframes;
+    for(const KeyFrame::Ptr &kf : connected_keyframes)
+    {
+        std::set<KeyFrame::Ptr> sub_connected_keyframe = kf->getConnectedKeyFrames();
+        for(const KeyFrame::Ptr &sub_kf : sub_connected_keyframe)
+        {
+            if(connected_keyframes.count(sub_kf) || sub_kf == shared_from_this())
+                continue;
+
+            if(candidate_keyframes.count(sub_kf))
+                candidate_keyframes.find(sub_kf)->second++;
+            else
+                candidate_keyframes.emplace(sub_kf, 1);
+        }
+    }
+
+    if(num == -1 || candidate_keyframes.empty())
+    {
+        for(const auto &item : candidate_keyframes)
+            connected_keyframes.insert(item.first);
+
+        return connected_keyframes;
+    }
+
+    std::list<std::pair<int, KeyFrame::Ptr> > candidate_keyframes_list;
+    for(const auto &item : candidate_keyframes)
+    {
+        candidate_keyframes_list.emplace_back(item.second, item.first);
+    }
+
+    candidate_keyframes_list.sort();
+
+    for(;!candidate_keyframes_list.empty();)
+    {
+        const auto item = candidate_keyframes_list.back();
+        candidate_keyframes_list.pop_back();
+
+        connected_keyframes.insert(item.second);
+        if(connected_keyframes.size() >= num)
+            break;
+    }
+
+    return connected_keyframes;
 }
 
 void KeyFrame::setBad()

@@ -275,17 +275,7 @@ int LocalMapper::createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe)
 
 int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
 {
-    std::set<KeyFrame::Ptr> connected_keyframes = keyframe->getConnectedKeyFrames();
-    std::set<KeyFrame::Ptr> local_keyframes = connected_keyframes;
-
-    for(const KeyFrame::Ptr &kf : connected_keyframes)
-    {
-        std::set<KeyFrame::Ptr> sub_connected_keyframe = kf->getConnectedKeyFrames();
-        for(const KeyFrame::Ptr &sub_kf : sub_connected_keyframe)
-        {
-            local_keyframes.insert(sub_kf);
-        }
-    }
+    std::set<KeyFrame::Ptr> local_keyframes = keyframe->getSubConnectedKeyFrames();
 
     std::unordered_set<MapPoint::Ptr> local_mpts;
     MapPoints mpts_cur;

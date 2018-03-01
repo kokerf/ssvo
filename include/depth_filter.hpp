@@ -72,7 +72,6 @@ private:
 
     struct Option{
         int max_kfs; //! max keyframes for seeds tracking(exclude current keyframe)
-        int max_seeds_buffer;
         int max_features;
         double max_perprocess_kfs;
         double max_epl_length;

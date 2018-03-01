@@ -21,6 +21,8 @@ public:
 
     std::set<KeyFrame::Ptr> getConnectedKeyFrames(int num=-1);
 
+    std::set<KeyFrame::Ptr> getSubConnectedKeyFrames(int num=-1);
+
     const ImgPyr opticalImages() const = delete;    //! disable this function
 
     inline static KeyFrame::Ptr create(const Frame::Ptr frame)

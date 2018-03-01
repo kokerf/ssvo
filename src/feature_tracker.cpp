@@ -32,49 +32,8 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
 
     resetGrid();
 
-    std::set<KeyFrame::Ptr> connected_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_track_kfs);
-    connected_keyframes.insert(frame->getRefKeyFrame());
-
-    std::list<KeyFrame::Ptr> local_keyframes;
-    for(const KeyFrame::Ptr &kf : connected_keyframes)
-        local_keyframes.push_back(kf);
-
-    if(local_keyframes.size() < options_.max_track_kfs)
-    {
-        std::map<KeyFrame::Ptr, int> candidate_keyframes;
-        for(const KeyFrame::Ptr &kf : connected_keyframes)
-        {
-            std::set<KeyFrame::Ptr> sub_connected_keyframe = kf->getConnectedKeyFrames();
-            for(const KeyFrame::Ptr &sub_kf : sub_connected_keyframe)
-            {
-                if(connected_keyframes.count(sub_kf))
-                    continue;
-
-                if(candidate_keyframes.count(sub_kf))
-                    candidate_keyframes.find(sub_kf)->second++;
-                else
-                    candidate_keyframes.emplace(sub_kf, 1);
-            }
-        }
-
-        std::list<std::pair<int, KeyFrame::Ptr> > keyframe_list;
-        for(const auto &item : candidate_keyframes)
-        {
-            keyframe_list.emplace_back(item.second, item.first);
-        }
-
-        keyframe_list.sort();
-
-        for(;!keyframe_list.empty();)
-        {
-            const auto item = keyframe_list.back();
-            keyframe_list.pop_back();
-//            LOG(ERROR) << " n: " << item.first << std::endl;
-            local_keyframes.push_back(item.second);
-            if(local_keyframes.size() >= options_.max_track_kfs)
-                break;
-        }
-    }
+    std::set<KeyFrame::Ptr> local_keyframes = frame->getRefKeyFrame()->getSubConnectedKeyFrames(options_.max_track_kfs);
+    local_keyframes.insert(frame->getRefKeyFrame());
 
     double t1 = (double)cv::getTickCount();
     std::unordered_set<MapPoint::Ptr> local_mpts;
