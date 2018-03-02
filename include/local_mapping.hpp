@@ -61,6 +61,9 @@ private:
         int min_redundant_observations;
         int num_loacl_ba_kfs;
         int min_kfs_connected_fts;
+        int num_align_iter;
+        double max_align_epsilon;
+        double max_align_error2;
     } options_;
 
     FastDetector::Ptr fast_detector_;

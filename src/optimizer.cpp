@@ -370,7 +370,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool report,
     ceres::Solve(options, &problem, &summary);
 
     int remove_count = 0;
-//    static const double TH_REPJ = 3.81 * Config::pixelUnSigma2();
+//    static const double TH_REPJ = 3.81 * Config::imagePixelUnSigma2();
 //    for(size_t i = 0; i < N; ++i)
 //    {
 //        Feature::Ptr ft = fts[i];
@@ -383,11 +383,11 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool report,
 //    }
 //
 //    ceres::Solve(options, &problem, &summary);
+//
+//    LOG_IF(INFO, report) << "[Optimizer] Motion-only BA removes " << remove_count << " points";
 
     //! update pose
     frame->setTcw(frame->optimal_Tcw_);
-
-    LOG_IF(INFO, report) << "[Optimizer] Motion-only BA removes " << remove_count << " points";
 
     //! Report
     reportInfo(problem, summary, report, verbose);

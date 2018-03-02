@@ -10,6 +10,10 @@ FeatureTracker::FeatureTracker(int width, int height, int grid_size, int border,
     options_.border = border;
     options_.max_matches = 200;
     options_.max_track_kfs = Config::maxTrackKeyFrames();
+    options_.num_align_iter = 30;
+    options_.max_align_epsilon = 0.01;
+    options_.max_align_error2 = 3.0;
+
     //! initialize grid
     grid_.grid_size = grid_size;
     grid_.grid_n_cols = ceil(static_cast<double>(width)/grid_.grid_size);
@@ -115,7 +119,7 @@ bool FeatureTracker::matchMapPointsFromCell(const Frame::Ptr &frame, Grid::Cell 
         const MapPoint::Ptr &mpt = candidate.pt;
         Vector2d px_cur = candidate.px;
         int level_cur = 0;
-        int result = reprojectMapPoint(frame, mpt, px_cur, level_cur, 30, 0.01, verbose_);
+        int result = reprojectMapPoint(frame, mpt, px_cur, level_cur, options_.num_align_iter, options_.max_align_epsilon, options_.max_align_error2, verbose_);
 
         mpt->increaseVisible(result+1);
 
@@ -134,15 +138,17 @@ bool FeatureTracker::matchMapPointsFromCell(const Frame::Ptr &frame, Grid::Cell 
 }
 
 int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
-                                       const MapPoint::Ptr &mpt,
-                                       Vector2d &px_cur,
-                                       int &level_cur,
-                                       const int max_iterations,
-                                       const double epslion,
-                                       bool verbose)
+                                      const MapPoint::Ptr &mpt,
+                                      Vector2d &px_cur,
+                                      int &level_cur,
+                                      const int max_iterations,
+                                      const double epslion,
+                                      const double threshold,
+                                      bool verbose)
 {
     static const int patch_size = AlignPatch::Size;
     static const int patch_border_size = AlignPatch::SizeWithBorder;
+    const int TH_SSD = AlignPatch::Area * threshold;
 
     KeyFrame::Ptr kf_ref;
     if(!mpt->getCloseViewObs(frame, kf_ref, level_cur))
@@ -187,6 +193,13 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
     if(!matched)
         return 0;
 
+    ZSSD<float, patch_size> zssd(patch_with_border.block(1,1,8,8));
+    Matrix<float, patch_size, patch_size, RowMajor> patch_cur;
+    utils::interpolateMat<uchar, float, patch_size>(image_cur, patch_cur, estimate[0], estimate[1]);
+    float score = zssd.compute_score(patch_cur);
+    if(score > TH_SSD)
+        return 0;
+
     px_cur = estimate.head<2>() * factor;
 
     return 1;
@@ -199,10 +212,12 @@ bool FeatureTracker::trackFeature(const Frame::Ptr &frame_ref,
                                   int &level_cur,
                                   const int max_iterations,
                                   const double epslion,
+                                  const double threshold,
                                   bool verbose)
 {
     static const int patch_size = AlignPatch::Size;
     static const int patch_border_size = AlignPatch::SizeWithBorder;
+    const int TH_SSD = AlignPatch::Area * threshold;
 
     const Vector3d obs_ref_dir(frame_ref->pose().translation() - ft_ref->mpt_->pose());
     const SE3d T_cur_from_ref = frame_cur->Tcw() * frame_ref->pose();
@@ -226,6 +241,13 @@ bool FeatureTracker::trackFeature(const Frame::Ptr &frame_ref,
 
     bool matched = AlignPatch::align2DI(image_cur, patch_with_border, estimate, max_iterations, epslion, verbose);
     if(!matched)
+        return false;
+
+    ZSSD<float, patch_size> zssd(patch_with_border.block(1,1,8,8));
+    Matrix<float, patch_size, patch_size, RowMajor> patch_cur;
+    utils::interpolateMat<uchar, float, patch_size>(image_cur, patch_cur, estimate[0], estimate[1]);
+    float score = zssd.compute_score(patch_cur);
+    if(score > TH_SSD)
         return false;
 
     px_cur = estimate.head<2>() * factor;

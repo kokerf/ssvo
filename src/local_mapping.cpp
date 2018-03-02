@@ -35,6 +35,9 @@ LocalMapper::LocalMapper(double fps, bool report, bool verbose) :
     options_.min_redundant_observations = 3;
     options_.num_loacl_ba_kfs = MAX(Config::maxLocalBAKeyFrames(), 1);
     options_.min_kfs_connected_fts = Config::minLocalBAConnectedFts();
+    options_.num_align_iter = 15;
+    options_.max_align_epsilon = 0.01;
+    options_.max_align_error2 = 3.0;
 
     //! LOG and timer for system;
     TimeTracing::TraceNames time_names;
@@ -321,7 +324,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
         project_count++;
 
         int level_cur = 0;
-        int result = FeatureTracker::reprojectMapPoint(keyframe, mpt, px_cur, level_cur, 15, 0.01);
+        int result = FeatureTracker::reprojectMapPoint(keyframe, mpt, px_cur, level_cur, options_.num_align_iter, options_.max_align_epsilon, options_.max_align_error2);
         if(result != 1)
             continue;
 
@@ -445,7 +448,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
                         continue;
 
                     int level_new = 0;
-                    bool matched = FeatureTracker::trackFeature(kf_old_ref, kf_new, ft_old, px_new, level_new, 15, 0.01, verbose_);
+                    bool matched = FeatureTracker::trackFeature(kf_old_ref, kf_new, ft_old, px_new, level_new, options_.num_align_iter, options_.max_align_epsilon, options_.max_align_error2, verbose_);
 
                     if(!matched)
                         continue;
@@ -512,7 +515,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
                         continue;
 
                     int level_old = 0;
-                    bool matched = FeatureTracker::trackFeature(kf_new_ref, kf_old, ft_new, px_old, level_old, 15, 0.01, verbose_);
+                    bool matched = FeatureTracker::trackFeature(kf_new_ref, kf_old, ft_new, px_old, level_old, options_.num_align_iter, options_.max_align_epsilon, options_.max_align_error2, verbose_);
 
                     if(!matched)
                         continue;

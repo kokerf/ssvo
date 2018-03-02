@@ -36,10 +36,10 @@ public:
     int reprojectLoaclMap(const Frame::Ptr &frame);
 
     static int reprojectMapPoint(const Frame::Ptr &frame, const MapPoint::Ptr& mpt, Vector2d &px_cur, int &level_cur,
-                                  const int max_iterations = 30, const double epslion = 0.01, bool verbose = false);
+                                  const int max_iterations = 30, const double epslion = 0.01, const double threshold = 4.0, bool verbose = false);
 
     static bool trackFeature(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, const Feature::Ptr &ft_ref,
-                             Vector2d &px_cur, int &level_cur, const int max_iterations = 30, const double epslion = 0.01, bool verbose = false);
+                             Vector2d &px_cur, int &level_cur, const int max_iterations = 30, const double epslion = 0.01, const double threshold = 4.0, bool verbose = false);
 
     inline static FeatureTracker::Ptr create(int width, int height, int grid_size, int border, bool report = false, bool verbose = false)
     {return FeatureTracker::Ptr(new FeatureTracker(width, height, grid_size, border, report, verbose));}
@@ -60,6 +60,9 @@ private:
         int border;
         int max_matches;
         int max_track_kfs;
+        int num_align_iter;
+        double max_align_epsilon;
+        double max_align_error2;
     } options_;
 
     Grid grid_;
