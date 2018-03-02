@@ -41,16 +41,17 @@ Mapping.scale: 1
 Mapping.min_connection_observations: 5 # min shared fts in connected kfs
 Mapping.min_corners: 200 # min corners per keyframe
 Mapping.max_local_ba_kfs: 10
-Mapping.min_local_ba_connected_fts: 5
+Mapping.min_local_ba_connected_fts: 20
+Mapping.min_reproject_connected_fts: 20
 
 # Align
-Align.top_level: 3   # not big than Image.pyramid_levels
+Align.top_level: 3   # not bigger than Image.pyramid_levels
 Align.bottom_level: 0   # not smaller than 0
 Align.patch_size: 4
 
 # Tracking
 Tracking.max_local_kfs: 10
-Tracking.min_quality_fts: 0
+Tracking.min_quality_fts: 5
 Tracking.max_quality_drop_fts: 40
 
 # DepthFilter

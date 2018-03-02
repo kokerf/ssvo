@@ -23,6 +23,7 @@ FeatureTracker::FeatureTracker(int width, int height, int grid_size, int border,
     grid_.grid_order.resize(grid_.cells.size());
     for(size_t i = 0; i < grid_.grid_order.size(); ++i) { grid_.grid_order[i] = i; }
     std::random_shuffle(grid_.grid_order.begin(), grid_.grid_order.end());
+    grid_.occupied.resize(grid_.cells.size(), false);
 }
 
 FeatureTracker::~FeatureTracker()
@@ -30,16 +31,46 @@ FeatureTracker::~FeatureTracker()
     for(Grid::Cell*& c : grid_.cells) { delete c; }
 }
 
+void FeatureTracker::resetGrid()
+{
+    for(Grid::Cell* c : grid_.cells) { c->clear(); }
+    std::random_shuffle(grid_.grid_order.begin(), grid_.grid_order.end());
+    std::fill(grid_.occupied.begin(), grid_.occupied.end(), false);
+}
+
 int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
 {
+    static Frame::Ptr frame_last;
+
     double t0 = (double)cv::getTickCount();
 
     resetGrid();
 
-    std::set<KeyFrame::Ptr> local_keyframes = frame->getRefKeyFrame()->getSubConnectedKeyFrames(options_.max_track_kfs);
+    int matches_from_frame = 0;
+    std::unordered_set<MapPoint::Ptr> last_mpts_set;
+    if(frame_last)
+    {
+        matches_from_frame = matchMapPointsFromLastFrame(frame, frame_last);
+        std::list<MapPoint::Ptr> last_mpts_list;
+        frame_last->getMapPoints(last_mpts_list);
+        for(const MapPoint::Ptr &mpt : last_mpts_list)
+            last_mpts_set.insert(mpt);
+    }
+
+    std::set<KeyFrame::Ptr> local_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_track_kfs);
     local_keyframes.insert(frame->getRefKeyFrame());
 
+    if(local_keyframes.size() < options_.max_track_kfs)
+    {
+        std::set<KeyFrame::Ptr> sub_connected_keyframes = frame->getRefKeyFrame()->getSubConnectedKeyFrames(options_.max_track_kfs-local_keyframes.size());
+        for(const KeyFrame::Ptr &kf : sub_connected_keyframes)
+        {
+            local_keyframes.insert(kf);
+        }
+    }
+
     double t1 = (double)cv::getTickCount();
+
     std::unordered_set<MapPoint::Ptr> local_mpts;
     for(const KeyFrame::Ptr &kf : local_keyframes)
     {
@@ -47,7 +78,7 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
         kf->getMapPoints(mpts);
         for(const MapPoint::Ptr &mpt : mpts)
         {
-            if(local_mpts.count(mpt))
+            if(local_mpts.count(mpt) || last_mpts_set.count(mpt))
                 continue;
 
             local_mpts.insert(mpt);
@@ -63,13 +94,18 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     }
 
     double t2 = (double)cv::getTickCount();
-    int matches = 0;
+    int matches_from_cell = 0;
+    const int max_matches_rest = options_.max_matches - matches_from_frame;
     total_project_ = 0;
     for(int index : grid_.grid_order)
     {
+        if(grid_.occupied.at(index))
+            continue;
+
         if(matchMapPointsFromCell(frame, *grid_.cells[index]))
-            matches++;
-        if(matches > options_.max_matches)
+            matches_from_cell++;
+
+        if(matches_from_cell > max_matches_rest)
             break;
     }
 
@@ -78,17 +114,12 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
                            << (t1-t0)/cv::getTickFrequency() << " "
                            << (t2-t1)/cv::getTickFrequency() << " "
                            << (t3-t2)/cv::getTickFrequency() << " "
-                           << ", match points " << matches << "(" << total_project_ << ", " << local_mpts.size() << ")";
+                           << ", match points " << matches_from_frame << "+" << matches_from_cell << "(" << total_project_ << ", " << local_mpts.size() << ")";
 
-    // TODO 最后可以做一个对极线外点检测？
+    //! update last frame
+    frame_last = frame;
 
-    return matches;
-}
-
-void FeatureTracker::resetGrid()
-{
-    for(Grid::Cell* c : grid_.cells) { c->clear(); }
-    std::random_shuffle(grid_.grid_order.begin(), grid_.grid_order.end());
+    return matches_from_frame + matches_from_cell;
 }
 
 bool FeatureTracker::reprojectMapPointToCell(const Frame::Ptr &frame, const MapPoint::Ptr &point)
@@ -103,6 +134,10 @@ bool FeatureTracker::reprojectMapPointToCell(const Frame::Ptr &frame, const MapP
 
     const int k = static_cast<int>(px[1]/grid_.grid_size)*grid_.grid_n_cols
                 + static_cast<int>(px[0]/grid_.grid_size);
+
+    if(grid_.occupied.at(k))
+        return false;
+
     grid_.cells.at(k)->push_back(Candidate(point, px));
 
     return true;
@@ -135,6 +170,50 @@ bool FeatureTracker::matchMapPointsFromCell(const Frame::Ptr &frame, Grid::Cell 
     }
 
     return false;
+}
+
+int FeatureTracker::matchMapPointsFromLastFrame(const Frame::Ptr &frame_cur, const Frame::Ptr &frame_last)
+{
+    if(frame_last == nullptr || frame_cur == nullptr)
+        return 0;
+
+    std::list<MapPoint::Ptr> mpts;
+    frame_last->getMapPoints(mpts);
+
+    int matches_count = 0;
+    for(const MapPoint::Ptr &mpt : mpts)
+    {
+        const Vector3d mpt_cur = frame_cur->Tcw() * mpt->pose();
+        if(mpt_cur[2] < 0.0f)
+            continue;
+
+        Vector2d px_cur(frame_cur->cam_->project(mpt_cur));
+        if(!frame_cur->cam_->isInFrame(px_cur.cast<int>(), options_.border))
+            continue;
+
+        total_project_++;
+
+        int level_cur = 0;
+        int result = reprojectMapPoint(frame_cur, mpt, px_cur, level_cur, options_.num_align_iter, options_.max_align_epsilon, options_.max_align_error2, verbose_);
+
+        mpt->increaseVisible(result+1);
+
+        if(result != 1)
+            continue;
+
+        Vector3d ft_cur = frame_cur->cam_->lift(px_cur);
+        Feature::Ptr new_feature = Feature::create(px_cur, ft_cur, level_cur, mpt);
+        frame_cur->addFeature(new_feature);
+        mpt->increaseFound(2);
+
+        const int k = static_cast<int>(px_cur[1]/grid_.grid_size)*grid_.grid_n_cols
+            + static_cast<int>(px_cur[0]/grid_.grid_size);
+        grid_.occupied.at(k) = true;
+
+        matches_count++;
+    }
+
+    return matches_count;
 }
 
 int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,

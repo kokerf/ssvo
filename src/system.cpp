@@ -168,8 +168,8 @@ System::Status System::tracking()
     LOG(WARNING) << "[System] Track with " << matches << " points";
 
     // TODO tracking status
-//    if(matches < Config::minQualityFts())
-//        return STATUS_TRACKING_BAD;
+    if(matches < Config::minQualityFts())
+        return STATUS_TRACKING_BAD;
 
     //! motion-only BA
     sysTrace->startTimer("motion_ba");
@@ -298,7 +298,7 @@ bool System::createNewKeyFrame()
 
     //! check disparity
     std::list<float> disparities;
-    const int threahold = (int)max_overlap * 0.6;
+    const int threahold = int (max_overlap * 0.6);
     for(const auto &ovlp_kf : overlap_kfs)
     {
         if(ovlp_kf.second < threahold)

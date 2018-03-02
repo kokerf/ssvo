@@ -109,10 +109,7 @@ std::set<KeyFrame::Ptr> KeyFrame::getConnectedKeyFrames(int num, int min_fts)
 
 std::set<KeyFrame::Ptr> KeyFrame::getSubConnectedKeyFrames(int num)
 {
-    std::set<KeyFrame::Ptr> connected_keyframes = getConnectedKeyFrames(num);
-
-    if(connected_keyframes.size() >= num)
-        return connected_keyframes;
+    std::set<KeyFrame::Ptr> connected_keyframes = getConnectedKeyFrames();
 
     std::map<KeyFrame::Ptr, int> candidate_keyframes;
     for(const KeyFrame::Ptr &kf : connected_keyframes)
@@ -130,33 +127,31 @@ std::set<KeyFrame::Ptr> KeyFrame::getSubConnectedKeyFrames(int num)
         }
     }
 
-    if(num == -1 || candidate_keyframes.empty())
+    std::set<KeyFrame::Ptr> sub_connected_keyframes;
+    if(num == -1)
     {
         for(const auto &item : candidate_keyframes)
-            connected_keyframes.insert(item.first);
+            sub_connected_keyframes.insert(item.first);
 
-        return connected_keyframes;
+        return sub_connected_keyframes;
     }
 
-    std::list<std::pair<int, KeyFrame::Ptr> > candidate_keyframes_list;
+    //! stort by order
+    std::map<int, KeyFrame::Ptr, std::greater<int> > ordered_candidate_keyframes;
     for(const auto &item : candidate_keyframes)
     {
-        candidate_keyframes_list.emplace_back(item.second, item.first);
+        ordered_candidate_keyframes.emplace(item.second, item.first);
     }
 
-    candidate_keyframes_list.sort();
-
-    for(;!candidate_keyframes_list.empty();)
+    //! get best (num) keyframes
+    for(const auto &item : ordered_candidate_keyframes)
     {
-        const auto item = candidate_keyframes_list.back();
-        candidate_keyframes_list.pop_back();
-
-        connected_keyframes.insert(item.second);
-        if(connected_keyframes.size() >= num)
+        sub_connected_keyframes.insert(item.second);
+        if(sub_connected_keyframes.size() >= num)
             break;
     }
 
-    return connected_keyframes;
+    return sub_connected_keyframes;
 }
 
 void KeyFrame::setBad()

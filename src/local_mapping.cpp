@@ -33,8 +33,9 @@ LocalMapper::LocalMapper(double fps, bool report, bool verbose) :
 
     options_.min_disparity = 100;
     options_.min_redundant_observations = 3;
-    options_.num_loacl_ba_kfs = MAX(Config::maxLocalBAKeyFrames(), 1);
-    options_.min_kfs_connected_fts = Config::minLocalBAConnectedFts();
+    options_.num_local_ba_kfs = MAX(Config::maxLocalBAKeyFrames(), 1);
+    options_.min_local_ba_connected_fts = Config::minLocalBAConnectedFts();
+    options_.min_reproject_connected_fts = Config::minReprojectConnectedFts();
     options_.num_align_iter = 15;
     options_.max_align_epsilon = 0.01;
     options_.max_align_error2 = 3.0;
@@ -48,7 +49,9 @@ LocalMapper::LocalMapper(double fps, bool report, bool verbose) :
     TimeTracing::TraceNames log_names;
     log_names.push_back("frame_id");
     log_names.push_back("keyframe_id");
-    log_names.push_back("num_reproj");
+    log_names.push_back("num_reproj_kfs");
+    log_names.push_back("num_reproj_mpts");
+    log_names.push_back("num_matched");
     log_names.push_back("num_fusion");
 
     mapTrace.reset(new TimeTracing("ssvo_trace_map", "/tmp", time_names, log_names));
@@ -142,7 +145,7 @@ void LocalMapper::run()
                 LOG_IF(INFO, report_) << "[Mapper] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
 
                 mapTrace->startTimer("local_ba");
-                Optimizer::localBundleAdjustment(keyframe_cur, bad_mpts, options_.num_loacl_ba_kfs, options_.min_kfs_connected_fts, report_, verbose_);
+                Optimizer::localBundleAdjustment(keyframe_cur, bad_mpts, options_.num_local_ba_kfs, options_.min_local_ba_connected_fts, report_, verbose_);
                 mapTrace->stopTimer("local_ba");
             }
 
@@ -203,7 +206,7 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
             LOG_IF(INFO, report_) << "[Mapper] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
 
             mapTrace->startTimer("local_ba");
-            Optimizer::localBundleAdjustment(keyframe, bad_mpts, options_.num_loacl_ba_kfs, options_.min_kfs_connected_fts, report_, verbose_);
+            Optimizer::localBundleAdjustment(keyframe, bad_mpts, options_.num_local_ba_kfs, options_.min_local_ba_connected_fts, report_, verbose_);
             mapTrace->stopTimer("local_ba");
         }
 
@@ -271,7 +274,7 @@ int LocalMapper::createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe)
 
 int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
 {
-    std::set<KeyFrame::Ptr> local_keyframes = keyframe->getSubConnectedKeyFrames();
+    std::set<KeyFrame::Ptr> local_keyframes = keyframe->getConnectedKeyFrames();
 
     std::unordered_set<MapPoint::Ptr> local_mpts;
     MapPoints mpts_cur;
@@ -589,9 +592,11 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
 
     }
 
-    mapTrace->log("num_reproj", created_count);
+    mapTrace->log("num_reproj_mpts", project_count);
+    mapTrace->log("num_reproj_kfs", local_keyframes.size());
     mapTrace->log("num_fusion", fusion_count);
-    LOG_IF(WARNING, report_) << "[Mapper][1] old points: " << mpts_cur.size() << " new projected: " << project_count << "(" << candidate_mpts.size() << ")"
+    mapTrace->log("num_matched", created_count);
+    LOG_IF(WARNING, report_) << "[Mapper][1] old points: " << mpts_cur.size() << ". All candidate: " << candidate_mpts.size() << ", projected: " << project_count
                              << ", points matched: " << new_fts.size() << " with " << created_count << " created, " << fusion_count << " fusioned. ";
 
     return created_count;

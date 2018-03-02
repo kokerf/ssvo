@@ -26,6 +26,7 @@ class FeatureTracker : public noncopyable
         int grid_n_rows;
         std::vector<Cell*> cells;
         std::vector<int> grid_order;
+        std::vector<bool> occupied;
     };
 
 public:
@@ -53,6 +54,8 @@ private:
     bool reprojectMapPointToCell(const Frame::Ptr &frame, const MapPoint::Ptr &point);
 
     bool matchMapPointsFromCell(const Frame::Ptr &frame, Grid::Cell &cell);
+
+    int matchMapPointsFromLastFrame(const Frame::Ptr &frame_cur, const Frame::Ptr &frame_last);
 
 private:
 
