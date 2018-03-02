@@ -574,10 +574,8 @@ int DepthFilter::reprojectSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr 
     for(const Feature::Ptr &ft : seed_fts)
     {
         const Seed::Ptr &seed = ft->seed_;
-        if(frame->seed_tracked_.count(seed))
+        if(frame->hasSeed(seed))
             continue;
-
-        frame->seed_tracked_.insert(seed);
 
         project_count++;
         bool matched = findEpipolarMatch(seed, keyframe, frame, T_cur_from_ref, px_matched, level_matched);
@@ -629,9 +627,6 @@ int DepthFilter::reprojectAllSeeds(const Frame::Ptr &frame)
 
     std::vector<Feature::Ptr> seed_fts;
     frame->getSeeds(seed_fts);
-    frame->seed_tracked_.clear();
-    for(const Feature::Ptr &ft : seed_fts)
-        frame->seed_tracked_.insert(ft->seed_);
 
     int matched_count = 0;
     for(const KeyFrame::Ptr &kf : candidate_keyframes)

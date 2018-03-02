@@ -33,9 +33,9 @@ LocalMapper::LocalMapper(double fps, bool report, bool verbose) :
 
     options_.min_disparity = 100;
     options_.min_redundant_observations = 3;
+    options_.num_reproject_kfs = MAX(Config::maxReprojectKeyFrames(), 2);
     options_.num_local_ba_kfs = MAX(Config::maxLocalBAKeyFrames(), 1);
     options_.min_local_ba_connected_fts = Config::minLocalBAConnectedFts();
-    options_.min_reproject_connected_fts = Config::minReprojectConnectedFts();
     options_.num_align_iter = 15;
     options_.max_align_epsilon = 0.01;
     options_.max_align_error2 = 3.0;
@@ -274,7 +274,7 @@ int LocalMapper::createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe)
 
 int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
 {
-    std::set<KeyFrame::Ptr> local_keyframes = keyframe->getConnectedKeyFrames();
+    std::set<KeyFrame::Ptr> local_keyframes = keyframe->getConnectedKeyFrames(options_.num_reproject_kfs);
 
     std::unordered_set<MapPoint::Ptr> local_mpts;
     MapPoints mpts_cur;

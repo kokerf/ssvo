@@ -59,9 +59,9 @@ private:
     struct Option{
         double min_disparity;
         int min_redundant_observations;
+        int num_reproject_kfs;
         int num_local_ba_kfs;
         int min_local_ba_connected_fts;
-        int min_reproject_connected_fts;
         int num_align_iter;
         double max_align_epsilon;
         double max_align_error2;

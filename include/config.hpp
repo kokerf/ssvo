@@ -67,11 +67,11 @@ public:
 
     static int minCornersPerKeyFrame(){return getInstance().mapping_min_corners;}
 
+    static int maxReprojectKeyFrames(){return getInstance().mapping_max_reproject_kfs;}
+
     static int maxLocalBAKeyFrames(){return getInstance().mapping_max_local_ba_kfs;}
 
     static int minLocalBAConnectedFts(){return getInstance().mapping_min_local_ba_connected_fts;}
-
-    static int minReprojectConnectedFts(){return getInstance().mapping_min_reproject_connected_fts;}
 
     static int alignTopLevel(){return getInstance().align_top_level;}
 
@@ -154,9 +154,9 @@ private:
         mapping_scale = (double)fs["Mapping.scale"];
         mapping_min_connection_observations = (int)fs["Mapping.min_connection_observations"];
         mapping_min_corners = (int)fs["Mapping.min_corners"];
+        mapping_max_reproject_kfs = (int)fs["Mapping.max_reproject_kfs"];
         mapping_max_local_ba_kfs = (int)fs["Mapping.max_local_ba_kfs"];
         mapping_min_local_ba_connected_fts = (int)fs["Mapping.min_local_ba_connected_fts"];
-        mapping_min_reproject_connected_fts = (int)fs["Mapping.min_reproject_connected_fts"];
 
         //! Align
         align_top_level = (int)fs["Align.top_level"];
@@ -235,9 +235,9 @@ private:
     double mapping_scale;
     int mapping_min_connection_observations;
     int mapping_min_corners;
+    int mapping_max_reproject_kfs;
     int mapping_max_local_ba_kfs;
     int mapping_min_local_ba_connected_fts;
-    int mapping_min_reproject_connected_fts;
 
     //! Align
     int align_top_level;

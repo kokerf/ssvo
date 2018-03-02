@@ -40,9 +40,9 @@ Initializer.ransac_max_iters: 1000
 Mapping.scale: 1
 Mapping.min_connection_observations: 5 # min shared fts in connected kfs
 Mapping.min_corners: 200 # min corners per keyframe
+Mapping.max_reproject_kfs: 25
 Mapping.max_local_ba_kfs: 10
 Mapping.min_local_ba_connected_fts: 20
-Mapping.min_reproject_connected_fts: 20
 
 # Align
 Align.top_level: 3   # not bigger than Image.pyramid_levels

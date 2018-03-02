@@ -73,6 +73,8 @@ public:
 
     bool removeSeed(const Seed::Ptr &seed);
 
+    bool hasSeed(const Seed::Ptr &seed);
+
     bool getSceneDepth(double &depth_mean, double &depth_min);
 
     std::map<std::shared_ptr<KeyFrame>, int> getOverLapKeyFrames();
@@ -130,8 +132,6 @@ public:
     static float light_affine_b_;
 
     SE3d optimal_Tcw_;//! for optimization
-
-    std::set<Seed::Ptr> seed_tracked_;
 
 protected:
 
