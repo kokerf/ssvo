@@ -68,7 +68,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
     std::set<KeyFrame::Ptr> actived_keyframes = keyframe->getConnectedKeyFrames(size, min_shared_fts);
     actived_keyframes.insert(keyframe);
     std::unordered_set<MapPoint::Ptr> local_mappoints;
-    std::list<KeyFrame::Ptr> fixed_keyframe;
+    std::set<KeyFrame::Ptr> fixed_keyframe;
 
     for(const KeyFrame::Ptr &kf : actived_keyframes)
     {
@@ -88,7 +88,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
             if(actived_keyframes.count(item.first))
                 continue;
 
-            fixed_keyframe.push_back(item.first);
+            fixed_keyframe.insert(item.first);
         }
     }
 
@@ -172,7 +172,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
     //! Report
     double t1 = (double)cv::getTickCount();
     LOG_IF(INFO, report) << "[Optimizer] Finish local BA for KF: " << keyframe->id_ << "(" << keyframe->frame_id_ << ")"
-                         << ", KFs: " << actived_keyframes.size()
+                         << ", KFs: " << actived_keyframes.size() << "(+" << fixed_keyframe.size() << ")"
                          << ", Mpts: " << local_mappoints.size()
                          << ", remove " << bad_mpts.size() << " bad mpts."
                          << " (" << (t1-t0)/cv::getTickFrequency() << "ms)";
