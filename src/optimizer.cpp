@@ -504,7 +504,7 @@ void Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool repo
     double t1 = (double)cv::getTickCount();
     LOG_IF(INFO, report) << std::scientific  << "[Optimizer] MapPoint " << mpt->id_
                          << " Error(MSE) changed from " << std::scientific << init_chi2/n_obs << " to " << last_chi2/n_obs
-                         << ", time: " << std::fixed << (t1-t0)*1000/cv::getTickFrequency() << "ms, "
+                         << "(" << obs.size() << "), time: " << std::fixed << (t1-t0)*1000/cv::getTickFrequency() << "ms, "
                          << (convergence? "Convergence" : "Unconvergence");
 
 #endif

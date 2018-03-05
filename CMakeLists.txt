@@ -175,5 +175,8 @@ endif(BUILD_TEST)
 ## -----------------------
 ## Build VO
 ## -----------------------
-add_executable(monoVO demo/monoVO.cpp ${SOURCEFILES})
-target_link_libraries(monoVO ${LINK_LIBS})
+add_executable(monoVO_dataset demo/monoVO_dataset.cpp ${SOURCEFILES})
+target_link_libraries(monoVO_dataset ${LINK_LIBS})
+
+add_executable(monoVO_live demo/monoVO_live.cpp ${SOURCEFILES})
+target_link_libraries(monoVO_live ${LINK_LIBS})
