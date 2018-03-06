@@ -7,7 +7,7 @@ namespace ssvo{
 uint64_t KeyFrame::next_id_ = 0;
 
 KeyFrame::KeyFrame(const Frame::Ptr frame):
-    Frame(frame->images(), next_id_++, frame->timestamp_, frame->cam_), frame_id_(frame->id_)
+    Frame(frame->images(), next_id_++, frame->timestamp_, frame->cam_), frame_id_(frame->id_), isBad_(false)
 {
     mpt_fts_ = frame->features();
     setRefKeyFrame(frame->getRefKeyFrame());
@@ -15,6 +15,9 @@ KeyFrame::KeyFrame(const Frame::Ptr frame):
 }
 void KeyFrame::updateConnections()
 {
+    if(isBad())
+        return;
+
     Features fts;
     {
         std::lock_guard<std::mutex> lock(mutex_feature_);
@@ -43,7 +46,11 @@ void KeyFrame::updateConnections()
         }
     }
 
-    LOG_ASSERT(!connection_counter.empty()) << " No connections find in KF: " << id_;
+    if(connection_counter.empty())
+    {
+        setBad();
+        return;
+    }
 
     // TODO how to select proper connections
     int connection_threshold = Config::minConnectionObservations();
@@ -159,8 +166,24 @@ void KeyFrame::setBad()
     if(id_ == 0)
         return;
 
+    std::cout << "The keyframe " << id_ << " was set to be earased." << std::endl;
+
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts;
+    {
+        std::lock_guard<std::mutex> lock(mutex_feature_);
+        mpt_fts = mpt_fts_;
+    }
+
+    for(const auto &it : mpt_fts)
+    {
+        it.first->removeObservation(shared_from_this());
+    }
+
     {
         std::lock_guard<std::mutex> lock(mutex_connection_);
+
+        isBad_ = true;
+
         for(const auto &connect : connectedKeyFrames_)
         {
             connect.first->removeConnection(shared_from_this());
@@ -168,15 +191,16 @@ void KeyFrame::setBad()
 
         connectedKeyFrames_.clear();
         orderedConnectedKeyFrames_.clear();
+        mpt_fts_.clear();
+        seed_fts_.clear();
     }
-
-    std::lock_guard<std::mutex> lock(mutex_feature_);
-    for(const auto &it : mpt_fts_)
-    {
-        it.first->removeObservation(shared_from_this());
-    }
-
     // TODO change refKF
+}
+
+bool KeyFrame::isBad()
+{
+    std::lock_guard<std::mutex> lock(mutex_connection_);
+    return isBad_;
 }
 
 void KeyFrame::addConnection(const KeyFrame::Ptr &kf, const int weight)
@@ -208,12 +232,15 @@ void KeyFrame::updateOrderedConnections()
 
 void KeyFrame::removeConnection(const KeyFrame::Ptr &kf)
 {
-    std::lock_guard<std::mutex> lock(mutex_connection_);
-    if(connectedKeyFrames_.count(kf))
     {
-        connectedKeyFrames_.erase(kf);
-        updateOrderedConnections();
+        std::lock_guard<std::mutex> lock(mutex_connection_);
+        if(connectedKeyFrames_.count(kf))
+        {
+            connectedKeyFrames_.erase(kf);
+        }
     }
+
+    updateOrderedConnections();
 }
 
 }

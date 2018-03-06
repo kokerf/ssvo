@@ -19,6 +19,8 @@ public:
 
     void setBad();
 
+    bool isBad();
+
     std::set<KeyFrame::Ptr> getConnectedKeyFrames(int num=-1, int min_fts = 0);
 
     std::set<KeyFrame::Ptr> getSubConnectedKeyFrames(int num=-1);
@@ -51,6 +53,8 @@ public:
     std::multimap<int, KeyFrame::Ptr> orderedConnectedKeyFrames_;
 
 private:
+
+    bool isBad_;
 
     std::mutex mutex_connection_;
 
