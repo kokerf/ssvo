@@ -124,25 +124,25 @@ public:
         ofs_.precision(15);
         ofs_.setf(std::ios::fixed, std::ios::floatfield);
 
-        for(auto it = timers_.begin(); it != timers_.end(); ++it)
+        for(auto it = trace_names_.begin(); it != trace_names_.end(); ++it)
         {
             if(first_value)
             {
-                ofs_ << it->second.duration();
+                ofs_ << timers_[*it].duration();
                 first_value = false;
             }
             else
-                ofs_ << "," << it->second.duration();
+                ofs_ << "," << timers_[*it].duration();
         }
-        for(auto it = logs_.begin(); it != logs_.end(); ++it)
+        for(auto it = log_names_.begin(); it != log_names_.end(); ++it)
         {
             if(first_value)
             {
-                ofs_ << it->second;
+                ofs_ << logs_[*it];
                 first_value = false;
             }
             else
-                ofs_ << "," << it->second;
+                ofs_ << "," << logs_[*it];
         }
         ofs_ << "\n";
 
@@ -177,25 +177,25 @@ private:
     void traceHeader()
     {
         bool first_value = true;
-        for(auto it = timers_.begin(); it != timers_.end(); ++it)
+        for(auto it = trace_names_.begin(); it != trace_names_.end(); ++it)
         {
             if(first_value)
             {
-                ofs_ << it->first;
+                ofs_ << *it;
                 first_value = false;
             }
             else
-                ofs_ << "," << it->first;
+                ofs_ << "," << *it;
         }
-        for(auto it = logs_.begin(); it != logs_.end(); ++it)
+        for(auto it = log_names_.begin(); it != log_names_.end(); ++it)
         {
             if(first_value)
             {
-                ofs_ << it->first;
+                ofs_ << *it;
                 first_value = false;
             }
             else
-                ofs_ << "," << it->first;
+                ofs_ << "," << *it;
         }
         ofs_ << "\n";
     }
