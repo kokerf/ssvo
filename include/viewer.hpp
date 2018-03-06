@@ -19,7 +19,7 @@ public:
 
     bool waitForFinish();
 
-    void setCurrentFrame(const Frame::Ptr &frame);
+    void setCurrentFrame(const Frame::Ptr &frame, const cv::Mat image = cv::Mat());
 
     static Viewer::Ptr create(const Map::Ptr &map, cv::Size image_size){ return Viewer::Ptr(new Viewer(map, image_size));}
 
@@ -31,17 +31,17 @@ private:
 
     void setFinished();
 
-    void drawMapPoints();
+    void drawMapPoints(Map::Ptr &map, Frame::Ptr &frame);
 
     void drawCamera(const Matrix4d &pose, cv::Scalar color);
 
-    void drawKeyFrames(bool show_connections=false, bool show_current=false);
+    void drawKeyFrames(Map::Ptr &map, KeyFrame::Ptr &reference, bool show_connections=false, bool show_current=false);
 
-    void drawCurrentFrame();
+    void drawCurrentFrame(const Matrix4d &pose, cv::Scalar color);
 
-    void drawCurrentImage(pangolin::GlTexture& gl_texture);
+    void drawCurrentImage(pangolin::GlTexture& gl_texture, cv::Mat &image);
 
-    void getCurrentCameraPose(pangolin::OpenGlMatrix &M);
+    void drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst);
 
 private:
 
@@ -52,7 +52,6 @@ private:
     Frame::Ptr frame_;
     cv::Mat image_;
     cv::Size image_size_;
-    Matrix4d camera_pose_;
 
     float map_point_size;
     float key_frame_size;

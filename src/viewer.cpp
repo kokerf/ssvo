@@ -5,8 +5,6 @@ namespace ssvo{
 Viewer::Viewer(const Map::Ptr &map, cv::Size image_size) :
     map_(map), image_size_(image_size), required_stop_(false), is_finished_(false)
 {
-    camera_pose_.setIdentity();
-
     map_point_size = 3;
     key_frame_size = 0.05;
     key_frame_line_width= 2;
@@ -86,6 +84,14 @@ void Viewer::run()
 
     while(!pangolin::ShouldQuit() && !isRequiredStop())
     {
+        Frame::Ptr frame;
+        cv::Mat image;
+        {
+            std::lock_guard<std::mutex> lock(mutex_frame_);
+            frame = frame_;
+            image = image_;
+        }
+
         // Clear screen and activate view to render into
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         camera_viewer.Activate(s_cam);
@@ -94,10 +100,18 @@ void Viewer::run()
 
         if(menu_follow_camera)
         {
-            pangolin::OpenGlMatrix pose;
-            getCurrentCameraPose(pose);
+            pangolin::OpenGlMatrix camera_pose;
+            Eigen::Map<Matrix<pangolin::GLprecision, 4, 4> > T(camera_pose.m);
+            if(frame)
+            {
+                T = frame->pose().matrix();
+            }
+            else{
+                T.setIdentity();
+            }
+
             s_cam.SetModelViewMatrix(pangolin::ModelViewLookAt(0, -1, -0.5, 0, 0, 0, 0, -1, 0));
-            s_cam.Follow(pose);
+            s_cam.Follow(camera_pose);
             following_camera = true;
         }
         else if(!menu_follow_camera && following_camera)
@@ -133,14 +147,22 @@ void Viewer::run()
         }
 
         pangolin::glDrawAxis(0.1);
-        drawMapPoints();
+
+        drawMapPoints(map_, frame);
 
         if(show_keyframe)
-            drawKeyFrames(show_connections, show_current_connections);
+        {
+            KeyFrame::Ptr reference = frame->getRefKeyFrame();
+            drawKeyFrames(map_, reference, show_connections, show_current_connections);
+        }
 
-        drawCurrentFrame();
+        drawCurrentFrame(frame->pose().matrix(), cv::Scalar(0.0, 0.0, 1.0));
 
-        drawCurrentImage(imageTexture);
+
+        if(image.empty() && frame != nullptr)
+            drowTrackedPoints(frame, image);
+
+        drawCurrentImage(imageTexture, image);
 
         image_viewer.Activate();
         glColor3f(1.0,1.0,1.0);
@@ -153,35 +175,24 @@ void Viewer::run()
     pangolin::DestroyWindow(win_name);
 }
 
-void Viewer::setCurrentFrame(const Frame::Ptr &frame)
+void Viewer::setCurrentFrame(const Frame::Ptr &frame, const cv::Mat image)
 {
     std::lock_guard<std::mutex> lock(mutex_frame_);
     frame_ = frame;
-    camera_pose_ = frame_->pose().matrix();
-    cv::cvtColor(frame_->getImage(0), image_, CV_GRAY2RGB);
+    image_ = image;
 }
 
-void Viewer::getCurrentCameraPose(pangolin::OpenGlMatrix &M)
+void Viewer::drawKeyFrames(Map::Ptr &map, KeyFrame::Ptr &reference, bool show_connections, bool show_current)
 {
-    Eigen::Map<Matrix<pangolin::GLprecision, 4, 4> > T(M.m);
-    {
-        std::lock_guard<std::mutex> lock(mutex_frame_);
-        T = camera_pose_;
-    }
-}
-
-void Viewer::drawKeyFrames(bool show_connections, bool show_current)
-{
-    std::vector<KeyFrame::Ptr> kfs = map_->getAllKeyFrames();
+    std::vector<KeyFrame::Ptr> kfs = map->getAllKeyFrames();
 
     std::set<KeyFrame::Ptr> loacl_kfs;
     if(show_current)
     {
-        const KeyFrame::Ptr &ref_kf = frame_->getRefKeyFrame();
-        if(ref_kf != nullptr)
+        if(reference != nullptr)
         {
-            loacl_kfs = ref_kf->getConnectedKeyFrames();
-            loacl_kfs.insert(ref_kf);
+            loacl_kfs = reference->getConnectedKeyFrames();
+            loacl_kfs.insert(reference);
         }
     }
 
@@ -219,30 +230,28 @@ void Viewer::drawKeyFrames(bool show_connections, bool show_current)
 
 }
 
-void Viewer::drawCurrentFrame()
+void Viewer::drawCurrentFrame(const Matrix4d &pose, cv::Scalar color)
 {
-    std::lock_guard<std::mutex> lock(mutex_frame_);
-    drawCamera(camera_pose_.matrix(), cv::Scalar(0.0, 0.0, 1.0));
+    drawCamera(pose.matrix(), color);
 }
 
-void Viewer::drawCurrentImage(pangolin::GlTexture &gl_texture)
+void Viewer::drawCurrentImage(pangolin::GlTexture &gl_texture, cv::Mat &image)
 {
-    std::lock_guard<std::mutex> lock(mutex_frame_);
-    if(image_.empty())
+    if(image.empty())
         return;
 
-    gl_texture.Upload(image_.data, GL_RGB, GL_UNSIGNED_BYTE);
+    if(image.type() == CV_8UC1)
+        cv::cvtColor(image, image, CV_GRAY2RGB);
+    gl_texture.Upload(image.data, GL_RGB, GL_UNSIGNED_BYTE);
+    cv::imshow("SSVO Current Image", image);
+    cv::waitKey(1);
 }
 
-void Viewer::drawMapPoints()
+void Viewer::drawMapPoints(Map::Ptr &map, Frame::Ptr &frame)
 {
-    std::unordered_map<MapPoint::Ptr, Feature::Ptr> obs_mpts;
-    {
-        std::lock_guard<std::mutex> lock(mutex_frame_);
-        obs_mpts = frame_->features();
-    }
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> obs_mpts = frame->features();
 
-    std::vector<MapPoint::Ptr> mpts = map_->getAllMapPoints();
+    std::vector<MapPoint::Ptr> mpts = map->getAllMapPoints();
 
     glPointSize(map_point_size);
     glBegin(GL_POINTS);
@@ -251,8 +260,10 @@ void Viewer::drawMapPoints()
         Vector3d pose = mpt->pose();
         if(obs_mpts.count(mpt))
             glColor3f(1.0,0.0,0.3);
+        else if(mpt->observations() == 1)
+            glColor3f(0.0,0.0,0.0);
         else
-            glColor3f(0.0,0.0,1.0);
+            glColor3f(0.5,0.5,0.5);
 //        float rate = (float)mpt->getFoundRatio();
 //        glColor3f((1-rate)*rate, 0, rate*rate);
         glVertex3f(pose[0], pose[1], pose[2]);
@@ -297,6 +308,44 @@ void Viewer::drawCamera(const Matrix4d &pose, cv::Scalar color)
     glEnd();
 
     glPopMatrix();
+}
+
+void Viewer::drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
+{
+    //! draw features
+    const cv::Mat src = frame->getImage(0);
+    std::vector<Feature::Ptr> fts;
+    frame->getFeatures(fts);
+    cv::cvtColor(src, dst, CV_GRAY2RGB);
+    int font_face = 1;
+    double font_scale = 0.5;
+    for(const Feature::Ptr &ft : fts)
+    {
+        Vector2d ft_px = ft->px_;
+        cv::Point2f px(ft_px[0], ft_px[1]);
+        cv::Scalar color(0, 255, 0);
+        cv::circle(dst, px, 2, color, -1);
+
+        string id_str = std::to_string((frame->Tcw()*ft->mpt_->pose()).norm());//ft->mpt_->getFoundRatio());//
+        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
+    }
+
+    //! draw seeds
+    std::vector<Feature::Ptr> seed_fts;
+    frame->getSeeds(seed_fts);
+    for(const Feature::Ptr &ft : seed_fts)
+    {
+        Seed::Ptr seed = ft->seed_;
+        cv::Point2f px(ft->px_[0], ft->px_[1]);
+        double convergence = 0;
+        double scale = MIN(convergence, 256.0) / 256.0;
+        cv::Scalar color(255*scale, 0, 255*(1-scale));
+        cv::circle(dst, px, 2, color, -1);
+
+//        string id_str = std::to_string();
+//        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
+    }
+
 }
 
 }

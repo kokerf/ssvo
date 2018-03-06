@@ -25,8 +25,8 @@ std::ostream& operator<<(std::ostream& out, const Feature& ft)
 TimeTracing::Ptr mapTrace = nullptr;
 
 //! LocalMapper
-LocalMapper::LocalMapper(double fps, bool report, bool verbose) :
-    delay_(static_cast<int>(1000.0/fps)), report_(report), verbose_(report&&verbose),
+LocalMapper::LocalMapper(bool report, bool verbose) :
+    report_(report), verbose_(report&&verbose),
     mapping_thread_(nullptr), stop_require_(false)
 {
     map_ = Map::create();
@@ -140,7 +140,7 @@ void LocalMapper::run()
             {
 //                new_seed_features = createFeatureFromSeedFeature(keyframe_cur);
                 mapTrace->startTimer("reproj");
-                new_local_features = createFeatureFromLocalMap(keyframe_cur);
+                new_local_features = createFeatureFromLocalMap(keyframe_cur, options_.num_reproject_kfs);
                 mapTrace->stopTimer("reproj");
                 LOG_IF(INFO, report_) << "[Mapper] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
 
@@ -154,7 +154,7 @@ void LocalMapper::run()
                 map_->removeMapPoint(mpt);
             }
 
-//        checkCulling();
+            checkCulling(keyframe_cur);
 
             mapTrace->stopTimer("total");
             mapTrace->writeToFile();
@@ -201,7 +201,7 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
         {
 //            new_seed_features = createFeatureFromSeedFeature(keyframe);
             mapTrace->startTimer("reproj");
-            new_local_features = createFeatureFromLocalMap(keyframe);
+            new_local_features = createFeatureFromLocalMap(keyframe, options_.num_reproject_kfs);
             mapTrace->stopTimer("reproj");
             LOG_IF(INFO, report_) << "[Mapper] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
 
@@ -215,7 +215,7 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
             map_->removeMapPoint(mpt);
         }
 
-//        checkCulling();
+        checkCulling(keyframe);
         mapTrace->stopTimer("total");
         mapTrace->writeToFile();
 
@@ -239,10 +239,40 @@ void LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
     map_->insertMapPoint(mpt);
     mpt->addObservation(seed->kf, ft);
     mpt->updateViewAndDepth();
-//    addOptimalizeMapPoint(mpt);
-//    std::cout << " Create new seed as mpt: " << ft->mpt_->id_ << ", " << 1.0/seed->getInvDepth() << ", kf: " << seed->kf->id_ << " his: ";
-//    for(const auto his : seed->history){ std::cout << "[" << his.first << "," << his.second << "]";}
-//    std::cout << std::endl;
+
+    std::set<KeyFrame::Ptr> local_keyframes = seed->kf->getConnectedKeyFrames(10);
+
+    for(const KeyFrame::Ptr &kf : local_keyframes)
+    {
+        Vector3d xyz_cur(kf->Tcw() * mpt->pose());
+        if(xyz_cur[2] < 0.0f)
+            continue;
+
+        Vector2d px_cur(kf->cam_->project(xyz_cur));
+        if(!kf->cam_->isInFrame(px_cur.cast<int>(), 8))
+            continue;
+
+        int level_cur = 0;
+        const Vector2d px_cur_last = px_cur;
+        int result = FeatureTracker::reprojectMapPoint(kf, mpt, px_cur, level_cur, options_.num_align_iter, options_.max_align_epsilon, options_.max_align_error2);
+        if(result != 1)
+            continue;
+
+        double error = (px_cur_last-px_cur).norm();
+        if(error > 2.0)
+            continue;
+
+        Vector3d ft_cur = kf->cam_->lift(px_cur);
+        Feature::Ptr new_feature = Feature::create(px_cur, ft_cur, level_cur, mpt);
+        kf->addFeature(new_feature);
+
+        mpt->addObservation(kf, new_feature);
+    }
+
+    mpt->updateViewAndDepth();
+
+    if(mpt->observations() > 1)
+        Optimizer::refineMapPoint(mpt, 10, true);
 }
 
 int LocalMapper::createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe)
@@ -272,9 +302,9 @@ int LocalMapper::createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe)
     return (int) seeds.size();
 }
 
-int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
+int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe, const int num)
 {
-    std::set<KeyFrame::Ptr> local_keyframes = keyframe->getConnectedKeyFrames(options_.num_reproject_kfs);
+    std::set<KeyFrame::Ptr> local_keyframes = keyframe->getConnectedKeyFrames(num);
 
     std::unordered_set<MapPoint::Ptr> local_mpts;
     MapPoints mpts_cur;
@@ -347,12 +377,14 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe)
     for(int i = 0; i < old_fts_size; ++i)
     {
         const Vector2i px = old_fts[i]->px_.cast<int>();
-        for(int c = -1; c <= 1; ++c)
+        for(int c = -2; c <= 2; ++c)
         {
             int16_t* ptr = mask.ptr<int16_t>(px[1]+c) + px[0];
+            ptr[-2] = (int16_t)i;
             ptr[-1] = (int16_t)i;
             ptr[0] = (int16_t)i;
             ptr[1] = (int16_t)i;
+            ptr[2] = (int16_t)i;
         }
     }
 
@@ -693,31 +725,36 @@ int LocalMapper::refineMapPoints(const int max_optimalize_num)
 
 void LocalMapper::checkCulling(const KeyFrame::Ptr &keyframe)
 {
+
+    return;
+
     const std::set<KeyFrame::Ptr> connected_keyframes = keyframe->getConnectedKeyFrames();
 
     int count = 0;
     for(const KeyFrame::Ptr &kf : connected_keyframes)
     {
-        if(kf->id_ == 0)
+        if(kf->id_ == 0 || kf->isBad())
             continue;
 
         const int observations_threshold = 3;
-        int observations = 0;
         int redundant_observations = 0;
         MapPoints mpts;
         kf->getMapPoints(mpts);
+        std::cout << "mpt obs: [";
         for(const MapPoint::Ptr &mpt : mpts)
         {
             std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+            std::cout << obs.size() << ",";
             if(obs.size() > observations_threshold)
             {
+                int observations = 0;
                 const Feature::Ptr &ft = obs[kf];
                 for(const auto &it : obs)
                 {
                     if(it.first == kf)
                         continue;
 
-                    if(it.second->level_ <= ft->level_+1)
+                    //if(it.second->level_ <= ft->level_+1)
                     {
                         observations++;
                         if(observations >= options_.min_redundant_observations)
@@ -736,6 +773,9 @@ void LocalMapper::checkCulling(const KeyFrame::Ptr &keyframe)
                 count++;
             }
         }
+        std::cout << "]" <<std::endl;
+
+        std::cout <<"redundant_observations: " << redundant_observations << " mpts: " << mpts.size() << std::endl;
 
     }
 }

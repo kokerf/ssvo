@@ -27,12 +27,12 @@ public:
 
     void createFeatureFromSeed(const Seed::Ptr &seed);
 
-    static LocalMapper::Ptr create(double fps, bool report = false, bool verbose = false)
-    { return LocalMapper::Ptr(new LocalMapper(fps, report, verbose));}
+    static LocalMapper::Ptr create(bool report = false, bool verbose = false)
+    { return LocalMapper::Ptr(new LocalMapper(report, verbose));}
 
 private:
 
-    LocalMapper(double fps, bool report, bool verbose);
+    LocalMapper(bool report, bool verbose);
 
     void run();
 
@@ -46,7 +46,7 @@ private:
 
     int createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe);
 
-    int createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe);
+    int createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe, const int num = 5);
 
     void checkCulling(const KeyFrame::Ptr &keyframe);
 
@@ -72,7 +72,6 @@ private:
     std::deque<KeyFrame::Ptr> keyframes_buffer_;
     KeyFrame::Ptr keyframe_last_;
 
-    const int delay_;
     const bool report_;
     const bool verbose_;
 

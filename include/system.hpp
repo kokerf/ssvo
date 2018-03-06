@@ -53,8 +53,6 @@ private:
 
     void calcLightAffine();
 
-    void showImage(Stage stage);
-
     void drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst);
 
 private:

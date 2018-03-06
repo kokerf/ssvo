@@ -20,9 +20,7 @@ public:
 
     void trackFrame(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur);
 
-    void insertFrame(const Frame::Ptr &frame);
-
-    void insertKeyFrame(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame);
+    void insertFrame(const Frame::Ptr &frame, const KeyFrame::Ptr keyframe = nullptr);
 
 //    int getSeedsForMapping(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame);
 
@@ -53,7 +51,7 @@ private:
 
     bool isRequiredStop();
 
-    Frame::Ptr checkNewFrame();
+    bool checkNewFrame(Frame::Ptr &frame, KeyFrame::Ptr &keyframe);
 
     int createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame = nullptr);
 
@@ -83,7 +81,7 @@ private:
 
     FastDetector::Ptr fast_detector_;
 
-    std::deque<Frame::Ptr> frames_buffer_;
+    std::deque<std::pair<Frame::Ptr, KeyFrame::Ptr> > frames_buffer_;
 //    std::map<uint64_t, std::tuple<int, int> > seeds_convergence_rate_;
 
     const bool report_;

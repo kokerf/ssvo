@@ -132,6 +132,7 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback 
     time_names.push_back("klt_track");
     time_names.push_back("update_seeds");
     time_names.push_back("epl_search");
+    time_names.push_back("create_seeds");
 
     TimeTracing::TraceNames log_names;
     log_names.push_back("frame_id");
@@ -183,28 +184,39 @@ bool DepthFilter::isRequiredStop()
 
 void DepthFilter::run()
 {
+    LOG(WARNING) << "[Filter][*] Start main thread!";
     while(!isRequiredStop())
     {
-        Frame::Ptr frame_cur = checkNewFrame();
-        if(frame_cur)
+        Frame::Ptr frame;
+        KeyFrame::Ptr keyframe;
+        if(checkNewFrame(frame, keyframe))
         {
             dfltTrace->startTimer("total_without_klt");
 
             dfltTrace->startTimer("update_seeds");
-            int updated_count = updateSeeds(frame_cur);
+            int updated_count = updateSeeds(frame);
             dfltTrace->stopTimer("update_seeds");
             dfltTrace->log("num_updated", updated_count);
 
             dfltTrace->startTimer("epl_search");
-            int  project_count = reprojectAllSeeds(frame_cur);
+            int  project_count = reprojectAllSeeds(frame);
             dfltTrace->stopTimer("epl_search");
             dfltTrace->log("num_repoj", project_count);
+
+            dfltTrace->startTimer("create_seeds");
+            if(keyframe)
+            {
+                int new_seeds = createSeeds(keyframe, frame);
+                updateByConnectedKeyFrames(keyframe, 3);
+                LOG(INFO) << "[Filter] New created depth filter seeds: " << new_seeds;
+            }
+            dfltTrace->stopTimer("create_seeds");
 
             dfltTrace->stopTimer("total_without_klt");
 
             dfltTrace->writeToFile();
 
-            LOG_IF(WARNING, report_) << "[Filter][2] Frame: " << frame_cur->id_
+            LOG_IF(WARNING, report_) << "[Filter][2] Frame: " << frame->id_
                                      << ", Seeds after updated: " << updated_count
                                      << ", new reprojected: " << project_count;
         }
@@ -244,17 +256,19 @@ void DepthFilter::run()
 //    f.close();
 //}
 
-Frame::Ptr DepthFilter::checkNewFrame()
+bool DepthFilter::checkNewFrame(Frame::Ptr &frame, KeyFrame::Ptr &keyframe)
 {
     static Frame::Ptr frame_last;
     std::unique_lock<std::mutex> lock(mutex_frame_);
     cond_process_main_.wait_for(lock, std::chrono::milliseconds(3));
     if(frames_buffer_.empty())
-        return nullptr;
+        return false;
 
-    Frame::Ptr frame = frames_buffer_.front();
+    frame = frames_buffer_.front().first;
+    keyframe = frames_buffer_.front().second;
     frames_buffer_.pop_front();
-    return frame;
+
+    return frame != nullptr;
 }
 
 void DepthFilter::trackFrame(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur)
@@ -272,11 +286,11 @@ void DepthFilter::trackFrame(const Frame::Ptr &frame_last, const Frame::Ptr &fra
     }
 }
 
-void DepthFilter::insertFrame(const Frame::Ptr &frame)
+void DepthFilter::insertFrame(const Frame::Ptr &frame, const KeyFrame::Ptr keyframe)
 {
     LOG_ASSERT(frame != nullptr) << "[Filter] Error input! Frame should not be null!";
 
-    if(track_thread_enabled_)
+    if(track_thread_enabled_ && seeds_track_future_.valid())
     {
         seeds_track_future_.wait();
         int tracked_count = seeds_track_future_.get();
@@ -298,6 +312,15 @@ void DepthFilter::insertFrame(const Frame::Ptr &frame)
         dfltTrace->stopTimer("epl_search");
         dfltTrace->log("num_repoj", project_count);
 
+        dfltTrace->startTimer("create_seeds");
+        if(keyframe)
+        {
+            int new_seeds = createSeeds(keyframe, frame);
+            updateByConnectedKeyFrames(keyframe, 3);
+            LOG(INFO) << "[Filter] New created depth filter seeds: " << new_seeds;
+        }
+        dfltTrace->stopTimer("create_seeds");
+
         dfltTrace->stopTimer("total_without_klt");
 
         dfltTrace->writeToFile();
@@ -309,16 +332,9 @@ void DepthFilter::insertFrame(const Frame::Ptr &frame)
     else
     {
         std::unique_lock<std::mutex> lock(mutex_frame_);
-        frames_buffer_.push_back(frame);
+        frames_buffer_.emplace_back(frame, keyframe);
         cond_process_main_.notify_one();
     }
-}
-
-void DepthFilter::insertKeyFrame(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame)
-{
-    int new_seeds = createSeeds(keyframe, frame);
-    updateByConnectedKeyFrames(keyframe, 3);
-    LOG(INFO) << "[Filter] New created depth filter seeds: " << new_seeds;
 }
 
 //int DepthFilter::getSeedsForMapping(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame)

@@ -38,7 +38,7 @@ System::System(std::string config_file) :
     fast_detector_ = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
     feature_tracker_ = FeatureTracker::create(width, height, grid_size, image_border, true);
     initializer_ = Initializer::create(fast_detector_, true);
-    mapper_ = LocalMapper::create(fps, true, false);
+    mapper_ = LocalMapper::create(true, false);
     DepthFilter::Callback depth_fliter_callback = std::bind(&LocalMapper::createFeatureFromSeed, mapper_, std::placeholders::_1);
     depth_filter_ = DepthFilter::create(fast_detector_, depth_fliter_callback, true);
     viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));
@@ -54,11 +54,14 @@ System::System(std::string config_file) :
     //! LOG and timer for system;
     TimeTracing::TraceNames time_names;
     time_names.push_back("total");
+    time_names.push_back("processing");
+    time_names.push_back("frame_create");
     time_names.push_back("img_align");
     time_names.push_back("feature_reproj");
     time_names.push_back("motion_ba");
     time_names.push_back("light_affine");
     time_names.push_back("per_depth_filter");
+    time_names.push_back("finish");
 
     TimeTracing::TraceNames log_names;
     log_names.push_back("frame_id");
@@ -82,6 +85,7 @@ System::~System()
 void System::process(const cv::Mat &image, const double timestamp)
 {
     sysTrace->startTimer("total");
+    sysTrace->startTimer("frame_create");
     //! get gray image
     double t0 = (double)cv::getTickCount();
     rgb_ = image;
@@ -94,7 +98,9 @@ void System::process(const cv::Mat &image, const double timestamp)
     double t1 = (double)cv::getTickCount();
     LOG(WARNING) << "[System] Frame " << current_frame_->id_ << " create time: " << (t1-t0)/cv::getTickFrequency();
     sysTrace->log("frame_id", current_frame_->id_);
+    sysTrace->stopTimer("frame_create");
 
+    sysTrace->startTimer("processing");
     if(STAGE_NORMAL_FRAME == stage_)
     {
         status_ = tracking();
@@ -107,6 +113,7 @@ void System::process(const cv::Mat &image, const double timestamp)
     {
 
     }
+    sysTrace->stopTimer("processing");
 
     finishFrame();
 }
@@ -140,7 +147,7 @@ System::Status System::initialize()
     reference_keyframe_ = kf1;
     last_keyframe_ = kf1;
 
-    depth_filter_->insertKeyFrame(kf1, current_frame_);
+    depth_filter_->insertFrame(current_frame_, kf1);
 
     initializer_->reset();
 
@@ -176,15 +183,17 @@ System::Status System::tracking()
     Optimizer::motionOnlyBundleAdjustment(current_frame_, true);
     sysTrace->stopTimer("motion_ba");
 
-    depth_filter_->insertFrame(current_frame_);
+    sysTrace->startTimer("per_depth_filter");
     if(createNewKeyFrame())
     {
-//        depth_filter_->getSeedsForMapping(reference_keyframe_, current_frame_);
-        sysTrace->startTimer("per_depth_filter");
+        depth_filter_->insertFrame(current_frame_, reference_keyframe_);
         mapper_->insertKeyFrame(reference_keyframe_);
-        depth_filter_->insertKeyFrame(reference_keyframe_, current_frame_);
-        sysTrace->stopTimer("per_depth_filter");
     }
+    else
+    {
+        depth_filter_->insertFrame(current_frame_, nullptr);
+    }
+    sysTrace->stopTimer("per_depth_filter");
 
     sysTrace->startTimer("light_affine");
     calcLightAffine();
@@ -366,6 +375,8 @@ bool System::createNewKeyFrame()
 
 void System::finishFrame()
 {
+    sysTrace->startTimer("finish");
+    cv::Mat image_show;
     Stage last_stage = stage_;
     if(STAGE_NORMAL_FRAME == stage_)
     {
@@ -380,78 +391,23 @@ void System::finishFrame()
             stage_ = STAGE_NORMAL_FRAME;
         else if(STATUS_INITAL_RESET == status_)
             initializer_->reset();
+
+        initializer_->drowOpticalFlow(image_show);
     }
 
     //! update
     last_frame_ = current_frame_;
 
-    LOG(WARNING) << "[System] Finish Current Frame with Stage: " << stage_;
-
     //! display
-    viewer_->setCurrentFrame(current_frame_);
+    viewer_->setCurrentFrame(current_frame_, image_show);
 
     sysTrace->log("stage", stage_);
+    sysTrace->stopTimer("finish");
     sysTrace->stopTimer("total");
+    const double time = sysTrace->getTimer("total");
+    LOG(WARNING) << "[System] Finish Current Frame with Stage: " << stage_ << ", total time: " << time;
+
     sysTrace->writeToFile();
-
-    showImage(last_stage);
-}
-
-void System::showImage(Stage stage)
-{
-//    cv::Mat image = rgb_;
-//    if(image.channels() < 3)
-//        cv::cvtColor(image, image, CV_GRAY2RGB);
-
-    cv::Mat image;
-    if(STAGE_NORMAL_FRAME == stage)
-    {
-        drowTrackedPoints(current_frame_, image);
-    }
-    else if(STAGE_INITALIZE == stage)
-    {
-        initializer_->drowOpticalFlow(image);
-    }
-
-    cv::imshow("SSVO Current Image", image);
-    cv::waitKey(time_);
-}
-
-void System::drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
-{
-    //! draw features
-    const cv::Mat src = frame->getImage(0);
-    std::vector<Feature::Ptr> fts;
-    frame->getFeatures(fts);
-    cv::cvtColor(src, dst, CV_GRAY2RGB);
-    int font_face = 1;
-    double font_scale = 0.5;
-    for(const Feature::Ptr &ft : fts)
-    {
-        Vector2d ft_px = ft->px_;
-        cv::Point2f px(ft_px[0], ft_px[1]);
-        cv::Scalar color(0, 255, 0);
-        cv::circle(dst, px, 2, color, -1);
-
-        string id_str = std::to_string((frame->Tcw()*ft->mpt_->pose()).norm());//ft->mpt_->getFoundRatio());//
-        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
-    }
-
-    //! draw seeds
-    std::vector<Feature::Ptr> seed_fts;
-    frame->getSeeds(seed_fts);
-    for(const Feature::Ptr &ft : seed_fts)
-    {
-        Seed::Ptr seed = ft->seed_;
-        cv::Point2f px(ft->px_[0], ft->px_[1]);
-        double convergence = 0;
-        double scale = MIN(convergence, 256.0) / 256.0;
-        cv::Scalar color(255*scale, 0, 255*(1-scale));
-        cv::circle(dst, px, 2, color, -1);
-
-//        string id_str = std::to_string();
-//        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
-    }
 
 }
 
