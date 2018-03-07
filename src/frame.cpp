@@ -153,7 +153,8 @@ bool Frame::addFeature(const Feature::Ptr &ft)
     std::lock_guard<std::mutex> lock(mutex_feature_);
     if(mpt_fts_.count(ft->mpt_))
     {
-        LOG(ERROR) << " The mappoint is already be observed! Frame: " << id_ << " Mpt: " << ft->mpt_->id_;
+        LOG(ERROR) << " The mappoint is already be observed! Frame: " << id_ << " Mpt: " << ft->mpt_->id_
+            << ", px: " << mpt_fts_.find(ft->mpt_)->second->px_.transpose() << ", " << ft->px_.transpose();
         return false;
     }
 

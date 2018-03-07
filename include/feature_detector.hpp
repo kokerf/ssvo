@@ -3,6 +3,7 @@
 
 #include "fast/fast.h"
 #include "global.hpp"
+#include "grid.hpp"
 
 //! (u,v) is in the n-level image of pyramid
 //! (x,y) is in the 0-level image of pyramid
@@ -15,52 +16,13 @@ struct Corner{
     int level;      //!< pyramid level of the corner.
     float score;    //!< shi-tomasi score of the corner.
     //float angle;  //!< for gradient-features: dominant gradient angle.
-    Corner() {}
+    Corner() : x(-1), y(-1), level(-1), score(-1) {}
     Corner(int x, int y, float score, int level) : x(x), y(y), level(level), score(score) {}
 
     Corner(const Corner& other): x(other.x), y(other.y), level(other.level), score(other.score) {}
 };
 
 typedef std::vector<Corner> Corners;
-
-class Grid
-{
-public:
-    Grid(int cols, int rows, int grid_size, int grid_min_size);
-
-    inline const int getSize() const {return grid_size_; }
-
-    inline const int getGridIndex(const int x, const int y) const {return y/grid_size_*grid_n_cols_ + x/grid_size_; }
-
-    inline const bool getOccupancy(const int n) const { return occupancy_[n]; }
-
-    inline const bool getOccupancy(const int x, const int y) const { return getOccupancy(getGridIndex(x, y)); }
-
-    const int getCorners(Corners &corners) const;
-
-    void resetOccupancy();
-
-    void resetSize(int grid_size);
-
-    bool setCorners(const Corner &corner);
-
-    const int setCorners(const Corners &corners);
-
-    const int setCornersAdaptive(const Corners &corners, const int N);
-
-    void setExistingCorners(const Corners& corners);
-
-private:
-    const int cols_;
-    const int rows_;
-    int grid_size_;
-    const int grid_min_size_;
-    int grid_n_cols_;
-    int grid_n_rows_;
-    std::vector<bool> occupancy_;
-    Corners corners_;
-    Corners exit_corners_;
-};
 
 class FastDetector: public noncopyable
 {
@@ -83,6 +45,12 @@ private:
 
     FastDetector(int width, int height, int border, int nlevels, int grid_size, int grid_min_size, int max_threshold, int min_threshold);
 
+    static void setGridMask(Grid<Corner> &grid, const Corners &corners);
+
+    static void setCorners(Grid<Corner> &grid, const Corners &corners);
+
+    static void resetGridAdaptive(Grid<Corner> &grid, const int N, const int min_size);
+
     void detectAdaptive(const cv::Mat &img, Corners &corners, const size_t required, const double eigen_threshold, const int trials = 5);
 
 private:
@@ -100,7 +68,7 @@ private:
     int threshold_;
 
     std::vector<Corners> corners_in_levels_;
-    Grid grid_filter_;
+    Grid<Corner> grid_filter_;
 };
 
 }//! end of ssvo

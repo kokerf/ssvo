@@ -4,115 +4,21 @@
 
 namespace ssvo{
 
-//! Grid
-Grid::Grid(int cols, int rows, int grid_size, int grid_min_size) :
-    cols_(cols), rows_(rows), grid_size_(grid_size), grid_min_size_(grid_min_size),
-    grid_n_cols_(ceil(static_cast<double>(cols)/grid_size_)),
-    grid_n_rows_(ceil(static_cast<double>(rows)/grid_size_)),
-    occupancy_(grid_n_cols_*grid_n_rows_, false),
-    corners_(grid_n_cols_*grid_n_rows_, Corner(0,0,-1.0f,0))
-{}
-
-void Grid::resetOccupancy()
+const bool operator < (const Corner &a, const Corner &b)
 {
-    std::fill(occupancy_.begin(), occupancy_.end(), false);
-    std::fill(corners_.begin(), corners_.end(), Corner(0,0,-1.0f,0));
-    for(const Corner &corner : exit_corners_)
-    {
-        const int idx = getGridIndex(corner.x, corner.y);
-        occupancy_[idx] = true;
-    }
+    return a.score < b.score;
 }
 
-inline void Grid::resetSize(int grid_size)
+const bool operator == (const Corner &a, const Corner &b)
 {
-    grid_size_ = grid_size;
-    grid_n_cols_ = ceil(static_cast<double>(cols_)/grid_size_);
-    grid_n_rows_ = ceil(static_cast<double>(rows_)/grid_size_);
-    occupancy_.resize(grid_n_cols_*grid_n_rows_, false);
-    corners_.resize(grid_n_cols_*grid_n_rows_, Corner(0,0,-1.0f,0));
-    resetOccupancy();
+    return a.x == b.x && a.y == b.y;
 }
 
-//! return true if insert to a new grid
-inline bool Grid::setCorners(const Corner &corner)
+template <>
+inline size_t Grid<Corner>::getIndex(const Corner &element)
 {
-    const int idx = getGridIndex(corner.x, corner.y);
-    const float old_score = corners_[idx].score;
-    if(occupancy_.at(idx) || old_score >= corner.score)
-        return false;
-
-    corners_[idx] = corner;
-    return (old_score < 0.0f);//! true if it is a new grid
-}
-
-//! return the number of grids newly inserted a corner
-inline const int Grid::setCorners(const Corners &corners)
-{
-    int now_corners = 0;
-    for(const Corner &corner : corners)
-    {
-        if(setCorners(corner))
-            now_corners++;
-    }
-    return now_corners;
-}
-
-const int Grid::getCorners(Corners &corners) const
-{
-    const int grid_size = grid_n_cols_*grid_n_rows_;
-    corners.clear();
-    corners.reserve(grid_size);
-    for(const Corner &corner : corners_)
-    {
-        if(corner.score > 0.0f)
-            corners.push_back(corner);
-    }
-
-    return corners.size();
-}
-
-void Grid::setExistingCorners(const Corners& corners)
-{
-    exit_corners_ = corners;
-}
-
-const int Grid::setCornersAdaptive(const Corners &corners, const int N)
-{
-    int new_size = grid_size_;//floorf(std::sqrt(cols_ * rows_ / N));
-    new_size = MAX(new_size, grid_min_size_);
-
-    int n = 0;
-    int now_corners = 0;
-    const int max_corners = 1.1*N;
-    const int min_corners = 0.9*N;
-    while(n++ < 5)
-    {
-        now_corners = exit_corners_.size();
-
-        resetSize(new_size);
-
-        now_corners += setCorners(corners);
-
-        if(now_corners <= max_corners && now_corners >= min_corners)
-            break;
-
-        const float corners_per_grid = 1.0 * now_corners / (grid_n_rows_ * grid_n_cols_);
-        const float n_grid = N / corners_per_grid;
-        if(now_corners > max_corners)
-            new_size = ceil(std::sqrt(cols_ * rows_ / n_grid)) + 1;
-        else if(now_corners < min_corners)
-            new_size = floor(std::sqrt(cols_ * rows_ / n_grid)) - 1;
-
-        new_size = MAX(new_size, grid_min_size_);
-
-        if(grid_size_ == new_size)
-            break;
-
-        LOG_ASSERT(new_size < cols_ || new_size < rows_) << "Error Grid Size: " << new_size;
-    }
-
-    return now_corners;
+    return static_cast<size_t>(element.y/grid_size_)*grid_n_cols_
+        + static_cast<size_t>(element.x/grid_size_);
 }
 
 //! FastDetector
@@ -120,7 +26,7 @@ FastDetector::FastDetector(int width, int height, int border, int nlevels,
                            int grid_size, int grid_min_size, int max_threshold, int min_threshold):
     width_(width), height_(height), border_(border), nlevels_(nlevels), grid_min_size_(grid_min_size),
     size_adjust_(grid_size!=grid_min_size), max_threshold_(max_threshold), min_threshold_(min_threshold),
-    threshold_(max_threshold_), grid_filter_(width, height, grid_size, grid_min_size)
+    threshold_(max_threshold_), grid_filter_(width, height, grid_size)
 {
     corners_in_levels_.resize(nlevels_);
 }
@@ -135,7 +41,7 @@ int FastDetector::detect(const ImgPyr &img_pyr, Corners &new_corners, const Corn
     for(Corners &cs : corners_in_levels_) { cs.clear(); }
     //! find a good threshold to detect fast
     detectAdaptive(img_pyr[0], corners_in_levels_[0], 1.5*N, eigen_threshold, 5);
-
+    
     int new_coners = corners_in_levels_[0].size();
     for(int level = 1; level < nlevels_; level++)
     {
@@ -143,29 +49,75 @@ int FastDetector::detect(const ImgPyr &img_pyr, Corners &new_corners, const Corn
     }
 
     //! 2. Get corners from grid
-    grid_filter_.setExistingCorners(exist_corners);
-    grid_filter_.resetOccupancy();
+    setCorners(grid_filter_, exist_corners);
+//    setGridMask(grid_filter_, exist_corners);
+
+    for(const Corners &corners : corners_in_levels_)
+        setCorners(grid_filter_, corners);
+
     //! if adjust the grid size
     if(size_adjust_)
     {
-        new_corners.clear();
-        new_corners.reserve(new_coners);
-        for(const Corners& cs : corners_in_levels_)
-            for(const Corner &c : cs)
-                new_corners.push_back(c);
-
-        grid_filter_.setCornersAdaptive(new_corners, N);
-        grid_filter_.getCorners(new_corners);
+        resetGridAdaptive(grid_filter_, N, grid_min_size_);
     }
-    else
-    {
-        for(const Corners &cs : corners_in_levels_)
-            grid_filter_.setCorners(cs);
 
-        grid_filter_.getCorners(new_corners);
-    }
+    setGridMask(grid_filter_, exist_corners);
+    grid_filter_.getBestElement(new_corners);
+    grid_filter_.clear();
 
     return new_corners.size();
+}
+
+void FastDetector::setGridMask(Grid<Corner> &grid, const Corners &corners)
+{
+    for(const Corner &corner : corners)
+    {
+        const size_t id = grid.getIndex(corner);
+        grid.setMask(id);
+    }
+}
+
+void FastDetector::setCorners(Grid<Corner> &grid, const Corners &corners)
+{
+    for(const Corner &corner : corners)
+        grid.insert(corner);
+}
+
+void FastDetector::resetGridAdaptive(Grid<Corner> &grid, const int N, const int min_size)
+{
+    const int MAX_SIZE = static_cast<int>(1.1*N);
+    const int MIN_SIZE = static_cast<int>(0.9*N);
+
+    int count = 0;
+//    double time0 = (double)cv::getTickCount();
+    while(count++ < 5)
+    {
+        const int now_size = grid.size();
+
+        if(now_size <= MAX_SIZE && now_size >= MIN_SIZE)
+            break;
+
+        const float corners_per_grid = 1.0 * now_size / (grid.nCells());
+        const float n_grid = N / corners_per_grid;
+
+        int new_size = 0;
+        if(now_size > MAX_SIZE)
+            new_size = ceil(std::sqrt(grid.area() / n_grid)) + 1;
+        else if(now_size < MIN_SIZE)
+            new_size = floor(std::sqrt(grid.area() / n_grid)) - 1;
+
+        new_size = MAX(new_size, min_size);
+
+        if(grid.gridSize() == new_size)
+            break;
+
+        grid.resize(new_size);
+
+        LOG_ASSERT(new_size < grid.cols() || new_size < grid.rows()) << "Error Grid Size: " << new_size;
+    }
+//    double time1 = (double)cv::getTickCount();
+//    std::cout << "time: " << (time1-time0)/cv::getTickFrequency() << ", n:" << count-1 << std::endl;
+
 }
 
 //! detect in level 0 to find a good threshold
@@ -257,7 +209,7 @@ void FastDetector::drawGrid(const cv::Mat& img, cv::Mat& img_grid)
 {
     img_grid = img.clone();
 
-    int grid_size = grid_filter_.getSize();
+    int grid_size = grid_filter_.gridSize();
     int grid_n_cols = (ceil(static_cast<double>(width_)/grid_size));
     int grid_n_rows = (ceil(static_cast<double>(height_)/grid_size));
 
