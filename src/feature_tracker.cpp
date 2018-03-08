@@ -1,11 +1,20 @@
 #include "feature_tracker.hpp"
 #include "feature_alignment.hpp"
 #include "image_alignment.hpp"
+#include <numeric>
 
 namespace ssvo{
 
+template <>
+inline size_t Grid<Feature::Ptr>::getIndex(const Feature::Ptr &element)
+{
+    const Vector2d &px = element->px_;
+    return static_cast<size_t>(px[1]/grid_size_)*grid_n_cols_
+        + static_cast<size_t>(px[0]/grid_size_);
+}
+
 FeatureTracker::FeatureTracker(int width, int height, int grid_size, int border, bool report, bool verbose) :
-    report_(report), verbose_(report&&verbose)
+    report_(report), verbose_(report&&verbose), grid_(width, height, grid_size)
 {
     options_.border = border;
     options_.max_matches = 200;
@@ -15,27 +24,8 @@ FeatureTracker::FeatureTracker(int width, int height, int grid_size, int border,
     options_.max_align_error2 = 3.0;
 
     //! initialize grid
-    grid_.grid_size = grid_size;
-    grid_.grid_n_cols = ceil(static_cast<double>(width)/grid_.grid_size);
-    grid_.grid_n_rows = ceil(static_cast<double>(height)/grid_.grid_size);
-    grid_.cells.resize(grid_.grid_n_rows*grid_.grid_n_cols);
-    for(Grid::Cell*& c : grid_.cells) { c = new Grid::Cell; }
-    grid_.grid_order.resize(grid_.cells.size());
-    for(size_t i = 0; i < grid_.grid_order.size(); ++i) { grid_.grid_order[i] = i; }
-    std::random_shuffle(grid_.grid_order.begin(), grid_.grid_order.end());
-    grid_.occupied.resize(grid_.cells.size(), false);
-}
-
-FeatureTracker::~FeatureTracker()
-{
-    for(Grid::Cell*& c : grid_.cells) { delete c; }
-}
-
-void FeatureTracker::resetGrid()
-{
-    for(Grid::Cell* c : grid_.cells) { c->clear(); }
-    std::random_shuffle(grid_.grid_order.begin(), grid_.grid_order.end());
-    std::fill(grid_.occupied.begin(), grid_.occupied.end(), false);
+    grid_order_.resize(grid_.nCells());
+    std::iota(grid_order_.begin(), grid_order_.end(), 0);
 }
 
 int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
@@ -44,7 +34,7 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
 
     double t0 = (double)cv::getTickCount();
 
-    resetGrid();
+    grid_.clear();
 
     int matches_from_frame = 0;
     std::unordered_set<MapPoint::Ptr> last_mpts_set;
@@ -97,12 +87,15 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     int matches_from_cell = 0;
     const int max_matches_rest = options_.max_matches - matches_from_frame;
     total_project_ = 0;
-    for(int index : grid_.grid_order)
+
+    std::cout << "size: " << grid_.size() << std::endl;
+    std::random_shuffle(grid_order_.begin(), grid_order_.end());
+    for(size_t index : grid_order_)
     {
-        if(grid_.occupied.at(index))
+        if(grid_.isMasked(index))
             continue;
 
-        if(matchMapPointsFromCell(frame, *grid_.cells[index]))
+        if(matchMapPointsFromCell(frame, grid_.getCell(index)))
             matches_from_cell++;
 
         if(matches_from_cell > max_matches_rest)
@@ -132,38 +125,32 @@ bool FeatureTracker::reprojectMapPointToCell(const Frame::Ptr &frame, const MapP
     if(!frame->cam_->isInFrame(px.cast<int>(), options_.border))
         return false;
 
-    const int k = static_cast<int>(px[1]/grid_.grid_size)*grid_.grid_n_cols
-                + static_cast<int>(px[0]/grid_.grid_size);
+    Feature::Ptr ft = Feature::create(px, point);
 
-    if(grid_.occupied.at(k))
-        return false;
-
-    grid_.cells.at(k)->push_back(Candidate(point, px));
+    grid_.insert(ft);
 
     return true;
 }
 
-bool FeatureTracker::matchMapPointsFromCell(const Frame::Ptr &frame, Grid::Cell &cell)
+bool FeatureTracker::matchMapPointsFromCell(const Frame::Ptr &frame, Grid<Feature::Ptr>::Cell &cell)
 {
     // TODO sort? 选择质量较好的点优先投影
-    cell.sort([](Candidate &c1, Candidate &c2){return c1.pt->getFoundRatio() > c2.pt->getFoundRatio();});
+    cell.sort([](Feature::Ptr &ft1, Feature::Ptr &ft2){return ft1->mpt_->getFoundRatio() > ft2->mpt_->getFoundRatio();});
 
-    for(const Candidate &candidate : cell)
+    for(const Feature::Ptr &ft : cell)
     {
         total_project_++;
-        const MapPoint::Ptr &mpt = candidate.pt;
-        Vector2d px_cur = candidate.px;
-        int level_cur = 0;
-        int result = reprojectMapPoint(frame, mpt, px_cur, level_cur, options_.num_align_iter, options_.max_align_epsilon, options_.max_align_error2, verbose_);
+        const MapPoint::Ptr &mpt = ft->mpt_;
+        Vector2d px_cur = ft->px_;
+        int result = reprojectMapPoint(frame, mpt, px_cur, ft->level_, options_.num_align_iter, options_.max_align_epsilon, options_.max_align_error2, verbose_);
 
         mpt->increaseVisible(result+1);
 
         if(result != 1)
             continue;
 
-        Vector3d ft_cur = frame->cam_->lift(px_cur);
-        Feature::Ptr new_feature = Feature::create(px_cur, ft_cur, level_cur, mpt);
-        frame->addFeature(new_feature);
+        ft->fn_ = frame->cam_->lift(px_cur);
+        frame->addFeature(ft);
         mpt->increaseFound(2);
 
         return true;
@@ -206,9 +193,8 @@ int FeatureTracker::matchMapPointsFromLastFrame(const Frame::Ptr &frame_cur, con
         frame_cur->addFeature(new_feature);
         mpt->increaseFound(2);
 
-        const int k = static_cast<int>(px_cur[1]/grid_.grid_size)*grid_.grid_n_cols
-            + static_cast<int>(px_cur[0]/grid_.grid_size);
-        grid_.occupied.at(k) = true;
+        const size_t id = grid_.getIndex(new_feature);
+        grid_.setMask(id);
 
         matches_count++;
     }

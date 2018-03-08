@@ -152,11 +152,12 @@ void Viewer::run()
 
         if(show_keyframe)
         {
-            KeyFrame::Ptr reference = frame->getRefKeyFrame();
+            KeyFrame::Ptr reference = frame ? frame->getRefKeyFrame() : nullptr;
             drawKeyFrames(map_, reference, show_connections, show_current_connections);
         }
 
-        drawCurrentFrame(frame->pose().matrix(), cv::Scalar(0.0, 0.0, 1.0));
+        if(frame)
+            drawCurrentFrame(frame->pose().matrix(), cv::Scalar(0.0, 0.0, 1.0));
 
 
         if(image.empty() && frame != nullptr)
@@ -249,7 +250,9 @@ void Viewer::drawCurrentImage(pangolin::GlTexture &gl_texture, cv::Mat &image)
 
 void Viewer::drawMapPoints(Map::Ptr &map, Frame::Ptr &frame)
 {
-    std::unordered_map<MapPoint::Ptr, Feature::Ptr> obs_mpts = frame->features();
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> obs_mpts;
+    if(frame)
+        obs_mpts = frame->features();
 
     std::vector<MapPoint::Ptr> mpts = map->getAllMapPoints();
 

@@ -11,28 +11,26 @@ namespace ssvo
 
 class FeatureTracker : public noncopyable
 {
-    struct Candidate {
-        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-        MapPoint::Ptr pt;    //!< 3D point.
-        Vector2d px;         //!< projected 2D pixel location.
-        Candidate(MapPoint::Ptr pt, Vector2d& px) : pt(pt), px(px) {}
-        Candidate(){}
-    };
-
-    struct Grid {
-        typedef std::list<Candidate, aligned_allocator<Candidate> > Cell;
-        int grid_size;
-        int grid_n_cols;
-        int grid_n_rows;
-        std::vector<Cell*> cells;
-        std::vector<int> grid_order;
-        std::vector<bool> occupied;
-    };
+//    struct Candidate {
+//        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+//        MapPoint::Ptr pt;    //!< 3D point.
+//        Vector2d px;         //!< projected 2D pixel location.
+//        Candidate(MapPoint::Ptr pt, Vector2d& px) : pt(pt), px(px) {}
+//        Candidate(){}
+//    };
+//
+//    struct Grid {
+//        typedef std::list<Candidate, aligned_allocator<Candidate> > Cell;
+//        int grid_size;
+//        int grid_n_cols;
+//        int grid_n_rows;
+//        std::vector<Cell*> cells;
+//        std::vector<int> grid_order;
+//        std::vector<bool> occupied;
+//    };
 
 public:
     typedef std::shared_ptr<FeatureTracker> Ptr;
-
-    ~FeatureTracker();
 
     int reprojectLoaclMap(const Frame::Ptr &frame);
 
@@ -49,11 +47,9 @@ private:
 
     FeatureTracker(int width, int height, int grid_size, int border, bool report = false, bool verbose = false);
 
-    void resetGrid();
-
     bool reprojectMapPointToCell(const Frame::Ptr &frame, const MapPoint::Ptr &point);
 
-    bool matchMapPointsFromCell(const Frame::Ptr &frame, Grid::Cell &cell);
+    bool matchMapPointsFromCell(const Frame::Ptr &frame, Grid<Feature::Ptr>::Cell &cell);
 
     int matchMapPointsFromLastFrame(const Frame::Ptr &frame_cur, const Frame::Ptr &frame_last);
 
@@ -68,7 +64,8 @@ private:
         double max_align_error2;
     } options_;
 
-    Grid grid_;
+    Grid<Feature::Ptr> grid_;
+    std::vector<size_t> grid_order_;
 
     bool report_;
     bool verbose_;

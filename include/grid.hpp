@@ -131,6 +131,12 @@ public:
         mask_.at(index) = value;
     }
 
+    bool isMasked(size_t index)
+    {
+        assert(index >= 0 && index < grid_n_cells_);
+        return mask_.at(index);
+    }
+
     inline const size_t cols()
     {
         return cols_;
@@ -156,12 +162,12 @@ public:
         return grid_size_;
     }
 
-    inline const Cell &getCell(size_t id)
+    inline Cell &getCell(size_t id)
     {
         return *cells_->at(id);
     }
 
-    inline const Cells &getCells()
+    inline Cells &getCells()
     {
         return *cells_;
     }

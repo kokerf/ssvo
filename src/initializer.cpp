@@ -164,7 +164,7 @@ Initializer::Result Initializer::createNewCorners(const FrameCandidate::Ptr &can
 
     new_corners.resize(needed);
     auto new_corners_itr = new_corners.begin();
-    for(int i = 0; i < FrameCandidate::size; ++i, ++new_corners_itr)
+    for(int i = 0; i < FrameCandidate::size && new_corners_itr != new_corners.end(); i++)
     {
         if(candidate->idx[i] >= 0)
             continue;
@@ -174,6 +174,7 @@ Initializer::Result Initializer::createNewCorners(const FrameCandidate::Ptr &can
         candidate->level[i] = corner.level;
         candidate->pts[i].x = corner.x;
         candidate->pts[i].y = corner.y;
+        new_corners_itr++;
     }
 
     LOG_IF(INFO, verbose_) << "[INIT][0] New Detect corners: " << new_corners.size() << " for frame: " << candidate->frame->id_;
@@ -379,8 +380,9 @@ void Initializer::createInitalMap(double map_scale)
 
         MapPoint::Ptr mpt = ssvo::MapPoint::create(p3ds_[i]*scale);
 
-        LOG_ASSERT(cand_cur_->level[i] >= 0) << "Error in level, index:" << i;
-        Feature::Ptr feature_ref = Feature::create(px_ref, ft_ref, cand_cur_->level[i], mpt);
+        LOG_ASSERT(cand_cur_->level[i] >= 0 && cand_cur_->level[i] <= cand_cur_->frame->max_level_) << "Error in level, index:" << i;
+        LOG_ASSERT(cand_ref_->level[i] >= 0 && cand_ref_->level[i] <= cand_ref_->frame->max_level_) << "Error in level, index:" << i;
+        Feature::Ptr feature_ref = Feature::create(px_ref, ft_ref, cand_ref_->level[i], mpt);
         Feature::Ptr feature_cur = Feature::create(px_cur, ft_cur, cand_cur_->level[i], mpt);
 
         cand_ref_->frame->addFeature(feature_ref);
