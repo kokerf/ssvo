@@ -88,7 +88,6 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     const int max_matches_rest = options_.max_matches - matches_from_frame;
     total_project_ = 0;
 
-    std::cout << "size: " << grid_.size() << std::endl;
     std::random_shuffle(grid_order_.begin(), grid_order_.end());
     for(size_t index : grid_order_)
     {
@@ -141,15 +140,14 @@ bool FeatureTracker::matchMapPointsFromCell(const Frame::Ptr &frame, Grid<Featur
     {
         total_project_++;
         const MapPoint::Ptr &mpt = ft->mpt_;
-        Vector2d px_cur = ft->px_;
-        int result = reprojectMapPoint(frame, mpt, px_cur, ft->level_, options_.num_align_iter, options_.max_align_epsilon, options_.max_align_error2, verbose_);
+        int result = reprojectMapPoint(frame, mpt, ft->px_, ft->level_, options_.num_align_iter, options_.max_align_epsilon, options_.max_align_error2, verbose_);
 
         mpt->increaseVisible(result+1);
 
         if(result != 1)
             continue;
 
-        ft->fn_ = frame->cam_->lift(px_cur);
+        ft->fn_ = frame->cam_->lift(ft->px_);
         frame->addFeature(ft);
         mpt->increaseFound(2);
 
