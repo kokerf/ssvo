@@ -40,7 +40,7 @@ int main(int argc, char *argv[])
     }
 
     vo.saveTrajectoryTUM("trajectory.txt");
-    cv::waitKey(0);
+    getchar();
 
     return 0;
 }

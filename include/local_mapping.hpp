@@ -65,6 +65,7 @@ private:
         int num_align_iter;
         double max_align_epsilon;
         double max_align_error2;
+        double min_found_ratio_;
     } options_;
 
     FastDetector::Ptr fast_detector_;

@@ -39,6 +39,7 @@ LocalMapper::LocalMapper(bool report, bool verbose) :
     options_.num_align_iter = 15;
     options_.max_align_epsilon = 0.01;
     options_.max_align_error2 = 3.0;
+    options_.min_found_ratio_ = 0.15;
 
     //! LOG and timer for system;
     TimeTracing::TraceNames time_names;
@@ -330,12 +331,12 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe, const 
                 continue;
             }
 
-//            if(mpt->getFoundRatio() < 0.1)
-//            {
-//                mpt->setBad();
-//                map_->removeMapPoint(mpt);
-//                continue;
-//            }
+            if(mpt->observations() == 1 && mpt->getFoundRatio() < options_.min_found_ratio_)
+            {
+                mpt->setBad();
+                map_->removeMapPoint(mpt);
+                continue;
+            }
 
             candidate_mpts.insert(mpt);
         }
