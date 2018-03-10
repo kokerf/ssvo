@@ -333,8 +333,10 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
 //    reportInfo(problem, summary, report, verbose);
 //}
 
-void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool report, bool verbose)
+void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_seeds, bool report, bool verbose)
 {
+    static const size_t OPTIMAL_MPTS = 150;
+
     frame->optimal_Tcw_ = frame->Tcw();
 
     ceres::Problem problem;
@@ -360,6 +362,41 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool report,
         res_ids[i] = problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), mpt->optimal_pose_.data());
         problem.SetParameterBlockConstant(mpt->optimal_pose_.data());
     }
+
+    if(N < OPTIMAL_MPTS)
+    {
+        std::vector<Feature::Ptr> ft_seeds;
+        frame->getSeeds(ft_seeds);
+        const size_t needed = OPTIMAL_MPTS - N;
+        if(ft_seeds.size() > needed)
+        {
+            std::nth_element(ft_seeds.begin(), ft_seeds.begin()+needed, ft_seeds.end(),
+                             [](const Feature::Ptr &a, const Feature::Ptr &b)
+                             {
+                               return a->seed_->getInfoWeight() > b->seed_->getInfoWeight();
+                             });
+
+            ft_seeds.resize(needed);
+        }
+
+        const size_t M = ft_seeds.size();
+        res_ids.resize(N+M);
+        for(int i = 0; i < M; ++i)
+        {
+            Feature::Ptr ft = ft_seeds[i];
+            Seed::Ptr seed = ft->seed_;
+            if(seed == nullptr)
+                continue;
+
+            seed->optimal_pose_.noalias() = seed->kf->Twc() * (seed->fn_ref / seed->getInvDepth());
+
+            ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(seed->fn_ref[0]/seed->fn_ref[2], seed->fn_ref[1]/seed->fn_ref[2], seed->getInfoWeight());
+            res_ids[i] = problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), seed->optimal_pose_.data());
+            problem.SetParameterBlockConstant(seed->optimal_pose_.data());
+
+        }
+    }
+
 
     ceres::Solver::Options options;
     ceres::Solver::Summary summary;

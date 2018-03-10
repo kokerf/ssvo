@@ -23,6 +23,8 @@ public:
     const Vector2d px_ref;                  //!< Pixel matched in current frame
     const int level_ref;                    //!< Corner detected level in refrence frame
 
+    Vector3d optimal_pose_;
+
     const static double convergence_rate;
 
     std::list<std::pair<double, double> > history;
@@ -33,6 +35,7 @@ public:
     bool checkConvergence();
     double getInvDepth();
     double getVariance();
+    double getInfoWeight();
 
     inline static Ptr create(const std::shared_ptr<KeyFrame> &kf, const Vector2d &px, const Vector3d &fn, const int level, double depth_mean, double depth_min)
     {return Ptr(new Seed(kf, px, fn, level, depth_mean, depth_min));}

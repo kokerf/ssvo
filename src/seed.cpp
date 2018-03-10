@@ -115,4 +115,10 @@ double Seed::getVariance()
     return sigma2;
 }
 
+double Seed::getInfoWeight()
+{
+    std::lock_guard<std::mutex> lock(mutex_seed_);
+    return MIN(convergence_rate * z_range/sigma2, 1.0);
+}
+
 }

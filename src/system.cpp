@@ -180,7 +180,7 @@ System::Status System::tracking()
 
     //! motion-only BA
     sysTrace->startTimer("motion_ba");
-    Optimizer::motionOnlyBundleAdjustment(current_frame_, true);
+    Optimizer::motionOnlyBundleAdjustment(current_frame_, true, true);
     sysTrace->stopTimer("motion_ba");
 
     sysTrace->startTimer("per_depth_filter");
