@@ -53,6 +53,8 @@ private:
 
     bool checkNewFrame(Frame::Ptr &frame, KeyFrame::Ptr &keyframe);
 
+    bool checkDisparity(const Frame::Ptr &frame);
+
     int createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame = nullptr);
 
     int trackSeeds(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur) const;
@@ -77,6 +79,7 @@ private:
         double klt_epslion;
         double align_epslion;
         double px_error_normlized;
+        double min_disparity;
     } options_;
 
     FastDetector::Ptr fast_detector_;

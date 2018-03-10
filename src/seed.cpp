@@ -58,15 +58,17 @@ double Seed::computeVar(const SE3d &T_cur_ref, const double z, const double delt
 
 //    double alpha = acos(f_r.dot(-t)/f_r_norm/t_norm);
 
-    double epslion = atan(0.5*delta/f_c_norm)*2.0;
+    double epslion = asin(0.5*delta/f_c_norm)*2.0;
 //    epslion  = 0.0021867665614925609;
     double beta = acos(f_c.dot(t)/(f_c_norm*t_norm));
     double gamma = acos(f_c.dot(f_r)/(f_c_norm*f_r_norm));
 
-    double z1 = t_norm * sin(beta+epslion) / sin(gamma-epslion);
-    z1 /= f_r_norm;
+    double z_far = t_norm * sin(beta+epslion) / sin(MAX(gamma-epslion, 0.0000001));
+    double z_near = t_norm * sin(beta-epslion) / sin(gamma+epslion);
+    z_far /= f_r_norm;
+    z_near /= f_r_norm;
 
-    return 0.5 * (1.0/MAX(0.0000001, 2*z-z1) - 1.0/(z1));
+    return 0.5 * (1.0/MIN(z, z_near)-1.0/MAX(z, z_far));
 }
 
 void Seed::update(const double x, const double tau2)

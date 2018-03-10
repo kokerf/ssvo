@@ -112,9 +112,7 @@ TimeTracing::Ptr dfltTrace = nullptr;
 //! DepthFilter
 DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback &callback, bool report, bool verbose) :
     fast_detector_(fast_detector), seed_coverged_callback_(callback),
-    report_(report), verbose_(report&&verbose),
-    filter_thread_(nullptr), track_thread_enabled_(true)
-
+    report_(report), verbose_(report&&verbose), filter_thread_(nullptr), track_thread_enabled_(true), stop_require_(false)
 {
     options_.max_kfs = 5;
     options_.max_features = Config::minCornersPerKeyFrame();
@@ -123,8 +121,8 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback 
     options_.klt_epslion = 0.0001;
     options_.align_epslion = 0.0001;
     options_.max_perprocess_kfs = Config::maxPerprocessKeyFrames();
-
     options_.px_error_normlized = Config::imagePixelUnSigma();
+    options_.min_disparity = 0.0;//2.0;
 
     //! LOG and timer for system;
     TimeTracing::TraceNames time_names;
@@ -193,15 +191,20 @@ void DepthFilter::run()
         {
             dfltTrace->startTimer("total_without_klt");
 
-            dfltTrace->startTimer("update_seeds");
-            int updated_count = updateSeeds(frame);
-            dfltTrace->stopTimer("update_seeds");
-            dfltTrace->log("num_updated", updated_count);
+            int updated_count = 0;
+            int project_count = 0;
+            if(checkDisparity(frame))
+            {
+                dfltTrace->startTimer("update_seeds");
+                updated_count = updateSeeds(frame);
+                dfltTrace->stopTimer("update_seeds");
+                dfltTrace->log("num_updated", updated_count);
 
-            dfltTrace->startTimer("epl_search");
-            int  project_count = reprojectAllSeeds(frame);
-            dfltTrace->stopTimer("epl_search");
-            dfltTrace->log("num_repoj", project_count);
+                dfltTrace->startTimer("epl_search");
+                project_count = reprojectAllSeeds(frame);
+                dfltTrace->stopTimer("epl_search");
+                dfltTrace->log("num_repoj", project_count);
+            }
 
             dfltTrace->startTimer("create_seeds");
             if(keyframe)
@@ -258,7 +261,6 @@ void DepthFilter::run()
 
 bool DepthFilter::checkNewFrame(Frame::Ptr &frame, KeyFrame::Ptr &keyframe)
 {
-    static Frame::Ptr frame_last;
     std::unique_lock<std::mutex> lock(mutex_frame_);
     cond_process_main_.wait_for(lock, std::chrono::milliseconds(3));
     if(frames_buffer_.empty())
@@ -269,6 +271,28 @@ bool DepthFilter::checkNewFrame(Frame::Ptr &frame, KeyFrame::Ptr &keyframe)
     frames_buffer_.pop_front();
 
     return frame != nullptr;
+}
+
+bool DepthFilter::checkDisparity(const Frame::Ptr &frame)
+{
+    static Frame::Ptr frame_ref;
+
+    if(frame == nullptr)
+        return false;
+
+    if(frame_ref != nullptr && frame_ref->getRefKeyFrame()->id_ == frame->getRefKeyFrame()->id_)
+    {
+        const double disparity = frame->disparity_ - frame_ref->disparity_;
+        if(std::abs(disparity) < options_.min_disparity)
+        {
+            LOG(ERROR) << "Too less disparity:" << disparity << " in frame " << frame->id_;
+            return false;
+        }
+    }
+
+    frame_ref = frame;
+
+    return true;
 }
 
 void DepthFilter::trackFrame(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur)
@@ -301,16 +325,20 @@ void DepthFilter::insertFrame(const Frame::Ptr &frame, const KeyFrame::Ptr keyfr
     if(filter_thread_ == nullptr)
     {
         dfltTrace->startTimer("total_without_klt");
+        int updated_count = 0;
+        int project_count = 0;
+        if(checkDisparity(frame))
+        {
+            dfltTrace->startTimer("update_seeds");
+            updated_count = updateSeeds(frame);
+            dfltTrace->stopTimer("update_seeds");
+            dfltTrace->log("num_updated", updated_count);
 
-        dfltTrace->startTimer("update_seeds");
-        int updated_count = updateSeeds(frame);
-        dfltTrace->stopTimer("update_seeds");
-        dfltTrace->log("num_updated", updated_count);
-
-        dfltTrace->startTimer("epl_search");
-        int  project_count = reprojectAllSeeds(frame);
-        dfltTrace->stopTimer("epl_search");
-        dfltTrace->log("num_repoj", project_count);
+            dfltTrace->startTimer("epl_search");
+            project_count = reprojectAllSeeds(frame);
+            dfltTrace->stopTimer("epl_search");
+            dfltTrace->log("num_repoj", project_count);
+        }
 
         dfltTrace->startTimer("create_seeds");
         if(keyframe)
@@ -647,7 +675,7 @@ int DepthFilter::reprojectAllSeeds(const Frame::Ptr &frame)
     int matched_count = 0;
     for(const KeyFrame::Ptr &kf : candidate_keyframes)
     {
-        matched_count += reprojectSeeds(kf, frame, options_.epl_dist2_threshold, options_.align_epslion*options_.px_error_normlized);
+        matched_count += reprojectSeeds(kf, frame, options_.epl_dist2_threshold, options_.px_error_normlized);
     }
 
     return matched_count;

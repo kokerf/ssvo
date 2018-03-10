@@ -133,6 +133,8 @@ public:
 
     SE3d optimal_Tcw_;//! for optimization
 
+    double disparity_;//! for depth filter
+
 protected:
 
     std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts_;
@@ -152,6 +154,7 @@ protected:
     std::mutex mutex_seed_;
 
 private:
+
     ImgPyr optical_pyr_;
 };
 

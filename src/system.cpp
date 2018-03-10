@@ -334,7 +334,10 @@ bool System::createNewKeyFrame()
     }
     disparities.sort();
 
-    LOG(INFO) << "[System] Max overlap: " << max_overlap << " min disaprity " << disparities.front() << ", average ";
+    if(!disparities.empty())
+        current_frame_->disparity_ = *std::next(disparities.begin(), disparities.size()/2);
+
+    LOG(INFO) << "[System] Max overlap: " << max_overlap << " min disaprity " << disparities.front() << ", median: " << current_frame_->disparity_;
 
 //    int all_features = current_frame_->featureNumber() + current_frame_->seedNumber();
     bool c2 = disparities.front() > options_.min_kf_disparity;
