@@ -13,14 +13,14 @@ message(STATUS "DBoW Enable : "   ${DBOW_ENABLE})
 
 # Definitions
 if(DEBUG_OUTPUT)
-  add_definitions(-DSSVO_IMFORM_OUTPUT)
+    add_definitions(-DSSVO_IMFORM_OUTPUT)
 endif()
 
 ## -----------------------
 ## Build setting
 ## -----------------------
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release)
+    set(CMAKE_BUILD_TYPE Release)
 endif()
 
 message(STATUS "Build Type  : " ${CMAKE_BUILD_TYPE})
@@ -128,6 +128,10 @@ LIST(APPEND SOURCEFILES
     src/viewer.cpp
 )
 
+if(DBOW_ENABLE)
+    LIST(APPEND SOURCEFILES src/brief.cpp)
+endif()
+
 #add_library(${PROJECT_NAME} SHARED ${SOURCEFILES})
 #target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})
 
@@ -166,7 +170,7 @@ add_executable(test_timer test/test_timer.cpp)
 target_link_libraries(test_timer)
 
 if(DBOW_ENABLE)
-add_executable(test_dbow3 test/test_dbow3.cpp)
+add_executable(test_dbow3 test/test_dbow3.cpp src/brief.cpp)
 target_link_libraries(test_dbow3  ${LINK_LIBS})
 endif()
 
