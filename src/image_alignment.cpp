@@ -54,7 +54,7 @@ AlignSE3::AlignSE3(bool verbose, bool visible) :
     verbose_(verbose), visible_(visible)
 {}
 
-bool AlignSE3::run(Frame::Ptr reference_frame,
+int AlignSE3::run(Frame::Ptr reference_frame,
                    Frame::Ptr current_frame,
                    int top_level,
                    int bottom_level,
@@ -66,7 +66,9 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
     ref_frame_ = reference_frame;
     cur_frame_ = current_frame;
 
-    const size_t N = ref_frame_->featureNumber();
+    std::vector<Feature::Ptr> fts;
+    ref_frame_->getFeatures(fts);
+    const size_t N = fts.size();
     LOG_ASSERT(N != 0) << " AlignSE3: Frame(" << reference_frame->id_ << ") " << " no features to track!";
     const int max_level = (int)cur_frame_->images().size() - 1;
     LOG_ASSERT(max_level >= top_level && bottom_level >= 0 && bottom_level <= top_level) << " Error align level from top " << top_level << " to bottom " << bottom_level;
@@ -80,7 +82,7 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
 
     for(int l = top_level; l >= bottom_level; l--)
     {
-        const int n = computeReferencePatches(l);
+        const int n = computeReferencePatches(l, fts);
 
         double res_old = std::numeric_limits<double>::max();
         SE3d T_cur_from_ref_old = T_cur_from_ref_;
@@ -120,13 +122,11 @@ bool AlignSE3::run(Frame::Ptr reference_frame,
         LOG(INFO) << "T_cur_from_ref:\n " << T_cur_from_ref_.matrix3x4();
     }
 
-    return true;
+    return count_;
 }
 
-int AlignSE3::computeReferencePatches(int level)
+int AlignSE3::computeReferencePatches(int level, std::vector<Feature::Ptr> &fts)
 {
-    std::vector<Feature::Ptr> fts;
-    ref_frame_->getFeatures(fts);
     const size_t N = fts.size();
 
     Vector3d ref_pose = ref_frame_->pose().translation();
@@ -181,8 +181,7 @@ double AlignSE3::computeResidual(int level, int N)
     Hessian_.setZero();
     Jres_.setZero();
     double res = 0;
-    int count = 0;
-
+    count_ = 0;
     cv::Mat showimg = cv::Mat::zeros(rows, cols, CV_8UC1);
     for(int n = 0; n < N; ++n)
     {
@@ -200,7 +199,7 @@ double AlignSE3::computeResidual(int level, int N)
         Hessian_.noalias() += J.transpose() * J;
 
         res += residual.dot(residual) / PatchArea;
-        count++;
+        count_++;
 
         if(visible_)
         {
@@ -221,7 +220,7 @@ double AlignSE3::computeResidual(int level, int N)
         cv::waitKey(0);
     }
 
-    return res / count;
+    return res / count_;
 }
 
 namespace utils{
