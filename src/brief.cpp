@@ -372,7 +372,7 @@ void BRIEF::compute(const std::vector<cv::Mat> &images, const std::vector<cv::Ke
         image_pyramid_border[i] = image_border(cv::Rect(EDGE_THRESHOLD, EDGE_THRESHOLD, images[i].cols, images[i].rows));
 
         // preprocess the resized image
-        cv::GaussianBlur(images[i], image_pyramid_border_gauss[i], cv::Size(7, 7), 2, 2, cv::BORDER_REFLECT_101);
+        cv::GaussianBlur(image_pyramid_border[i], image_pyramid_border_gauss[i], cv::Size(7, 7), 2, 2, cv::BORDER_REFLECT_101);
     }
 
     int size = (int)keypoints.size();
