@@ -16,6 +16,10 @@ if(DEBUG_OUTPUT)
     add_definitions(-DSSVO_IMFORM_OUTPUT)
 endif()
 
+if(DBOW_ENABLE)
+    add_definitions(-DSSVO_DBOW_ENABLE)
+endif()
+
 ## -----------------------
 ## Build setting
 ## -----------------------

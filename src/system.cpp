@@ -94,7 +94,6 @@ void System::process(const cv::Mat &image, const double timestamp)
         cv::cvtColor(gray, gray, cv::COLOR_RGB2GRAY);
 
     current_frame_ = Frame::create(gray, timestamp, camera_);
-    current_frame_->setRefKeyFrame(reference_keyframe_);
     double t1 = (double)cv::getTickCount();
     LOG(WARNING) << "[System] Frame " << current_frame_->id_ << " create time: " << (t1-t0)/cv::getTickFrequency();
     sysTrace->log("frame_id", current_frame_->id_);
@@ -111,7 +110,7 @@ void System::process(const cv::Mat &image, const double timestamp)
     }
     else if(STAGE_RELOCALIZING == stage_)
     {
-
+        status_ = relocalize();
     }
     sysTrace->stopTimer("processing");
 
@@ -156,6 +155,8 @@ System::Status System::initialize()
 
 System::Status System::tracking()
 {
+    current_frame_->setRefKeyFrame(reference_keyframe_);
+
     //! track seeds
     depth_filter_->trackFrame(last_frame_, current_frame_);
 
@@ -180,7 +181,7 @@ System::Status System::tracking()
 
     //! motion-only BA
     sysTrace->startTimer("motion_ba");
-    Optimizer::motionOnlyBundleAdjustment(current_frame_, true, true);
+    Optimizer::motionOnlyBundleAdjustment(current_frame_, false, false, true);
     sysTrace->stopTimer("motion_ba");
 
     sysTrace->startTimer("per_depth_filter");
@@ -203,6 +204,40 @@ System::Status System::tracking()
     frame_timestamp_buffer_.push_back(current_frame_->timestamp_);
     reference_keyframe_buffer_.push_back(current_frame_->getRefKeyFrame());
     frame_pose_buffer_.push_back(current_frame_->pose());//current_frame_->getRefKeyFrame()->Tcw() * current_frame_->pose());
+
+    return STATUS_TRACKING_GOOD;
+}
+
+System::Status System::relocalize()
+{
+    Corners corners_new;
+    Corners corners_old;
+    fast_detector_->detect(current_frame_->images(), corners_new, corners_old, Config::minCornersPerKeyFrame());
+
+    reference_keyframe_ = mapper_->relocalizeByDBoW(current_frame_, corners_new);
+
+    if(reference_keyframe_ == nullptr)
+        return STATUS_TRACKING_BAD;
+
+    current_frame_->setPose(reference_keyframe_->pose());
+
+    //! alignment by SE3
+    AlignSE3 align;
+    int matches = align.run(reference_keyframe_, current_frame_, Config::alignTopLevel(), Config::alignBottomLevel(), 30, 1e-8);
+
+    if(matches < 30)
+        return STATUS_TRACKING_BAD;
+
+    current_frame_->setRefKeyFrame(reference_keyframe_);
+    matches = feature_tracker_->reprojectLoaclMap(current_frame_);
+
+    if(matches < 30)
+        return STATUS_TRACKING_BAD;
+
+    Optimizer::motionOnlyBundleAdjustment(current_frame_, false, true, true);
+
+    if(current_frame_->featureNumber() < 30)
+        return STATUS_TRACKING_BAD;
 
     return STATUS_TRACKING_GOOD;
 }
@@ -383,9 +418,10 @@ void System::finishFrame()
     Stage last_stage = stage_;
     if(STAGE_NORMAL_FRAME == stage_)
     {
-        if(STATUS_TRACKING_GOOD == status_)
+        if(STATUS_TRACKING_BAD == status_)
         {
-
+            stage_ = STAGE_RELOCALIZING;
+            current_frame_->setPose(last_frame_->pose());
         }
     }
     else if(STAGE_INITALIZE == stage_)
@@ -396,6 +432,13 @@ void System::finishFrame()
             initializer_->reset();
 
         initializer_->drowOpticalFlow(image_show);
+    }
+    else if(STAGE_RELOCALIZING == stage_)
+    {
+        if(STATUS_TRACKING_GOOD == status_)
+            stage_ = STAGE_NORMAL_FRAME;
+        else
+            current_frame_->setPose(last_frame_->pose());
     }
 
     //! update

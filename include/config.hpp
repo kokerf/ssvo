@@ -89,6 +89,8 @@ public:
 
     static int maxPerprocessKeyFrames(){return getInstance().max_perprocess_kfs;}
 
+    static std::string DBoWDirectory(){return getInstance().dbow_dir;}
+
 private:
     static Config& getInstance()
     {
@@ -192,6 +194,10 @@ private:
         if(!fs["Glog.log_dir"].empty())
             fs["Glog.log_dir"] >> FLAGS_log_dir;
 
+        //! DBoW
+        if(!fs["DBoW.voc_dir"].empty())
+            fs["DBoW.voc_dir"] >> dbow_dir;
+
         fs.release();
     }
 
@@ -252,6 +258,9 @@ private:
     //! DepthFilter
     int max_seeds_buffer;
     int max_perprocess_kfs;
+
+    //! DBoW
+    std::string dbow_dir;
 };
 
 }

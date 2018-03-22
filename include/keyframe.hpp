@@ -48,11 +48,17 @@ public:
 
     const uint64_t frame_id_;
 
+#ifdef SSVO_DBOW_ENABLE
+    std::vector<Feature::Ptr> dbow_fts_;
+    cv::Mat descriptors_;
+    unsigned int dbow_Id_;
+#endif
+
+private:
+
     std::map<KeyFrame::Ptr, int> connectedKeyFrames_;
 
     std::multimap<int, KeyFrame::Ptr> orderedConnectedKeyFrames_;
-
-private:
 
     bool isBad_;
 

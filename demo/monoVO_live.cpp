@@ -7,7 +7,7 @@ int main(int argc, char *argv[])
     google::InitGoogleLogging(argv[0]);
     LOG_ASSERT(argc == 2) << "\n Usage : ./monoVO_live config_file";
 
-    const std::string videoStreamAddress = "rtsp://219.216.88.242:8554/mystream";
+    const std::string videoStreamAddress = "rtsp://219.216.88.118:8554/mystream";
 
     cv::VideoCapture vc;
 
