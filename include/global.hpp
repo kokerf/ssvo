@@ -5,7 +5,6 @@
 #include <stdint.h>
 #include <assert.h>
 #include <cmath>
-#include <sys/time.h>
 
 #include <iostream>
 #include <iomanip>
@@ -53,13 +52,6 @@ inline double Rand(double min, double max)
 
 inline int Rand(int min, int max)
 { return (((double)distribution(rd) * (max - min + 1))) + min;}
-
-inline double getSystemTime()
-{
-    timeval tv;
-    gettimeofday(&tv, NULL);
-    return (tv.tv_sec + 0.000001*tv.tv_usec);
-}
 
 class noncopyable
 {

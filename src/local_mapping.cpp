@@ -1,4 +1,4 @@
-#include <include/config.hpp>
+#include "config.hpp"
 #include "local_mapping.hpp"
 #include "feature_alignment.hpp"
 #include "feature_tracker.hpp"
@@ -232,8 +232,6 @@ void LocalMapper::finishLastKeyFrame()
 void LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
 {
     //! create new feature
-    // TODO add_observation 不用，需不需要找一下其他关键帧是否观测改点，增加约束
-    // TODO 把这部分放入一个队列，在单独线程进行处理
     MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->getInvDepth()));
     Feature::Ptr ft = Feature::create(seed->px_ref, seed->fn_ref, seed->level_ref, mpt);
     seed->kf->addFeature(ft);

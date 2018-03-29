@@ -1,6 +1,8 @@
 #ifndef _SSVO_PATTERN_HPP_
 #define _SSVO_PATTERN_HPP_
 
+#include <array>
+
 namespace ssvo{
 
 template <typename T, int N, int S>

@@ -48,6 +48,9 @@ void kltTrack(const ImgPyr &imgs_ref, const ImgPyr &imgs_cur, const cv::Size win
     const int track_size = inlier_ids.size();
     LOG_IF(INFO, verbose) << "Points for tracking: " << track_size;
 
+    if(track_size <= 0)
+        return;
+
     std::vector<float> error;
     std::vector<uchar> status_forward;
 

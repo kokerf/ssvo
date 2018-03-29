@@ -5,13 +5,13 @@ using namespace ssvo;
 int main(int argc, char *argv[])
 {
     google::InitGoogleLogging(argv[0]);
-    LOG_ASSERT(argc == 2) << "\n Usage : ./monoVO_live config_file";
+    LOG_ASSERT(argc == 3) << "\n Usage : ./monoVO_live config_file videoID";
 
-    const std::string videoStreamAddress = "rtsp://219.216.88.242:8554/mystream";
+    const std::string video_stream_address = argv[2];
 
     cv::VideoCapture vc;
 
-    if(!vc.open(videoStreamAddress))
+    if(!vc.open(video_stream_address))
     {
         std::cout << "error in open camera." << std::endl;
         return -1;

@@ -54,10 +54,12 @@ public:
 
     typedef std::shared_ptr<TimeTracing> Ptr;
 
+#ifdef SSVO_USE_TRACE
     TimeTracing(const std::string file_name, const std::string file_path,
                 const TraceNames &trace_names, const TraceNames &log_names) :
         file_name_(file_path), trace_names_(trace_names), log_names_(log_names)
     {
+
         size_t found = file_name_.find_last_of("/\\");
         if(found + 1 != file_name_.size())
             file_name_ += file_name_.substr(found, 1);
@@ -148,6 +150,25 @@ public:
 
         reset();
     }
+
+#else
+
+    TimeTracing(const std::string file_name, const std::string file_path,
+        const TraceNames &trace_names, const TraceNames &log_names) :
+        file_name_(file_path), trace_names_(trace_names), log_names_(log_names)
+    {}
+
+    inline void startTimer(const std::string &name) {}
+
+    inline void stopTimer(const std::string &name) {}
+
+    inline double getTimer(const std::string &name) { return 0; }
+
+    inline void log(const std::string &name, const double value) {}
+
+    inline void writeToFile() {}
+
+#endif // SSVO_USE_TRACE
 
 private:
 

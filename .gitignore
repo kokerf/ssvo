@@ -6,6 +6,7 @@ data/
 bin/
 lib/
 *build*/
+*install*/
 .idea/
 
 # for logging

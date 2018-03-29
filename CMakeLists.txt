@@ -7,14 +7,23 @@ project(ssvo)
 set(DEBUG_OUTPUT  TRUE)
 set(BUILD_TEST   FALSE)
 set(DBOW_ENABLE  FALSE)
+set(USE_TRACE  FALSE)
 message(STATUS "Info Output : "  ${DEBUG_OUTPUT})
 message(STATUS "Build Test  : "    ${BUILD_TEST})
 message(STATUS "DBoW Enable : "   ${DBOW_ENABLE})
+message(STATUS "USE TRACING : "   ${USE_TRACE})
 
 # Definitions
 if(DEBUG_OUTPUT)
   add_definitions(-DSSVO_IMFORM_OUTPUT)
 endif()
+
+if(USE_TRACE)
+  add_definitions(-DSSVO_USE_TRACE)
+endif()
+
+
+add_definitions(-D_USE_MATH_DEFINES)
 
 ## -----------------------
 ## Build setting
@@ -44,6 +53,10 @@ else()
     message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
 endif()
 
+IF(MSVC)
+  ADD_DEFINITIONS(-D__SSE2__)
+ENDIF()
+
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O0 -march=native")
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -mmmx -msse -msse -msse2 -msse3 -mssse3")
 
@@ -51,6 +64,11 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -mmmx -msse -msse -msse2 -ms
 ## Library required
 ## -----------------------
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
+
+# fast
+LIST(APPEND CMAKE_MODULE_PATH  ${PROJECT_SOURCE_DIR}/Thirdparty/fast/build)
+find_package(fast REQUIRED)
+include_directories(${fast_INCLUDE_DIR})
 
 # OpenCV
 find_package(OpenCV 3.1.0 REQUIRED)
@@ -90,7 +108,6 @@ endif()
 include_directories(
     ${PROJECT_SOURCE_DIR}
     ${PROJECT_SOURCE_DIR}/include
-    ${PROJECT_SOURCE_DIR}/Thirdparty/fast/include/
 )
 
 LIST(APPEND LINK_LIBS
@@ -100,7 +117,7 @@ LIST(APPEND LINK_LIBS
     ${CERES_LIBRARIES}
     ${Pangolin_LIBRARIES}
     ${DBoW3_LIBRARIES}
-    ${PROJECT_SOURCE_DIR}/Thirdparty/fast/build/libfast.so
+    ${fast_LIBRARY}
 )
 
 ## -----------------------

@@ -166,9 +166,9 @@ size_t FastDetector::detectInLevel(const cv::Mat &img,
 #if __SSE2__
     fast::fast_corner_detect_10_sse2(img.data, cols, rows, stride, threshold, fast_corners);
 #elif HAVE_FAST_NEON
-    fast::fast_corner_detect_9_neon(image.data, cols, rows, stride, threshold, fast_corners);
+    fast::fast_corner_detect_9_neon(img.data, cols, rows, stride, threshold, fast_corners);
 #else
-    fast::fast_corner_detect_10( image.data, cols, rows, stride, threshold, fast_corners);
+    fast::fast_corner_detect_10(img.data, cols, rows, stride, threshold, fast_corners);
 #endif
 
     std::vector<int> scores, nm_corners;

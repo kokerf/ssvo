@@ -36,7 +36,7 @@ int main(int argc, char *argv[])
             time_wait = (timestamp - dataset.timestamps_[i-1])*1e6;
 
         if(time_process < time_wait)
-            usleep(time_wait-time_process);
+            std::this_thread::sleep_for(std::chrono::microseconds((int)(time_wait - time_process)));
     }
 
     vo.saveTrajectoryTUM("trajectory.txt");

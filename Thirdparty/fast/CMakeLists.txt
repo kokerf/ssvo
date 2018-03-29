@@ -18,14 +18,20 @@ PROJECT(${PROJECT_NAME})
 CMAKE_MINIMUM_REQUIRED (VERSION 2.8.3)
 SET(CMAKE_VERBOSE_MAKEFILE ON)
 
+IF(MSVC)
+  ADD_DEFINITIONS(-D__SSE2__)
+ENDIF()
+
 # Build type and flags
-SET(CMAKE_BUILD_TYPE Release) # Options:  Debug, RelWithDebInfo, Release
-SET(CMAKE_CXX_FLAGS "-Wall -Werror -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unknown-pragmas")
-SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -O0 -g")
-IF(IS_ARM)
-  SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -mfpu=neon -march=armv7-a")
-ELSE()
-  SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -mmmx -msse -msse -msse2 -msse3 -mssse3 -fomit-frame-pointer")
+IF(NOT MSVC)
+  SET(CMAKE_BUILD_TYPE Release) # Options:  Debug, RelWithDebInfo, Release
+  SET(CMAKE_CXX_FLAGS "-Wall -Werror -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unknown-pragmas")
+  SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS} -O0 -g")
+  IF(IS_ARM)
+    SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -mfpu=neon -march=armv7-a")
+  ELSE()
+    SET(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -mmmx -msse -msse -msse2 -msse3 -mssse3 -fomit-frame-pointer")
+  ENDIF()
 ENDIF()
 
 # Add Sources
@@ -40,7 +46,7 @@ ENDIF()
 
 # Add library
 INCLUDE_DIRECTORIES(include src)
-ADD_LIBRARY(${PROJECT_NAME} SHARED ${SOURCES})
+ADD_LIBRARY(${PROJECT_NAME} STATIC ${SOURCES})
 
 # Add Tests
 IF(BUILD_TEST)
@@ -62,5 +68,7 @@ CONFIGURE_FILE( ${CMAKE_CURRENT_SOURCE_DIR}/fastConfig.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/fastConfig.cmake @ONLY IMMEDIATE )
 export( PACKAGE fast )
 
+SET(CMAKE_INSTALL_PREFIX ${PROJECT_SOURCE_DIR}/install)
+MESSAGE(STATUS "Install prefix: ${CMAKE_INSTALL_PREFIX}")
 INSTALL(DIRECTORY include/fast DESTINATION ${CMAKE_INSTALL_PREFIX}/include FILES_MATCHING PATTERN "*.h" )
 INSTALL(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib )

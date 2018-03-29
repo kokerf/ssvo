@@ -4,7 +4,7 @@
 namespace ssvo
 {
 
-unsigned long int MapPoint::next_id_ = 0;
+uint64_t MapPoint::next_id_ = 0;
 const double MapPoint::log_level_factor_ = log(2.0f);
 
 MapPoint::MapPoint(const Vector3d &p) :
@@ -63,7 +63,7 @@ void MapPoint::addObservation(const KeyFrame::Ptr &kf, const Feature::Ptr &ft)
     LOG_ASSERT(kf && kf) << " Error input kf: " << kf << ", or ft: " << ft;
 
     std::lock_guard<std::mutex> lock(mutex_obs_);
-    LOG_ASSERT(type_ != BAD) << " Error to use a BAD MapPoint！";
+    LOG_ASSERT(type_ != BAD) << " Error to use a BAD MapPoint!";
 
     if(refKF_ == nullptr)
         refKF_ = kf;
