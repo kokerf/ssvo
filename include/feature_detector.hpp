@@ -49,8 +49,6 @@ private:
 
     static void setCorners(Grid<Corner> &grid, const Corners &corners);
 
-    static void resetGridAdaptive(Grid<Corner> &grid, const int N, const int min_size);
-
     void detectAdaptive(const cv::Mat &img, Corners &corners, const size_t required, const double eigen_threshold, const int trials = 5);
 
 private:

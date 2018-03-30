@@ -89,7 +89,11 @@ public:
 
     static int maxPerprocessKeyFrames(){return getInstance().max_perprocess_kfs;}
 
+<<<<<<< HEAD
     static string timeTracingDirectory(){return getInstance().time_trace_dir;}
+=======
+    static std::string DBoWDirectory(){return getInstance().dbow_dir;}
+>>>>>>> origin/dev
 
 private:
     static Config& getInstance()
@@ -198,6 +202,10 @@ private:
         if(!fs["Trace.log_dir"].empty())
             fs["Trace.log_dir"] >> time_trace_dir;
 
+        //! DBoW
+        if(!fs["DBoW.voc_dir"].empty())
+            fs["DBoW.voc_dir"] >> dbow_dir;
+
         fs.release();
     }
 
@@ -261,6 +269,9 @@ private:
 
     //! TimeTrace
     string time_trace_dir;
+    
+    //! DBoW
+    std::string dbow_dir;
 };
 
 }

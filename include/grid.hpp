@@ -186,6 +186,44 @@ private:
     std::vector<bool> mask_;
 };
 
+template <typename T>
+void resetGridAdaptive(Grid<T> &grid, const int N, const int min_size)
+{
+    const int MAX_SIZE = static_cast<int>(1.1*N);
+    const int MIN_SIZE = static_cast<int>(0.9*N);
+
+    int count = 0;
+//    double time0 = (double)cv::getTickCount();
+    while(count++ < 5)
+    {
+        const int now_size = grid.size();
+
+        if(now_size <= MAX_SIZE && now_size >= MIN_SIZE)
+            break;
+
+        const float corners_per_grid = 1.0 * now_size / (grid.nCells());
+        const float n_grid = N / corners_per_grid;
+
+        int new_size = 0;
+        if(now_size > MAX_SIZE)
+            new_size = ceil(std::sqrt(grid.area() / n_grid)) + 1;
+        else if(now_size < MIN_SIZE)
+            new_size = floor(std::sqrt(grid.area() / n_grid)) - 1;
+
+        new_size = MAX(new_size, min_size);
+
+        if(grid.gridSize() == new_size)
+            break;
+
+        grid.resize(new_size);
+
+        LOG_ASSERT(new_size < grid.cols() || new_size < grid.rows()) << "Error Grid Size: " << new_size;
+    }
+//    double time1 = (double)cv::getTickCount();
+//    std::cout << "time: " << (time1-time0)/cv::getTickFrequency() << ", n:" << count-1 << std::endl;
+
+}
+
 }
 
 #endif //_SSVO_GRID_HPP_

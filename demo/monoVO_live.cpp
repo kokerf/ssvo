@@ -21,16 +21,17 @@ int main(int argc, char *argv[])
 
     std::string image_name;
     double timestamp;
+    cv::Mat image;
     for(;;)
     {
-        cv::Mat image;
         if(!vc.read(image))
         {
             std::cout << "no image" << std::endl;
             continue;
         }
 
-        vo.process(image, cv::getTickCount());
+        timestamp = (double) cv::getTickCount() / cv::getTickFrequency();
+        vo.process(image, timestamp);
     }
 
     vo.saveTrajectoryTUM("trajectory.txt");
