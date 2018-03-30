@@ -89,6 +89,8 @@ public:
 
     static int maxPerprocessKeyFrames(){return getInstance().max_perprocess_kfs;}
 
+    static string timeTracingDirectory(){return getInstance().time_trace_dir;}
+
 private:
     static Config& getInstance()
     {
@@ -192,6 +194,10 @@ private:
         if(!fs["Glog.log_dir"].empty())
             fs["Glog.log_dir"] >> FLAGS_log_dir;
 
+        //! Time Trace
+        if(!fs["Trace.log_dir"].empty())
+            fs["Trace.log_dir"] >> time_trace_dir;
+
         fs.release();
     }
 
@@ -252,6 +258,9 @@ private:
     //! DepthFilter
     int max_seeds_buffer;
     int max_perprocess_kfs;
+
+    //! TimeTrace
+    string time_trace_dir;
 };
 
 }

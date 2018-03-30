@@ -55,7 +55,8 @@ LocalMapper::LocalMapper(bool report, bool verbose) :
     log_names.push_back("num_matched");
     log_names.push_back("num_fusion");
 
-    mapTrace.reset(new TimeTracing("ssvo_trace_map", "/tmp", time_names, log_names));
+    string trace_dir = Config::timeTracingDirectory();
+    mapTrace.reset(new TimeTracing("ssvo_trace_map", trace_dir, time_names, log_names));
 }
 
 void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur)

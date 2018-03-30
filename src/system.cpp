@@ -68,7 +68,8 @@ System::System(std::string config_file) :
     log_names.push_back("num_feature_reproj");
     log_names.push_back("stage");
 
-    sysTrace.reset(new TimeTracing("ssvo_trace_system", "/tmp", time_names, log_names));
+    string trace_dir = Config::timeTracingDirectory();
+    sysTrace.reset(new TimeTracing("ssvo_trace_system", trace_dir, time_names, log_names));
 }
 
 System::~System()

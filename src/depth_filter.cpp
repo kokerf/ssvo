@@ -138,7 +138,8 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback 
     log_names.push_back("num_updated");
     log_names.push_back("num_repoj");
 
-    dfltTrace.reset(new TimeTracing("ssvo_trace_filter", "/tmp", time_names, log_names));
+    string trace_dir = Config::timeTracingDirectory();
+    dfltTrace.reset(new TimeTracing("ssvo_trace_filter", trace_dir, time_names, log_names));
 }
 
 void DepthFilter::enableTrackThread()

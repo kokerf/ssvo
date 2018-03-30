@@ -4,26 +4,17 @@ project(ssvo)
 ## -----------------------
 ## User's option
 ## -----------------------
-set(DEBUG_OUTPUT  TRUE)
-set(BUILD_TEST   FALSE)
-set(DBOW_ENABLE  FALSE)
-set(USE_TRACE  FALSE)
-message(STATUS "Info Output : "  ${DEBUG_OUTPUT})
-message(STATUS "Build Test  : "    ${BUILD_TEST})
-message(STATUS "DBoW Enable : "   ${DBOW_ENABLE})
-message(STATUS "USE TRACING : "   ${USE_TRACE})
+option(SSVO_TEST_ENABLE "If build the test files." OFF)
+option(SSVO_DBOW_ENABLE "If use the DBoW library." OFF)
+option(SSVO_TRACE_ENABLE "If use the time tracing." OFF)
+message(STATUS "Test Enable  : "   ${SSVO_TEST_ENABLE})
+message(STATUS "DBoW Enable  : "   ${SSVO_DBOW_ENABLE})
+message(STATUS "Trace Enable : "   ${SSVO_TRACE_ENABLE})
 
 # Definitions
-if(DEBUG_OUTPUT)
-  add_definitions(-DSSVO_IMFORM_OUTPUT)
-endif()
-
-if(USE_TRACE)
+if(SSVO_TRACE_ENABLE)
   add_definitions(-DSSVO_USE_TRACE)
 endif()
-
-
-add_definitions(-D_USE_MATH_DEFINES)
 
 ## -----------------------
 ## Build setting
@@ -54,6 +45,7 @@ else()
 endif()
 
 IF(MSVC)
+  ADD_DEFINITIONS(-D_USE_MATH_DEFINES)
   ADD_DEFINITIONS(-D__SSE2__)
 ENDIF()
 
