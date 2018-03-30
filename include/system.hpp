@@ -47,6 +47,8 @@ private:
 
     Status initialize();
 
+    Status relocalize();
+
     bool createNewKeyFrame();
 
     void finishFrame();

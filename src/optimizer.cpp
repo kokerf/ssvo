@@ -333,7 +333,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
 //    reportInfo(problem, summary, report, verbose);
 //}
 
-void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_seeds, bool report, bool verbose)
+void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_seeds, bool reject, bool report, bool verbose)
 {
     static const size_t OPTIMAL_MPTS = 150;
 
@@ -406,22 +406,26 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_see
 
     ceres::Solve(options, &problem, &summary);
 
-    int remove_count = 0;
-//    static const double TH_REPJ = 3.81 * Config::imagePixelUnSigma2();
-//    for(size_t i = 0; i < N; ++i)
-//    {
-//        Feature::Ptr ft = fts[i];
-//        if(reprojectionError(problem, res_ids[i]).squaredNorm() > TH_REPJ*(1<<ft->level_))
-//        {
-//            remove_count++;
-//            problem.RemoveResidualBlock(res_ids[i]);
-//            frame->removeFeature(ft);
-//        }
-//    }
-//
-//    ceres::Solve(options, &problem, &summary);
-//
-//    LOG_IF(INFO, report) << "[Optimizer] Motion-only BA removes " << remove_count << " points";
+    if(reject)
+    {
+        int remove_count = 0;
+
+        static const double TH_REPJ = 3.81 * Config::imagePixelUnSigma2();
+        for(size_t i = 0; i < N; ++i)
+        {
+            Feature::Ptr ft = fts[i];
+            if(reprojectionError(problem, res_ids[i]).squaredNorm() > TH_REPJ * (1 << ft->level_))
+            {
+                remove_count++;
+                problem.RemoveResidualBlock(res_ids[i]);
+                frame->removeFeature(ft);
+            }
+        }
+
+        ceres::Solve(options, &problem, &summary);
+
+        LOG_IF(WARNING, report) << "[Optimizer] Motion-only BA removes " << remove_count << " points";
+    }
 
     //! update pose
     frame->setTcw(frame->optimal_Tcw_);
