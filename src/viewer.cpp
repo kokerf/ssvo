@@ -110,7 +110,7 @@ void Viewer::run()
                 T.setIdentity();
             }
 
-            s_cam.SetModelViewMatrix(pangolin::ModelViewLookAt(0, -1, -0.5, 0, 0, 0, 0, -1, 0));
+            //s_cam.SetModelViewMatrix(pangolin::ModelViewLookAt(0, -1, -0.5, 0, 0, 0, 0, -1, 0));
             s_cam.Follow(camera_pose);
             following_camera = true;
         }
@@ -263,8 +263,8 @@ void Viewer::drawMapPoints(Map::Ptr &map, Frame::Ptr &frame)
         Vector3d pose = mpt->pose();
         if(obs_mpts.count(mpt))
             glColor3f(1.0,0.0,0.3);
-        else if(mpt->observations() == 1)
-            glColor3f(0.0,0.0,0.0);
+//        else if(mpt->observations() == 1)
+//             glColor3f(0.0,0.0,0.0);
         else
             glColor3f(0.5,0.5,0.5);
 //        float rate = (float)mpt->getFoundRatio();
