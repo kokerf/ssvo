@@ -89,11 +89,9 @@ public:
 
     static int maxPerprocessKeyFrames(){return getInstance().max_perprocess_kfs;}
 
-<<<<<<< HEAD
     static string timeTracingDirectory(){return getInstance().time_trace_dir;}
-=======
+
     static std::string DBoWDirectory(){return getInstance().dbow_dir;}
->>>>>>> origin/dev
 
 private:
     static Config& getInstance()
