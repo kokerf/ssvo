@@ -20,7 +20,14 @@ void loadImages(const string &file_directory, std::vector<string> &image_filenam
     intptr_t fileHandle;
     std::string filename = file_directory + "\\*.jpg";
     fileHandle = _findfirst(filename.c_str(), &file);
-    if (fileHandle  != -1L) {
+    if(fileHandle == -1L)
+    {
+        filename = file_directory + "\\*.png";
+        fileHandle = _findfirst(filename.c_str(), &file);
+    }
+
+    if(fileHandle  != -1L)
+    {
         do {
             std::string image_name = file_directory + "\\" + file.name;
             image_filenames.push_back(image_name);
@@ -58,6 +65,7 @@ int main(int argc, char const *argv[])
     if(argc != 3)
     {
         std::cout << "Usge: ./test_feature_detector path_to_sequence configfile" << std::endl;
+        return -1;
     }
 
     google::InitGoogleLogging(argv[0]);

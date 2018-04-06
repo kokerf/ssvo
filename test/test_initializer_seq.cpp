@@ -23,12 +23,19 @@ void loadImages(const string &file_directory, std::vector<string> &image_filenam
     intptr_t fileHandle;
     std::string filename = file_directory + "\\*.jpg";
     fileHandle = _findfirst(filename.c_str(), &file);
-    if (fileHandle  != -1L) {
+    if(fileHandle == -1L)
+    {
+        filename = file_directory + "\\*.png";
+        fileHandle = _findfirst(filename.c_str(), &file);
+    }
+
+    if(fileHandle != -1L)
+    {
         do {
             std::string image_name = file_directory + "\\" + file.name;
             image_filenames.push_back(image_name);
             std::cout << image_name << std::endl;
-        } while (_findnext(fileHandle, &file) == 0);
+        } while(_findnext(fileHandle, &file) == 0);
     }
 
     _findclose(fileHandle);
@@ -121,6 +128,7 @@ int main(int argc, char const *argv[])
     std::string dir_name = argv[1];
     std::vector<string> img_file_names;
     loadImages(dir_name, img_file_names);
+    LOG_ASSERT(!img_file_names.empty()) << "Error! No image in directory: " << dir_name;
 
     cv::Mat K = Config::cameraIntrinsic();
     cv::Mat DistCoef = Config::cameraDistCoef();
