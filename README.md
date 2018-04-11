@@ -2,6 +2,8 @@
 
 Semi-direct sparse odometry
 
+video of running in [rpg_urban dataset](https://www.youtube.com/watch?v=2AnIj_QFtow), and [live video](https://www.youtube.com/watch?v=ISGDrrDcUB0).
+
 ### 1. Prerequisites
 
 #### 1.1 [OpenCV](http://opencv.org)
