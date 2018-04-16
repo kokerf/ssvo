@@ -45,6 +45,9 @@ ELSE()
 ENDIF()
 
 # Add library
+# Set postfixes for generated libraries based on buildtype.
+SET(CMAKE_RELEASE_POSTFIX "")
+SET(CMAKE_DEBUG_POSTFIX "d")
 INCLUDE_DIRECTORIES(include src)
 ADD_LIBRARY(${PROJECT_NAME} STATIC ${SOURCES})
 
