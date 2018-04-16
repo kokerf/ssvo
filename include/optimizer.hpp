@@ -17,7 +17,7 @@ public:
 
     static void twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame::Ptr &kf2, bool report=false, bool verbose=false);
 
-    static void motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_seeds, bool report=false, bool verbose=false);
+    static void motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_seeds, bool reject=false, bool report=false, bool verbose=false);
 
     static void localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size=10, int min_shared_fts=50, bool report=false, bool verbose=false);
 

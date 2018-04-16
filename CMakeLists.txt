@@ -13,14 +13,18 @@ message(STATUS "Trace Enable : "   ${SSVO_TRACE_ENABLE})
 
 # Definitions
 if(SSVO_TRACE_ENABLE)
-  add_definitions(-DSSVO_USE_TRACE)
+    add_definitions(-DSSVO_USE_TRACE)
+endif()
+
+if(SSVO_DBOW_ENABLE)
+    add_definitions(-DSSVO_DBOW_ENABLE)
 endif()
 
 ## -----------------------
 ## Build setting
 ## -----------------------
 if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release)
+    set(CMAKE_BUILD_TYPE Release)
 endif()
 
 message(STATUS "Build Type  : " ${CMAKE_BUILD_TYPE})

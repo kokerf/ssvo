@@ -2,6 +2,7 @@
 #include <DBoW3/Vocabulary.h>
 #include <DBoW3/Database.h>
 #include <DBoW3/DescManip.h>
+#include "brief.hpp"
 
 std::vector<std::string> readImagePaths(int argc,char **argv,int start){
     std::vector<std::string> paths;
@@ -61,20 +62,51 @@ int main(int argc, char *argv[])
 
     std::vector<std::vector<cv::KeyPoint> > kps(images.size());
     std::vector<cv::Mat > desps(images.size());
+    std::vector<cv::Mat > desps1(images.size());
 
-    cv::Ptr<cv::ORB> orb = cv::ORB::create();
+    cv::Ptr<cv::ORB> orb = cv::ORB::create(500, 2, 1);
+    ssvo::BRIEF brief;
+    double t0 = cv::getTickCount();
     for(int i = 0; i < images.size(); ++i)
     {
         orb->detect(images[i], kps[i]);
+    }
+
+    double t1 = cv::getTickCount();
+    for(int i = 0; i < images.size(); ++i)
+    {
         orb->compute(images[i], kps[i], desps[i]);
+    }
+
+    double t2 = cv::getTickCount();
+    for(int i = 0; i < images.size(); ++i)
+    {
+        std::vector<cv::Mat> imgPyr;
+        cv::buildPyramid(images[0], imgPyr, 0);
+        brief.compute(imgPyr, kps[i], desps1[i]);
+    }
+
+    double t3 = cv::getTickCount();
+    std::cout << "Time: " << (t1-t0)/cv::getTickFrequency()/images.size()
+        << ", " << (t2-t1)/cv::getTickFrequency()/images.size()
+        << ", " << (t3-t2)/cv::getTickFrequency()/images.size()  << std::endl;
+
+
+    for(int j = 0; j < kps.size(); ++j)
+    {
+        std::cout << "1: " << to_binary(desps[0].row(j)) << std::endl;
+        std::cout << "2: " << to_binary(desps1[0].row(j)) << std::endl;
     }
 
     std::vector<DBoW3::BowVector> bvs(images.size());
     std::vector<DBoW3::FeatureVector> fvs(images.size());
+    double t4 = cv::getTickCount();
     for(int i = 0; i < images.size(); ++i)
     {
         db.add(desps[i], &bvs[i], &fvs[i]);
     }
+    double t5 = cv::getTickCount();
+    std::cout << "Database Time: " << (t5-t4)/cv::getTickFrequency()/images.size() << std::endl;
 
     std::cout << "\n=========" << std::endl;
     std::cout << "* BowVector of image 0:\n" << bvs[0] << std::endl;
@@ -106,6 +138,15 @@ int main(int argc, char *argv[])
 
         std::cout << "Searching for Image " << i << ". " << ret << std::endl;
     }
+
+    for(int j = 0; j < images.size(); ++j)
+    {
+        std::string id = std::to_string(j);
+        cv::Mat show;
+        cv::drawKeypoints(images[j], kps[j], show);
+        cv::imshow("img"+id, show);
+    }
+    cv::waitKey(0);
 
     std::cout << std::endl;
 

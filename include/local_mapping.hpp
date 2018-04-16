@@ -5,6 +5,10 @@
 #include "global.hpp"
 #include "map.hpp"
 
+#ifdef SSVO_DBOW_ENABLE
+#include <DBoW3/DBoW3.h>
+#endif
+
 namespace ssvo{
 
 class LocalMapper : public noncopyable
@@ -26,6 +30,8 @@ public:
     int refineMapPoints(const int max_optimalize_num = -1);
 
     void createFeatureFromSeed(const Seed::Ptr &seed);
+
+    KeyFrame::Ptr relocalizeByDBoW(const Frame::Ptr &frame, const Corners &corners);
 
     static LocalMapper::Ptr create(bool report = false, bool verbose = false)
     { return LocalMapper::Ptr(new LocalMapper(report, verbose));}
@@ -50,6 +56,8 @@ private:
 
     void checkCulling(const KeyFrame::Ptr &keyframe);
 
+    void addToDatabase(const KeyFrame::Ptr &keyframe);
+
 public:
 
     Map::Ptr map_;
@@ -59,6 +67,7 @@ private:
     struct Option{
         double min_disparity;
         int min_redundant_observations;
+        int max_features;
         int num_reproject_kfs;
         int num_local_ba_kfs;
         int min_local_ba_connected_fts;
@@ -72,6 +81,13 @@ private:
 
     std::deque<KeyFrame::Ptr> keyframes_buffer_;
     KeyFrame::Ptr keyframe_last_;
+
+#ifdef SSVO_DBOW_ENABLE
+    DBoW3::Vocabulary vocabulary_;
+    DBoW3::Database database_;
+    std::vector<cv::Point2i> border_tl_;
+    std::vector<cv::Point2i> border_br_;
+#endif
 
     const bool report_;
     const bool verbose_;

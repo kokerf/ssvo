@@ -39,12 +39,12 @@ public:
 
     AlignSE3(bool verbose=false, bool visible=false);
 
-    bool run(Frame::Ptr reference_frame, Frame::Ptr current_frame,
+    int run(Frame::Ptr reference_frame, Frame::Ptr current_frame,
              int top_level, int bottom_level, int max_iterations = 30, double epslion = 1E-5f);
 
 private:
 
-    int computeReferencePatches(int level);
+    int computeReferencePatches(int level, std::vector<Feature::Ptr> &fts);
 
     double computeResidual(int level, int N);
 
@@ -56,6 +56,7 @@ private:
     Frame::Ptr ref_frame_;
     Frame::Ptr cur_frame_;
 
+    int count_;
     std::vector<bool> visiable_fts_;
     Matrix<double, 3, Dynamic, RowMajor> ref_feature_cache_;
 
