@@ -4,9 +4,9 @@ project(ssvo)
 ## -----------------------
 ## User's option
 ## -----------------------
-option(SSVO_TEST_ENABLE "If build the test files." OFF)
+option(SSVO_TEST_ENABLE "If build the test files." TRUE)
 option(SSVO_DBOW_ENABLE "If use the DBoW library." OFF)
-option(SSVO_TRACE_ENABLE "If use the time tracing." OFF)
+option(SSVO_TRACE_ENABLE "If use the time tracing." TRUE)
 message(STATUS "Test Enable  : "   ${SSVO_TEST_ENABLE})
 message(STATUS "DBoW Enable  : "   ${SSVO_DBOW_ENABLE})
 message(STATUS "Trace Enable : "   ${SSVO_TRACE_ENABLE})
@@ -72,7 +72,7 @@ else()
 endif()
 
 # Eigen
-find_package(Eigen3 REQUIRED)
+find_package(Eigen 3 REQUIRED)
 include_directories(${EIGEN3_INCLUDE_DIR})
 
 # Sophus
@@ -88,11 +88,11 @@ find_package(Ceres REQUIRED)
 include_directories(${CERES_INCLUDE_DIRS})
 
 # Pangolin
-find_package(Pangolin 0.4 REQUIRED)
+find_package(Pangolin REQUIRED)
 include_directories(${Pangolin_INCLUDE_DIRS})
 
 # DBoW3
-if(DBOW_ENABLE)
+if(SSVO_DBOW_ENABLE)
 find_package(DBoW3 REQUIRED)
 include_directories(${DBoW3_INCLUDE_DIRS})
 endif()
@@ -137,55 +137,54 @@ LIST(APPEND SOURCEFILES
     src/viewer.cpp
 )
 
-#add_library(${PROJECT_NAME} SHARED ${SOURCEFILES})
-#target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})
+add_library(${PROJECT_NAME} STATIC ${SOURCEFILES})
+target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})
 
 ## -----------------------
 ## Build test
 ## -----------------------
-if(BUILD_TEST)
-add_executable(test_feature_detector test/test_feature_detector.cpp ${SOURCEFILES})
-target_link_libraries(test_feature_detector ${LINK_LIBS})
+if(SSVO_TEST_ENABLE)
+add_executable(test_feature_detector test/test_feature_detector.cpp)
+target_link_libraries(test_feature_detector ${PROJECT_NAME})
 
-add_executable(test_initializer_seq test/test_initializer_seq.cpp src/initializer.cpp ${SOURCEFILES})
-target_link_libraries(test_initializer_seq  ${LINK_LIBS})
+add_executable(test_initializer_seq test/test_initializer_seq.cpp src/initializer.cpp)
+target_link_libraries(test_initializer_seq ${PROJECT_NAME})
 
 add_executable(test_glog test/test_glog.cpp)
-target_link_libraries(test_glog  ${LINK_LIBS})
+target_link_libraries(test_glog  ${PROJECT_NAME})
 
 add_executable(test_utils test/test_utils.cpp)
-target_link_libraries(test_utils  ${LINK_LIBS})
+target_link_libraries(test_utils ${PROJECT_NAME})
 
-add_executable(test_alignment test/test_alignment.cpp ${SOURCEFILES})
-target_link_libraries(test_alignment  ${LINK_LIBS})
+add_executable(test_alignment test/test_alignment.cpp)
+target_link_libraries(test_alignment ${PROJECT_NAME})
 
 add_executable(test_alignment_2d test/test_alignment_2d.cpp src/feature_alignment.cpp)
-target_link_libraries(test_alignment_2d  ${LINK_LIBS})
+target_link_libraries(test_alignment_2d ${PROJECT_NAME})
 
 add_executable(test_triangulation test/test_triangulation.cpp)
-target_link_libraries(test_triangulation  ${LINK_LIBS})
+target_link_libraries(test_triangulation ${PROJECT_NAME})
 
-add_executable(test_pattern test/test_parttern.cpp ${SOURCEFILES})
-target_link_libraries(test_pattern  ${LINK_LIBS})
+add_executable(test_pattern test/test_parttern.cpp)
+target_link_libraries(test_pattern ${PROJECT_NAME})
 
-add_executable(test_optimizer test/test_optimizer.cpp ${SOURCEFILES})
-target_link_libraries(test_optimizer  ${LINK_LIBS})
+add_executable(test_optimizer test/test_optimizer.cpp)
+target_link_libraries(test_optimizer ${PROJECT_NAME})
 
 add_executable(test_timer test/test_timer.cpp)
-target_link_libraries(test_timer)
 
-if(DBOW_ENABLE)
+if(SSVO_DBOW_ENABLE)
 add_executable(test_dbow3 test/test_dbow3.cpp)
-target_link_libraries(test_dbow3  ${LINK_LIBS})
+target_link_libraries(test_dbow3 ${PROJECT_NAME})
 endif()
 
-endif(BUILD_TEST)
+endif(SSVO_TEST_ENABLE)
 
 ## -----------------------
 ## Build VO
 ## -----------------------
-add_executable(monoVO_dataset demo/monoVO_dataset.cpp ${SOURCEFILES})
-target_link_libraries(monoVO_dataset ${LINK_LIBS})
+add_executable(monoVO_dataset demo/monoVO_dataset.cpp)
+target_link_libraries(monoVO_dataset ${PROJECT_NAME})
 
-add_executable(monoVO_live demo/monoVO_live.cpp ${SOURCEFILES})
-target_link_libraries(monoVO_live ${LINK_LIBS})
+add_executable(monoVO_live demo/monoVO_live.cpp)
+target_link_libraries(monoVO_live ${PROJECT_NAME})

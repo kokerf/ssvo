@@ -127,6 +127,7 @@ int main(int argc, char const *argv[])
     rnger.fill(cv_mat, cv::RNG::UNIFORM, cv::Scalar::all(0), cv::Scalar::all(256));
 
     cv::imshow("random image", cv_mat);
+    cv::waitKey(0);
 
     Matrix<uchar , Dynamic, Dynamic, RowMajor> eigen_mat = Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> >((uchar*)cv_mat.data, cv_mat.rows, cv_mat.cols);
 
@@ -147,11 +148,11 @@ int main(int argc, char const *argv[])
     const double y =4.0001+size/2;
     const double x =3.9999+size/2;
     std::cout << "cv image:\n" << cv_mat<< std::endl;
-    std::cout << "eigen image:\n" << eigen_mat<< std::endl;
-    std::cout << "eigen bolck:\n" << eigen_mat.block<size,size>(int(y-size/2),int(x-size/2)) << std::endl;
+    std::cout << "eigen image:\n" << eigen_mat.cast<int>() << std::endl;
+    std::cout << "eigen bolck:\n" << eigen_mat.block<size,size>(int(y-size/2),int(x-size/2)).cast<int>() << std::endl;
 
     //! =============================
-    utils::interpolateMat(eigen_mat, img, dx, dy, x, y);
+    utils::interpolateMat<uchar, double, size>(eigen_mat, img, dx, dy, x, y);
     std::cout << "eigen Mat:\n" << img << std::endl;
     std::cout << "eigen Mat dx:\n" << dx << std::endl;
     std::cout << "eigen Mat dy:\n" << dy << std::endl;
@@ -185,7 +186,7 @@ int main(int argc, char const *argv[])
     const size_t N = 1000000;
     double t0 = (double)cv::getTickCount();
     for(size_t i = 0; i < N; i++) {
-        utils::interpolateMat(eigen_mat, img, dx, dy, x, y);
+        utils::interpolateMat<uchar, double, size>(eigen_mat, img, dx, dy, x, y);
     }
 
     double t1 = (double)cv::getTickCount();

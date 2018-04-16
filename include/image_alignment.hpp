@@ -89,7 +89,7 @@ void warpAffine(const cv::Mat &img_ref,
     assert(img_ref.type() == CV_8UC1);
 
     const Matrix2f A_ref_from_cur = A_cur_from_ref.inverse().cast<float>();
-    if(isnan(A_ref_from_cur(0,0)))
+    if(std::isnan(A_ref_from_cur(0,0)))
     {
         LOG(ERROR) << "Affine warp is Nan";
         return;
