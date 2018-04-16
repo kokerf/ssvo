@@ -1,3 +1,4 @@
+#include <iterator>
 #include <opencv2/imgproc.hpp>
 #include "brief.hpp"
 
