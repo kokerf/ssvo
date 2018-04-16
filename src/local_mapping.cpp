@@ -51,6 +51,7 @@ LocalMapper::LocalMapper(bool report, bool verbose) :
     time_names.push_back("total");
     time_names.push_back("local_ba");
     time_names.push_back("reproj");
+    time_names.push_back("dbow");
 
     TimeTracing::TraceNames log_names;
     log_names.push_back("frame_id");
@@ -189,7 +190,9 @@ void LocalMapper::run()
 
             checkCulling(keyframe_cur);
 
+            mapTrace->startTimer("dbow");
             addToDatabase(keyframe_cur);
+            mapTrace->stopTimer("dbow");
 
             mapTrace->stopTimer("total");
             mapTrace->writeToFile();

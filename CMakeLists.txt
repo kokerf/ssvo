@@ -139,6 +139,7 @@ LIST(APPEND SOURCEFILES
     src/local_mapping.cpp
     src/system.cpp
     src/viewer.cpp
+    src/brief.cpp
 )
 
 add_library(${PROJECT_NAME} STATIC ${SOURCEFILES})
@@ -181,7 +182,6 @@ if(SSVO_DBOW_ENABLE)
 add_executable(test_dbow3 test/test_dbow3.cpp)
 target_link_libraries(test_dbow3 ${PROJECT_NAME})
 endif()
-
 endif(SSVO_TEST_ENABLE)
 
 ## -----------------------
