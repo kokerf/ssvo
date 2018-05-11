@@ -166,4 +166,141 @@ void PinholeCamera::undistortPoints(std::vector<cv::Point2f> &src, std::vector<c
     cv::undistortPoints(src, dst, cvK_, cvD_);
 }
 
+//! =========================
+//! AtanCamera
+//! =========================
+AtanCamera::AtanCamera(int width, int height, double fx, double fy, double cx, double cy, double s) :
+        AbstractCamera(width, height, width*fx, height*fy, width*cx-0.5, height*cy-0.5, ATAN), s_(s)
+{
+    if(fabs(s_) > 0.0000001)
+    {
+        tans_ = 2.0 * tan(s_ / 2.0);
+        distortion_ = true;
+    }
+    else
+    {
+        tans_ = 0.0;
+        distortion_ = false;
+    }
+}
+
+AtanCamera::AtanCamera(int width, int height, const cv::Mat& K, const double s):
+        AbstractCamera(width, height, ATAN), s_(s)
+{
+    assert(K.cols == 3 && K.rows == 3);
+
+    fx_ = K.at<double>(0,0);
+    fy_ = K.at<double>(1,1);
+    cx_ = K.at<double>(0,2);
+    cy_ = K.at<double>(1,2);
+
+    if(fabs(s_) > 0.0000001)
+    {
+        tans_ = 2.0 * tan(s_ / 2.0);
+        distortion_ = true;
+    }
+    else
+    {
+        tans_ = 0.0;
+        distortion_ = false;
+    }
+}
+
+//! return the px lift to normalized plane
+Vector3d AtanCamera::lift(const Vector2d &px) const
+{
+    Vector2d px_d((px[0]-cx_)/fx_, (px[1]-cy_)/fy_);
+    if(distortion_)
+    {
+        const double r_d = px_d.norm();
+
+        if(r_d > 0.01)
+        {
+            const double factor_d = tan(r_d * s_) / (r_d * tans_);
+            px_d.array() *= factor_d;
+        }
+    }
+
+    return  Vector3d(px_d[0], px_d[1], 1);
+}
+
+Vector3d AtanCamera::lift(double x, double y) const
+{
+    Vector2d px_d((x-cx_)/fx_, (y-cy_)/fy_);
+    if(distortion_)
+    {
+        const double r_d = px_d.norm();
+
+        if(r_d > 0.01)
+        {
+            const double factor_d = tan(r_d * s_) / (r_d * tans_);
+            px_d.array() *= factor_d;
+        }
+    }
+
+    return  Vector3d(px_d[0], px_d[1], 1);
+}
+
+Vector2d AtanCamera::project(const Vector3d &xyz) const
+{
+    Vector2d px = xyz.head<2>() / xyz[2];
+    if(distortion_)
+    {
+        const double ru = px.norm();
+
+        if(ru > 0.001)
+        {
+            const double factor_u = atan(tans_ * ru) / (ru * s_);
+
+            px.array() *= factor_u;
+        }
+    }
+
+    px[0] = fx_ * px[0] + cx_;
+    px[1] = fy_ * px[1] + cy_;
+
+    return px;
+}
+
+Vector2d AtanCamera::project(double x, double y) const
+{
+    Vector2d px(x, y);
+    if(distortion_)
+    {
+        const double ru = px.norm();
+
+        if(ru > 0.001)
+        {
+            const double factor_u = atan(tans_ * ru) / (ru * s_);
+
+            px.array() *= factor_u;
+        }
+    }
+
+    px[0] = fx_ * px[0] + cx_;
+    px[1] = fy_ * px[1] + cy_;
+
+    return px;
+}
+
+void AtanCamera::undistortPoints(const std::vector<cv::Point2f> &pts_dist, std::vector<cv::Point2f> &pts_udist) const
+{
+    pts_udist.resize(pts_dist.size());
+
+    if(!distortion_)
+    {
+        pts_udist = pts_dist;
+        return;
+    }
+
+    const size_t N = pts_dist.size();
+    for(size_t i = 0; i < N; i++)
+    {
+        Vector3d fn = lift(pts_dist[i].x, pts_dist[i].y);
+        pts_udist[i].x = static_cast<float>(fx_ * fn[0] + cx_);
+        pts_udist[i].y = static_cast<float>(fy_ * fn[1] + cy_);
+    }
+}
+
+
 }

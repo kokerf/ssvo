@@ -120,6 +120,41 @@ private:
 
 };
 
+class AtanCamera : public AbstractCamera
+{
+
+public:
+
+    typedef std::shared_ptr<AtanCamera> Ptr;
+
+    virtual Vector3d lift(const Vector2d& px) const;
+
+    virtual Vector3d lift(double x, double y) const;
+
+    virtual Vector2d project(const Vector3d& xyz) const;
+
+    virtual Vector2d project(double x, double y) const;
+
+    virtual void undistortPoints(const std::vector<cv::Point2f> &pts_dist, std::vector<cv::Point2f> &pts_udist) const;
+
+    inline static AtanCamera::Ptr create(int width, int height, double fx, double fy, double cx, double cy, double s = 0.0)
+    {return AtanCamera::Ptr(new AtanCamera(width, height, fx, fy, cx, cy, s));}
+
+    inline static AtanCamera::Ptr create(int width, int height, const cv::Mat& K, const double s = 0.0)
+    {return AtanCamera::Ptr(new AtanCamera(width, height, K, s));}
+
+private:
+
+    AtanCamera(int width, int height, double fx, double fy, double cx, double cy, double s = 0.0);
+
+    AtanCamera(int width, int height, const cv::Mat& K, const double s = 0.0);
+
+private:
+
+    double s_;
+    double tans_;
+};
+
 }
 
 #endif
