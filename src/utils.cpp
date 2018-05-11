@@ -178,7 +178,7 @@ bool Fundamental::run8point(const std::vector<cv::Point2d>& fts_prev, const std:
     F = U * W * V.transpose();
 
     double F22 = F(2, 2);
-    if(isnan(F22))
+    if(std::isnan(F22))
         return false;
 
     F /= F22;
