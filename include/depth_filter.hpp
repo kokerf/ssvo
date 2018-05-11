@@ -79,7 +79,8 @@ private:
         double klt_epslion;
         double align_epslion;
         double px_error_normlized;
-        double min_disparity;
+        double min_frame_disparity;
+        double min_pixel_disparity;
     } options_;
 
     FastDetector::Ptr fast_detector_;

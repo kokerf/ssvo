@@ -122,7 +122,8 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback 
     options_.align_epslion = 0.0001;
     options_.max_perprocess_kfs = Config::maxPerprocessKeyFrames();
     options_.px_error_normlized = Config::imagePixelUnSigma();
-    options_.min_disparity = 0.0;//2.0;
+    options_.min_frame_disparity = 0.0;//2.0;
+    options_.min_pixel_disparity = 4.5;
 
     //! LOG and timer for system;
     TimeTracing::TraceNames time_names;
@@ -284,7 +285,7 @@ bool DepthFilter::checkDisparity(const Frame::Ptr &frame)
     if(frame_ref != nullptr && frame_ref->getRefKeyFrame()->id_ == frame->getRefKeyFrame()->id_)
     {
         const double disparity = frame->disparity_ - frame_ref->disparity_;
-        if(std::abs(disparity) < options_.min_disparity)
+        if(std::abs(disparity) < options_.min_frame_disparity)
         {
             LOG(ERROR) << "Too less disparity:" << disparity << " in frame " << frame->id_;
             return false;
@@ -579,6 +580,12 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
                 continue;
             }
 
+            double pixel_disparity = (seed->px_ref - ft->px_).norm() / (1 << ft->level_);// seed->level_ref);
+            if(pixel_disparity < options_.min_pixel_disparity)
+            {
+                continue;
+            }
+
             //! update
             double depth = -1;
             if(utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->fn_ref, fn_cur, depth))
@@ -632,6 +639,17 @@ int DepthFilter::reprojectSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr 
         double dist2 = utils::Fundamental::computeErrorSquared(keyframe->pose().translation(), seed->fn_ref/seed->getInvDepth(), T_cur_from_ref, fn_matched);
         if(dist2 > epl_threshold)
             continue;
+
+        double pixel_disparity = (seed->px_ref - px_matched).norm() / (1 << level_matched);//seed->level_ref);
+        if(pixel_disparity < options_.min_pixel_disparity)
+        {
+            if(created)
+            {
+                Feature::Ptr new_ft = Feature::create(px_matched, level_matched, seed);
+                frame->addSeed(new_ft);
+            }
+            continue;
+        }
 
         double depth = -1;
         const Vector3d fn_cur = frame->cam_->lift(px_matched);
