@@ -60,7 +60,7 @@ class ResidualErrorSE3 : public ceres::SizedCostFunction<16, 7>
 {
 public:
 
-    ResidualErrorSE3(const cv::Mat &image, const Matrix<double, 16, 1> &measured, const Vector3d &xyz, const Camera::Ptr &cam):
+    ResidualErrorSE3(const cv::Mat &image, const Matrix<double, 16, 1> &measured, const Vector3d &xyz, const AbstractCamera::Ptr &cam):
         image_(image), measured_(measured), xyz_(xyz), cam_(cam), cols_(image.cols), rows_(image.rows)
     {
         border_x_[0] = 8;
@@ -133,7 +133,7 @@ public:
     }
 
     static inline ceres::CostFunction *Create(const cv::Mat &image, const Matrix<double, 16, 1> &measured,
-                                              const Vector3d &xyz, const Camera::Ptr &cam) {
+                                              const Vector3d &xyz, const AbstractCamera::Ptr &cam) {
         return (new ResidualErrorSE3(image, measured, xyz, cam));
     }
 
@@ -143,7 +143,7 @@ private:
 
     const Matrix<double, 16, 1> measured_;
     const Vector3d xyz_;
-    const Camera::Ptr cam_;
+    const AbstractCamera::Ptr cam_;
     const int cols_, rows_;
     Vector2d border_x_;
     Vector2d border_y_;
@@ -266,7 +266,7 @@ int main(int argc, char *argv[])
     cv::Mat K = Config::cameraIntrinsic();
     cv::Mat DistCoef = Config::cameraDistCoef();
 
-    Camera::Ptr camera = Camera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef);
+    AbstractCamera::Ptr camera = std::static_pointer_cast<AbstractCamera>(PinholeCamera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef));
 
     Frame::Ptr frame0 = Frame::create(rgb0, 0, camera);
     Frame::Ptr frame1 = Frame::create(rgb1, 0, camera);

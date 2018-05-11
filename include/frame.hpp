@@ -83,7 +83,7 @@ public:
 
     inline std::shared_ptr<KeyFrame> getRefKeyFrame() const {return ref_keyframe_;}
 
-    inline static Ptr create(const cv::Mat& img, const double timestamp, Camera::Ptr cam)
+    inline static Ptr create(const cv::Mat& img, const double timestamp, AbstractCamera::Ptr cam)
     { return Ptr(new Frame(img, timestamp, cam)); }
 
     inline static void jacobian_xyz2uv(
@@ -112,9 +112,9 @@ public:
 
 protected:
 
-    Frame(const cv::Mat& img, const double timestamp, const Camera::Ptr &cam);
+    Frame(const cv::Mat& img, const double timestamp, const AbstractCamera::Ptr &cam);
 
-    Frame(const ImgPyr& img_pyr, const uint64_t id, const double timestamp, const Camera::Ptr &cam);
+    Frame(const ImgPyr& img_pyr, const uint64_t id, const double timestamp, const AbstractCamera::Ptr &cam);
 
 public:
 
@@ -124,7 +124,7 @@ public:
     const uint64_t id_;
     const double timestamp_;
 
-    Camera::Ptr cam_;
+    AbstractCamera::Ptr cam_;
 
     const int max_level_;
     static const cv::Size optical_win_size_;

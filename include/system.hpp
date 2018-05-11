@@ -68,7 +68,7 @@ private:
     Stage stage_;
     Status status_;
 
-    Camera::Ptr camera_;
+    AbstractCamera::Ptr camera_;
     FastDetector::Ptr fast_detector_;
     FeatureTracker::Ptr feature_tracker_;
     Initializer::Ptr initializer_;

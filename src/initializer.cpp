@@ -22,7 +22,7 @@ FrameCandidate::FrameCandidate(const Frame::Ptr &frame, const FrameCandidate::Pt
 void FrameCandidate::createFts()
 {
     std::vector<cv::Point2f> temp_udist;
-    cv::undistortPoints(pts, temp_udist, frame->cam_->cvK(), frame->cam_->cvD());
+    frame->cam_->undistortPoints(pts, temp_udist);
     fts.resize(size);
     for(int i = 0; i < FrameCandidate::size; ++i)
     {

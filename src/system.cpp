@@ -34,7 +34,8 @@ System::System(std::string config_file) :
     const int fast_max_threshold = Config::fastMaxThreshold();
     const int fast_min_threshold = Config::fastMinThreshold();
 
-    camera_ = Camera::create(width, height, K, DistCoef);
+    PinholeCamera::Ptr pinhole_camera = PinholeCamera::create(width, height, K, DistCoef);
+    camera_ = std::static_pointer_cast<AbstractCamera>(pinhole_camera);
     fast_detector_ = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
     feature_tracker_ = FeatureTracker::create(width, height, grid_size, image_border, true);
     initializer_ = Initializer::create(fast_detector_, true);

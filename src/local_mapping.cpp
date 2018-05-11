@@ -536,7 +536,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe, const 
                 }
 
                 //! update ft if succeed
-                const Camera::Ptr &cam = keyframe->cam_;//! all camera is the same
+                const AbstractCamera::Ptr &cam = keyframe->cam_;//! all camera is the same
                 for(const auto &it : fts_to_update)
                 {
                     const Feature::Ptr &ft_update = std::get<0>(it);
@@ -603,7 +603,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe, const 
                 }
 
                 //! update ft if succeed
-                const Camera::Ptr &cam = keyframe->cam_;//! all camera is the same
+                const AbstractCamera::Ptr &cam = keyframe->cam_;//! all camera is the same
                 for(const auto &it : fts_to_update)
                 {
                     const Feature::Ptr &ft_update = std::get<0>(it);

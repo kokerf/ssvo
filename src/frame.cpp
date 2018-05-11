@@ -13,7 +13,7 @@ const cv::Size Frame::optical_win_size_ = cv::Size(21,21);
 float Frame::light_affine_a_ = 1.0f;
 float Frame::light_affine_b_ = 0.0f;
 
-Frame::Frame(const cv::Mat &img, const double timestamp, const Camera::Ptr &cam) :
+Frame::Frame(const cv::Mat &img, const double timestamp, const AbstractCamera::Ptr &cam) :
     id_(next_id_++), timestamp_(timestamp), cam_(cam), max_level_(Config::imageTopLevel())
 {
     Tcw_ = SE3d(Matrix3d::Identity(), Vector3d::Zero());
@@ -31,7 +31,7 @@ Frame::Frame(const cv::Mat &img, const double timestamp, const Camera::Ptr &cam)
 
 }
 
-Frame::Frame(const ImgPyr &img_pyr, const uint64_t id, const double timestamp, const Camera::Ptr &cam) :
+Frame::Frame(const ImgPyr &img_pyr, const uint64_t id, const double timestamp, const AbstractCamera::Ptr &cam) :
     id_(id), timestamp_(timestamp), cam_(cam), max_level_(Config::imageTopLevel()), img_pyr_(img_pyr),
     Tcw_(SE3d(Matrix3d::Identity(), Vector3d::Zero())), Twc_(Tcw_.inverse())
 {}

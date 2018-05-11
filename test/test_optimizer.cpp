@@ -23,14 +23,14 @@ int main(int argc, char const *argv[])
     cv::Mat K = Config::cameraIntrinsic();
     cv::Mat DistCoef = Config::cameraDistCoef();
 
-    Camera::Ptr cam = Camera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef);
+    AbstractCamera::Ptr cam = std::static_pointer_cast<AbstractCamera>(PinholeCamera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef));
     std::cout << "K: \n" << K << std::endl;
     K.at<double>(0,0) += 0.5;
     K.at<double>(0,2) -= 0.5;
     K.at<double>(1,1) += 1.5;
     K.at<double>(1,2) += 1.0;
     std::cout << "K with noise: \n" << K << std::endl;
-    Camera::Ptr cam_err = Camera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef);
+    AbstractCamera::Ptr cam_err = std::static_pointer_cast<AbstractCamera>(PinholeCamera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef));
     cv::Mat img = cv::Mat(width, height, CV_8UC1);
 
     KeyFrame::Ptr kf1 = KeyFrame::create(Frame::create(img, 0, cam_err));

@@ -238,8 +238,8 @@ int getBestSearchLevel(const Matrix2d& A_cur_ref, const int max_level)
     return search_level;
 }
 
-void getWarpMatrixAffine(const Camera::Ptr &cam_ref,
-                         const Camera::Ptr &cam_cur,
+void getWarpMatrixAffine(const AbstractCamera::Ptr &cam_ref,
+                         const AbstractCamera::Ptr &cam_cur,
                          const Vector2d &px_ref,
                          const Vector3d &f_ref,
                          const int level_ref,
