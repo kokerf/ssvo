@@ -176,6 +176,9 @@ target_link_libraries(test_pattern ${PROJECT_NAME})
 add_executable(test_optimizer test/test_optimizer.cpp)
 target_link_libraries(test_optimizer ${PROJECT_NAME})
 
+add_executable(test_camera_model test/test_camera_model.cpp src/camera.cpp)
+target_link_libraries(test_camera_model ${LINK_LIBS})
+
 add_executable(test_timer test/test_timer.cpp)
 
 if(SSVO_DBOW_ENABLE)
