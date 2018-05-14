@@ -57,7 +57,7 @@ public:
 
     virtual Vector2d project(double x, double y) const;
 
-    virtual void undistortPoints(std::vector<cv::Point2f> &src, std::vector<cv::Point2f> &dst) const;
+    virtual void undistortPoints(const std::vector<cv::Point2f> &pts_dist, std::vector<cv::Point2f> &pts_udist) const;
 
     inline bool isInFrame(const Vector2i &obs, int boundary=0) const
     {
@@ -98,7 +98,7 @@ public:
 
     virtual Vector2d project(double x, double y) const;
 
-    virtual void undistortPoints(std::vector<cv::Point2f> &src, std::vector<cv::Point2f> &dst) const;
+    virtual void undistortPoints(const std::vector<cv::Point2f> &pts_dist, std::vector<cv::Point2f> &pts_udist) const;
 
     inline static PinholeCamera::Ptr create(int width, int height, double fx, double fy, double cx, double cy, double k1 = 0.0, double k2 = 0.0, double p1 = 0.0, double p2 = 0.0)
     {return PinholeCamera::Ptr(new PinholeCamera(width, height, fx, fy, cx, cy, k1, k2, p1, p2));}

@@ -31,7 +31,7 @@ Vector2d AbstractCamera::project(double x, double y) const
     LOG(FATAL) << "Please instantiation!!!";
 }
 
-void AbstractCamera::undistortPoints(std::vector<cv::Point2f> &src, std::vector<cv::Point2f> &dst) const
+void AbstractCamera::undistortPoints(const std::vector<cv::Point2f> &pts_dist, std::vector<cv::Point2f> &pts_udist) const
 {
     LOG(FATAL) << "Please instantiation!!!";
 }
@@ -161,9 +161,9 @@ Vector2d PinholeCamera::project(double x, double y) const
     return px;
 }
 
-void PinholeCamera::undistortPoints(std::vector<cv::Point2f> &src, std::vector<cv::Point2f> &dst) const
+void PinholeCamera::undistortPoints(const std::vector<cv::Point2f> &pts_dist, std::vector<cv::Point2f> &pts_udist) const
 {
-    cv::undistortPoints(src, dst, cvK_, cvD_);
+    cv::undistortPoints(pts_dist, pts_udist, cvK_, cvD_);
 }
 
 //! =========================
