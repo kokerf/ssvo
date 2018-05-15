@@ -304,7 +304,7 @@ Initializer::Result Initializer::addImage(Frame::Ptr frame_cur)
     cand_cur_->updateInliers(inliers_);
     int inliers_count = std::count(inliers_.begin(), inliers_.end(), true);
     LOG_IF(INFO, verbose_) << "[INIT][3] Inliers after epipolar geometry check: " << inliers_count;
-    if(inliers_count < Config::initMinInliers()) return FAILURE;
+    if(!succeed || inliers_count < Config::initMinInliers()) return FAILURE;
 
     double t4 = (double)cv::getTickCount();
 
@@ -568,10 +568,22 @@ bool Initializer::findBestRT(const Matrix3d& R1, const Matrix3d& R2, const Vecto
     }
 
     int maxGood = MAX(MAX(nGood1, nGood2), MAX(nGood3, nGood4));
+
+    int goodCount = 0;
+    if(nGood1 > 0.7*maxGood)
+        goodCount++;
+    if(nGood2 > 0.7*maxGood)
+        goodCount++;
+    if(nGood3 > 0.7*maxGood)
+        goodCount++;
+    if(nGood4 > 0.7*maxGood)
+        goodCount++;
+
     //! for normal, other count is 0
-    if(maxGood < 0.9*nGood0)
+    if(maxGood < 0.9*nGood0 || goodCount > 1)
     {
-        LOG(WARNING) << "[INIT] Inliers: " << maxGood << ", less than 90% inliers after cheirality check!!!";
+        LOG(WARNING) << "[INIT] Cheirality check failed! " << nGood1 << " " << nGood2 << " " << nGood3 << " " << nGood4
+                     << ", " << nGood0;
         return false;
     }
 
