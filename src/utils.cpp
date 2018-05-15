@@ -209,7 +209,7 @@ bool Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std:
     std::vector<cv::Point2d> fts1_norm;
     std::vector<cv::Point2d> fts2_norm;
     Matrix3d F_temp;
-    int max_inliers = 0;
+    int max_inliers = -1;
     int niters = max_iters;
     bool succeed = false;
     for(int iter = 0; iter < niters; iter++)
@@ -269,7 +269,7 @@ bool Fundamental::runRANSAC(const std::vector<cv::Point2d>& fts_prev, const std:
 
     }//! iterations
 
-    if(!succeed)
+    if(!succeed || max_inliers < 8)
         return false;
 
     fts1.clear();
