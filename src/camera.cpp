@@ -297,8 +297,8 @@ void AtanCamera::undistortPoints(const std::vector<cv::Point2f> &pts_dist, std::
     for(size_t i = 0; i < N; i++)
     {
         Vector3d fn = lift(pts_dist[i].x, pts_dist[i].y);
-        pts_udist[i].x = static_cast<float>(fx_ * fn[0] + cx_);
-        pts_udist[i].y = static_cast<float>(fy_ * fn[1] + cy_);
+        pts_udist[i].x = fn[0];//static_cast<float>(fx_ * fn[0] + cx_);
+        pts_udist[i].y = fn[1];//static_cast<float>(fy_ * fn[1] + cy_);
     }
 }
 

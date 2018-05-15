@@ -98,6 +98,7 @@ public:
 
     virtual Vector2d project(double x, double y) const;
 
+    //! all undistort points are in the normlized plane
     virtual void undistortPoints(const std::vector<cv::Point2f> &pts_dist, std::vector<cv::Point2f> &pts_udist) const;
 
     inline static PinholeCamera::Ptr create(int width, int height, double fx, double fy, double cx, double cy, double k1 = 0.0, double k2 = 0.0, double p1 = 0.0, double p2 = 0.0)
