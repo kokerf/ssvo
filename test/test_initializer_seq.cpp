@@ -131,7 +131,7 @@ int main(int argc, char const *argv[])
     LOG_ASSERT(!img_file_names.empty()) << "Error! No image in directory: " << dir_name;
 
     cv::Mat K = Config::cameraIntrinsic();
-    cv::Mat DistCoef = Config::cameraDistCoef();
+    cv::Mat DistCoef = Config::cameraDistCoefs();
 
     AbstractCamera::Ptr camera = std::static_pointer_cast<AbstractCamera>(PinholeCamera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef));
     FastDetector::Ptr detector = FastDetector::create(width, height, image_border, levels+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);

@@ -15,9 +15,19 @@ class Config
 {
 public:
 
+    enum CameraModel
+    {
+        PINHOLE     = 0,
+        ATAN        = 1
+    };
+
+    static CameraModel cameraModel(){return getInstance().camera_model;}
+
     static cv::Mat cameraIntrinsic(){return getInstance().K;}
 
-    static cv::Mat cameraDistCoef(){return getInstance().DistCoef;}
+    static cv::Mat cameraDistCoefs(){return getInstance().DistCoef;}
+
+    static double cameraDistCoef(){return getInstance().s;}
 
     static int imageWidth(){return getInstance().image_width;}
 
@@ -35,7 +45,7 @@ public:
 
     static double cameraFps(){return getInstance().fps;}
 
-    static double unitPlanePixelLength() { return  getInstance().unit_plane_pixel_length; }
+    static double unitPlanePixelLength() {return  getInstance().unit_plane_pixel_length;}
 
     static int initMinCorners(){return getInstance().init_min_corners;}
 
@@ -106,15 +116,40 @@ private:
         LOG_ASSERT(fs.isOpened()) << "Failed to open settings file at: " << file_name;
 
         //! camera parameters
+        std::string str_camera_model;
+        if(!fs["Camera.model"].empty())
+            fs["Camera.model"] >> str_camera_model;
+
+        if(str_camera_model == "pinhole")
+            camera_model = CameraModel::PINHOLE;
+        else if(str_camera_model == "atan")
+            camera_model = CameraModel::ATAN;
+        else
+            LOG(FATAL) << "Unidentify camera modle: " << str_camera_model;
+
         fx = (double)fs["Camera.fx"];
         fy = (double)fs["Camera.fy"];
         cx = (double)fs["Camera.cx"];
         cy = (double)fs["Camera.cy"];
 
-        k1 = (double)fs["Camera.k1"];
-        k2 = (double)fs["Camera.k2"];
-        p1 = (double)fs["Camera.p1"];
-        p2 = (double)fs["Camera.p2"];
+        image_width = (int)fs["Image.width"];
+        image_height = (int)fs["Image.height"];
+
+        if(camera_model == CameraModel::PINHOLE)
+        {
+            k1 = (double) fs["Camera.k1"];
+            k2 = (double) fs["Camera.k2"];
+            p1 = (double) fs["Camera.p1"];
+            p2 = (double) fs["Camera.p2"];
+        }
+        else if(camera_model == CameraModel::ATAN)
+        {
+            s = (double) fs["Camera.s"];
+            fx *= image_width;
+            fy *= image_height;
+            cx = cx * image_width - 0.5;
+            cy = cy * image_height - 0.5;
+        }
 
         K = cv::Mat::eye(3,3,CV_64F);
         K.at<double>(0,0) = fx;
@@ -128,8 +163,6 @@ private:
         DistCoef.at<double>(2) = p1;
         DistCoef.at<double>(3) = p2;
 
-        image_width = (int)fs["Image.width"];
-        image_height = (int)fs["Image.height"];
         image_top_level = (int)fs["Image.pyramid_levels"];
         image_sigma = (double)fs["Initializer.sigma"];
         image_sigma2 = image_sigma*image_sigma;
@@ -213,12 +246,14 @@ public:
 
 private:
     //! camera parameters
-    double fx, fy, cx, cy;
-    double k1, k2, p1, p2;
-    cv::Mat K;
-    cv::Mat DistCoef;
+    CameraModel camera_model;
     int image_width;
     int image_height;
+    double fx, fy, cx, cy;
+    double k1, k2, p1, p2;
+    double s;
+    cv::Mat K;
+    cv::Mat DistCoef;
     int image_top_level;
     double image_sigma;
     double image_sigma2;

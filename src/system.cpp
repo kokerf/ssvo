@@ -27,15 +27,25 @@ System::System(std::string config_file) :
     const int image_border = AlignPatch::Size;
     //! camera
     const cv::Mat K = Config::cameraIntrinsic();
-    const cv::Mat DistCoef = Config::cameraDistCoef();
+    const cv::Mat DistCoef = Config::cameraDistCoefs(); //! for pinhole
+    const double s = Config::cameraDistCoef();  //! for atan
     //! corner detector
     const int grid_size = Config::gridSize();
     const int grid_min_size = Config::gridMinSize();
     const int fast_max_threshold = Config::fastMaxThreshold();
     const int fast_min_threshold = Config::fastMinThreshold();
 
-    PinholeCamera::Ptr pinhole_camera = PinholeCamera::create(width, height, K, DistCoef);
-    camera_ = std::static_pointer_cast<AbstractCamera>(pinhole_camera);
+    if(Config::cameraModel() == Config::CameraModel::PINHOLE)
+    {
+        PinholeCamera::Ptr pinhole_camera = PinholeCamera::create(width, height, K, DistCoef);
+        camera_ = std::static_pointer_cast<AbstractCamera>(pinhole_camera);
+    }
+    else if(Config::cameraModel() == Config::CameraModel::ATAN)
+    {
+        AtanCamera::Ptr atan_camera = AtanCamera::create(width, height, K, s);
+        camera_ = std::static_pointer_cast<AbstractCamera>(atan_camera);
+    }
+
     fast_detector_ = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
     feature_tracker_ = FeatureTracker::create(width, height, grid_size, image_border, true);
     initializer_ = Initializer::create(fast_detector_, true);

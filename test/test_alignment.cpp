@@ -264,7 +264,7 @@ int main(int argc, char *argv[])
     double fast_min_eigen = Config::fastMinEigen();
 
     cv::Mat K = Config::cameraIntrinsic();
-    cv::Mat DistCoef = Config::cameraDistCoef();
+    cv::Mat DistCoef = Config::cameraDistCoefs();
 
     AbstractCamera::Ptr camera = std::static_pointer_cast<AbstractCamera>(PinholeCamera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef));
 

@@ -21,7 +21,7 @@ int main(int argc, char const *argv[])
     int width = Config::imageWidth();
     int height = Config::imageHeight();
     cv::Mat K = Config::cameraIntrinsic();
-    cv::Mat DistCoef = Config::cameraDistCoef();
+    cv::Mat DistCoef = Config::cameraDistCoefs();
 
     AbstractCamera::Ptr cam = std::static_pointer_cast<AbstractCamera>(PinholeCamera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef));
     std::cout << "K: \n" << K << std::endl;

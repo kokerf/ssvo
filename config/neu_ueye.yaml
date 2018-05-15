@@ -3,6 +3,7 @@
 # for uEye camera, UI122xLE-M-GL
 
 # Camera calibration and distortion parameters (OpenCV)
+Camera.model: "pinhole" # "pinhole" or "atan"
 Camera.fx: 478.491563
 Camera.fy: 478.450925
 Camera.cx: 360.715771
