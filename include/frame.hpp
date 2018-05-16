@@ -16,6 +16,8 @@ class Frame : public noncopyable
 {
 public:
 
+    virtual ~Frame() {};
+
     typedef std::shared_ptr<Frame> Ptr;
 
     const ImgPyr images() const;
