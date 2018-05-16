@@ -56,15 +56,21 @@ void Viewer::run()
 
     pangolin::CreatePanel("menu").SetBounds(pangolin::Attach::Pix(WIN_HEIGHT-UI_HEIGHT), 1.0, 0.0, pangolin::Attach::Pix(UI_WIDTH));
     pangolin::Var<bool> menu_follow_camera("menu.Follow Camera", true, true);
+    pangolin::Var<bool> menu_show_trajectory("menu.Show Trajectory", true, true);
     pangolin::Var<bool> menu_show_keyframe("menu.Show KeyFrame", true, true);
     pangolin::Var<bool> menu_show_connections("menu.Connections", true, true);
     pangolin::Var<bool> menu_show_current_connections("menu.Connections_cur", true, true);
 
+    const int trajectory_duration_max = 10000;
+    pangolin::Var<int> settings_trajectory_duration("menu.Traj Duration",1000, 1, trajectory_duration_max,false);
+
 
     bool following_camera = true;
+    bool show_trajectory = true;
     bool show_keyframe = true;
     bool show_connections = true;
     bool show_current_connections = true;
+    int trajectory_duration = -1;
 
     // Define Projection and initial ModelView matrix
     pangolin::OpenGlRenderState s_cam(
@@ -98,7 +104,18 @@ void Viewer::run()
 
         glClearColor(1.0f,1.0f,1.0f,1.0f);
 
-        if(menu_follow_camera)
+
+        //! update
+        following_camera = menu_follow_camera.Get();
+        show_trajectory = menu_show_trajectory.Get();
+        show_keyframe = menu_show_keyframe.Get();
+        show_connections = menu_show_connections.Get();
+        show_current_connections = menu_show_current_connections.Get();
+
+        trajectory_duration = settings_trajectory_duration.Get();
+        if(trajectory_duration == trajectory_duration_max) trajectory_duration = -1;
+
+        if(following_camera)
         {
             pangolin::OpenGlMatrix camera_pose;
             Eigen::Map<Matrix<pangolin::GLprecision, 4, 4> > T(camera_pose.m);
@@ -114,37 +131,6 @@ void Viewer::run()
             s_cam.Follow(camera_pose);
             following_camera = true;
         }
-        else if(!menu_follow_camera && following_camera)
-        {
-            following_camera = false;
-        }
-
-        if(menu_show_connections)
-        {
-            show_connections = true;
-        }
-        else if(!menu_show_connections && show_connections)
-        {
-            show_connections = false;
-        }
-
-        if(menu_show_current_connections)
-        {
-            show_current_connections = true;
-        }
-        else if(!menu_show_current_connections && show_current_connections)
-        {
-            show_current_connections = false;
-        }
-
-        if(menu_show_keyframe)
-        {
-            show_keyframe = true;
-        }
-        else if(!menu_show_keyframe && show_keyframe)
-        {
-            show_keyframe = false;
-        }
 
         pangolin::glDrawAxis(0.1);
 
@@ -156,12 +142,15 @@ void Viewer::run()
             drawKeyFrames(map_, reference, show_connections, show_current_connections);
         }
 
+        if(show_trajectory)
+            drawTrajectory(trajectory_duration);
+
         if(frame)
             drawCurrentFrame(frame->pose().matrix(), cv::Scalar(0.0, 0.0, 1.0));
 
 
         if(image.empty() && frame != nullptr)
-            drowTrackedPoints(frame, image);
+            drawTrackedPoints(frame, image);
 
         drawCurrentImage(imageTexture, image);
 
@@ -181,6 +170,8 @@ void Viewer::setCurrentFrame(const Frame::Ptr &frame, const cv::Mat image)
     std::lock_guard<std::mutex> lock(mutex_frame_);
     frame_ = frame;
     image_ = image;
+    if(frame_)
+        frame_trajectory_.push_back(frame_->pose().translation());
 }
 
 void Viewer::drawKeyFrames(Map::Ptr &map, KeyFrame::Ptr &reference, bool show_connections, bool show_current)
@@ -313,7 +304,7 @@ void Viewer::drawCamera(const Matrix4d &pose, cv::Scalar color)
     glPopMatrix();
 }
 
-void Viewer::drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
+void Viewer::drawTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
 {
     //! draw features
     const cv::Mat src = frame->getImage(0);
@@ -349,6 +340,24 @@ void Viewer::drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
 //        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
     }
 
+}
+
+void Viewer::drawTrajectory(int frame_num)
+{
+    std::lock_guard<std::mutex> lock(mutex_frame_);
+    float color[3] = {1,0,0};
+    glColor3f(color[0],color[1],color[2]);
+    glLineWidth(2);
+
+    glBegin(GL_LINE_STRIP);
+
+    size_t frame_count_max = frame_num == -1 ? frame_trajectory_.size() : static_cast<size_t>(frame_num);
+    size_t frame_count = 0;
+    for(auto itr = frame_trajectory_.rbegin(); itr != frame_trajectory_.rend() && frame_count < frame_count_max; itr++, frame_count++)
+    {
+        glVertex3f((float)(*itr)[0], (float)(*itr)[1], (float)(*itr)[2]);
+    }
+    glEnd();
 }
 
 }

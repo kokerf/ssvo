@@ -41,7 +41,9 @@ private:
 
     void drawCurrentImage(pangolin::GlTexture& gl_texture, cv::Mat &image);
 
-    void drowTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst);
+    void drawTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst);
+
+    void drawTrajectory(int frame_num = -1);
 
 private:
 
@@ -52,6 +54,8 @@ private:
     Frame::Ptr frame_;
     cv::Mat image_;
     cv::Size image_size_;
+
+    std::list<Vector3d, aligned_allocator<Vector3d> > frame_trajectory_;
 
     float map_point_size;
     float key_frame_size;
