@@ -99,7 +99,6 @@ private:
     std::mutex mutex_frame_;
     //! track thread
     std::condition_variable cond_process_main_;
-    std::condition_variable cond_process_sub_;
     std::future<int> seeds_track_future_;
     bool track_thread_enabled_;
 

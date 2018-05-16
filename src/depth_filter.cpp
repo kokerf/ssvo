@@ -264,9 +264,8 @@ void DepthFilter::run()
 bool DepthFilter::checkNewFrame(Frame::Ptr &frame, KeyFrame::Ptr &keyframe)
 {
     std::unique_lock<std::mutex> lock(mutex_frame_);
-    cond_process_main_.wait_for(lock, std::chrono::milliseconds(3));
-    if(frames_buffer_.empty())
-        return false;
+    while(frames_buffer_.empty())
+        cond_process_main_.wait(lock);
 
     frame = frames_buffer_.front().first;
     keyframe = frames_buffer_.front().second;

@@ -205,9 +205,8 @@ void LocalMapper::run()
 KeyFrame::Ptr LocalMapper::checkNewKeyFrame()
 {
     std::unique_lock<std::mutex> lock(mutex_keyframe_);
-    cond_process_.wait_for(lock, std::chrono::milliseconds(5));
-    if(keyframes_buffer_.empty())
-        return nullptr;
+    while(keyframes_buffer_.empty())
+        cond_process_.wait(lock);
 
     KeyFrame::Ptr keyframe = keyframes_buffer_.front();
     keyframes_buffer_.pop_front();
