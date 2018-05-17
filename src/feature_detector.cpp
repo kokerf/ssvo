@@ -21,6 +21,79 @@ inline size_t Grid<Corner>::getIndex(const Corner &element)
         + static_cast<size_t>(element.x/grid_size_);
 }
 
+FastGrid::FastGrid(int width, int height, int cell_size, int max_threshold, int min_threshold) :
+    width_(width), height_(height), cell_size_(cell_size), max_threshold_(max_threshold), min_threshold_(min_threshold)
+{
+    cell_size_ = MIN(MIN(width_, height_), cell_size_);
+    if(cell_size_ < MIN_CEIL_SIZE) cell_size_ = MIN_CEIL_SIZE;
+
+    int min_size = std::floor(std::sqrt(static_cast<float>(width_*height_)/MAX_GRIDS));
+
+    if(cell_size_ < min_size) cell_size_ = min_size;
+
+    cell_n_cols_ = MAX(width_/cell_size_, 1);
+    cell_n_rows_ = MAX(height_/cell_size_, 1);
+
+    N_ = cell_n_cols_ * cell_n_rows_;
+    cells_x_.resize(cell_n_cols_+1, 0);
+    cells_y_.resize(cell_n_rows_+1, 0);
+    fast_threshold_.resize(N_, max_threshold_);
+
+    int offset_cols = (width_ - cell_n_cols_ * cell_size_) / 2;
+    int offset_rows = (height_ - cell_n_rows_ * cell_size_) / 2;
+
+    cells_x_[1] = offset_cols + cell_size_;
+    cells_y_[1] = offset_rows + cell_size_;
+
+    if(cells_x_.size() > 2)
+    {
+        for (auto itr = cells_x_.begin() + 2; itr != cells_x_.end(); itr++)
+            *itr = *(itr - 1) + cell_size_;
+    }
+
+    if(cells_y_.size() > 2)
+    {
+        for (auto itr = cells_y_.begin() + 2; itr != cells_y_.end(); itr++)
+            *itr = *(itr - 1) + cell_size_;
+    }
+
+    cells_x_[cell_n_cols_] = width_;
+    cells_y_[cell_n_rows_] = height_;
+}
+
+cv::Rect FastGrid::getCell(int id) const
+{
+    const int r = id / cell_n_cols_;
+    const int c = id % cell_n_cols_;
+
+    LOG_ASSERT(r <= cell_n_rows_) << "Out of scope ! r = " << r << " should not  big than << " << cell_n_rows_;
+
+    return cv::Rect(cells_x_[c], cells_y_[r], cells_x_[c+1] - cells_x_[c], cells_y_[r+1] - cells_y_[r]);
+}
+
+int FastGrid::getThreshold(int id) const
+{
+    LOG_ASSERT(id <= N_) << "Out of scope ! id = " << id << " should not big than << " << N_;
+    return fast_threshold_.at(id);
+}
+
+bool FastGrid::setThreshold(int id, int threshold)
+{
+    LOG_ASSERT(id <= N_) << "Out of scope ! id = " << id << " should not big than << " << N_;
+    if(threshold > max_threshold_) threshold = max_threshold_;
+    if(threshold < min_threshold_) threshold = min_threshold_;
+    fast_threshold_.at(id) = threshold;
+    return true;
+}
+
+bool FastGrid::inBoundary(int id) const
+{
+    const int r = id / cell_n_cols_;
+    const int c = id % cell_n_cols_;
+
+    return (r == 0 || c == 0 || r == cell_n_rows_ || c == cell_n_cols_);
+}
+
 //! FastDetector
 FastDetector::FastDetector(int width, int height, int border, int nlevels,
                            int grid_size, int grid_min_size, int max_threshold, int min_threshold):
@@ -29,9 +102,13 @@ FastDetector::FastDetector(int width, int height, int border, int nlevels,
     threshold_(max_threshold_), grid_filter_(width, height, grid_size)
 {
     corners_in_levels_.resize(nlevels_);
+    for(int i = 0; i < nlevels_; ++i)
+    {
+       detect_grids_.push_back(FastGrid(width_>>i, height_>>i, grid_size, max_threshold_, min_threshold_));
+    }
 }
 
-int FastDetector::detect(const ImgPyr &img_pyr, Corners &new_corners, const Corners &exist_corners,
+size_t FastDetector::detect(const ImgPyr &img_pyr, Corners &new_corners, const Corners &exist_corners,
                          const int N, const double eigen_threshold)
 {
     LOG_ASSERT(img_pyr.size() == nlevels_) << "Unmatch size of ImgPyr(" << img_pyr.size() << ") with nlevel(" << nlevels_ << ")";
@@ -39,13 +116,19 @@ int FastDetector::detect(const ImgPyr &img_pyr, Corners &new_corners, const Corn
 
     //! 1. Corners detect in all levels
     for(Corners &cs : corners_in_levels_) { cs.clear(); }
-    //! find a good threshold to detect fast
-    detectAdaptive(img_pyr[0], corners_in_levels_[0], 1.5*N, eigen_threshold, 5);
     
-    int new_coners = corners_in_levels_[0].size();
-    for(int level = 1; level < nlevels_; level++)
+    size_t new_coners = corners_in_levels_[0].size();
+    for(int level = 0; level < nlevels_; level++)
     {
-        new_coners += detectInLevel(img_pyr[level], corners_in_levels_[level], level, max_threshold_, eigen_threshold, border_);
+        new_coners += detectInLevel(img_pyr[level], detect_grids_[level], corners_in_levels_[level], eigen_threshold, border_);
+
+        const int scale = 1 << level;
+        for(Corner &corner : corners_in_levels_[level])
+        {
+            corner.level = level;
+            corner.x *= scale;
+            corner.y *= scale;
+        }
     }
 
     //! 2. Get corners from grid
@@ -83,46 +166,76 @@ void FastDetector::setCorners(Grid<Corner> &grid, const Corners &corners)
         grid.insert(corner);
 }
 
-//! detect in level 0 to find a good threshold
-void FastDetector::detectAdaptive(const cv::Mat &img, Corners &corners, const size_t required, const double eigen_threshold, const int trials)
-{
-    const size_t min_corners = required >> 1;
-
-    int threshold = threshold_;
-    const int adjust = 1;
-    for(int i = 0; i < trials && threshold <= max_threshold_ && threshold_ >= min_threshold_; i++)
-    {
-        size_t num = detectInLevel(img, corners, 0, threshold_, eigen_threshold, border_);
-
-        if(num < 0.8 * min_corners)
-        {
-            threshold -= adjust;
-        }
-        else if(num > 1.5 * min_corners)
-        {
-            threshold += adjust;
-            break;
-        }
-    }
-
-    threshold_ = MAX(MIN(threshold, max_threshold_), min_threshold_);
-}
-
 size_t FastDetector::detectInLevel(const cv::Mat &img,
+                                   FastGrid &fast_grid,
                                    Corners &corners,
-                                   const int level,
-                                   const int threshold,
                                    const double eigen_threshold,
                                    const int border)
 {
     LOG_ASSERT(img.type() == CV_8UC1) << "Error cv::Mat type: " << img.type();
-
     const int rows = img.rows;
     const int cols = img.cols;
-    const int stride = cols;
-    const int scale = 1 << level;
+
+    LOG_ASSERT(fast_grid.width_ == cols && fast_grid.height_ == rows) << "The grid(" << fast_grid.width_ << "*" << fast_grid.height_ << ") is not fit the image("<< cols << "*" << rows << ")";
+
     const int max_cols = cols-border;
     const int max_rows = rows-border;
+
+    corners.clear();
+    static float corner_density = 1.0f / (20*20);
+    for(int i = 0; i < fast_grid.nCells(); ++i)
+    {
+        Corners corners_per_cell;
+        const cv::Rect rect = fast_grid.getCell(i);
+        const int th = fast_grid.getThreshold(i);
+        //! fast detect
+        fastDetect(img(rect), corners_per_cell, th, eigen_threshold);
+        //! fast re-detect
+        if(corners_per_cell.empty() && th != fast_grid.min_threshold_)
+        {
+            fastDetect(img(rect), corners_per_cell, fast_grid.min_threshold_, eigen_threshold);
+            fast_grid.setThreshold(i, fast_grid.min_threshold_);
+        }
+        else if(static_cast<float>(corners_per_cell.size()) / (rect.width*rect.height) > corner_density)
+        {
+            fast_grid.setThreshold(i, th+std::ceil((fast_grid.max_threshold_-fast_grid.min_threshold_)*0.1 + fast_grid.min_threshold_));
+        }
+
+        corners.reserve(corners.size() + corners_per_cell.size());
+
+        const bool border_check = fast_grid.inBoundary(i);
+        if(border_check)
+        {
+            for(Corner &corner : corners_per_cell)
+            {
+                corner.x += rect.x;
+                corner.y += rect.y;
+                //! border check;
+                if(corner.x < border || corner.y < border || corner.x > max_cols || corner.y > max_rows)
+                    continue;
+
+                corners.push_back(corner);
+            }
+        }
+        else
+        {
+            for(Corner &corner : corners_per_cell)
+            {
+                corner.x += rect.x;
+                corner.y += rect.y;
+                corners.push_back(corner);
+            }
+        }
+    }
+
+    return corners.size();
+}
+
+void FastDetector::fastDetect(const cv::Mat &img, Corners &corners, int threshold, double eigen_threshold)
+{
+    int cols = img.cols;
+    int rows = img.rows;
+    int stride = img.step.p[0];
 
     std::vector<fast::fast_xy> fast_corners;
 
@@ -146,25 +259,14 @@ size_t FastDetector::detectInLevel(const cv::Mat &img,
         const int u = xy.x;
         const int v = xy.y;
 
-        //! border check;
-        if(u < border || v < border || u > max_cols || v > max_rows)
-            continue;
-
         const float score = shiTomasiScore(img, u, v);
 
         //! reject the low-score point
         if(score < eigen_threshold)
             continue;
 
-        const int x = u*scale;
-        const int y = v*scale;
-
-        corners.emplace_back(Corner(x, y, score, level));
+        corners.emplace_back(Corner(u, v, score, -1));
     }
-
-//    fast_corners.clear();
-
-    return corners.size();
 }
 
 

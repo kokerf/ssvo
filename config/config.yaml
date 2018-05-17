@@ -24,7 +24,7 @@ Image.height: 480
 Image.pyramid_levels: 3  # 0-based
 
 # Fast detector
-FastDetector.grid_size: 20
+FastDetector.grid_size: 64
 FastDetector.grid_min_size: 8
 FastDetector.fast_max_threshold: 20
 FastDetector.fast_min_threshold: 7
