@@ -31,31 +31,19 @@ FastGrid::FastGrid(int width, int height, int cell_size, int max_threshold, int 
 
     if(cell_size_ < min_size) cell_size_ = min_size;
 
-    cell_n_cols_ = MAX(width_/cell_size_, 1);
-    cell_n_rows_ = MAX(height_/cell_size_, 1);
+    cell_n_cols_ = std::floor(static_cast<float>(width_)/cell_size_);
+    cell_n_rows_ = std::floor(static_cast<float>(height_)/cell_size_);
 
     N_ = cell_n_cols_ * cell_n_rows_;
     cells_x_.resize(cell_n_cols_+1, 0);
     cells_y_.resize(cell_n_rows_+1, 0);
     fast_threshold_.resize(N_, max_threshold_);
 
-    int offset_cols = (width_ - cell_n_cols_ * cell_size_) / 2;
-    int offset_rows = (height_ - cell_n_rows_ * cell_size_) / 2;
+    for (auto itr = cells_x_.begin() + 1; itr != cells_x_.end(); itr++)
+        *itr = *(itr - 1) + cell_size_;
 
-    cells_x_[1] = offset_cols + cell_size_;
-    cells_y_[1] = offset_rows + cell_size_;
-
-    if(cells_x_.size() > 2)
-    {
-        for (auto itr = cells_x_.begin() + 2; itr != cells_x_.end(); itr++)
-            *itr = *(itr - 1) + cell_size_;
-    }
-
-    if(cells_y_.size() > 2)
-    {
-        for (auto itr = cells_y_.begin() + 2; itr != cells_y_.end(); itr++)
-            *itr = *(itr - 1) + cell_size_;
-    }
+    for (auto itr = cells_y_.begin() + 1; itr != cells_y_.end(); itr++)
+        *itr = *(itr - 1) + cell_size_;
 
     cells_x_[cell_n_cols_] = width_;
     cells_y_[cell_n_rows_] = height_;
