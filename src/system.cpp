@@ -47,7 +47,7 @@ System::System(std::string config_file) :
     }
 
     fast_detector_ = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
-    feature_tracker_ = FeatureTracker::create(width, height, grid_size, image_border, true);
+    feature_tracker_ = FeatureTracker::create(width, height, 20, image_border, true);
     initializer_ = Initializer::create(fast_detector_, true);
     mapper_ = LocalMapper::create(true, false);
     DepthFilter::Callback depth_fliter_callback = std::bind(&LocalMapper::createFeatureFromSeed, mapper_, std::placeholders::_1);
