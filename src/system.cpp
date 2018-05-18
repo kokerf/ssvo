@@ -367,12 +367,13 @@ bool System::createNewKeyFrame()
         for(const MapPoint::Ptr &mpt : mpts)
         {
             Feature::Ptr ft_ref = mpt->findObservation(ovlp_kf.first);
-            Feature::Ptr ft_cur = mpt_ft[mpt];
-            if(ft_ref != nullptr && ft_cur != nullptr)
-            {
-                const Vector2d px(ft_ref->px_ - ft_cur->px_);
-                disparity.push_back(px.norm());
-            }
+            if(ft_ref == nullptr) continue;
+
+            if(!mpt_ft.count(mpt)) continue;
+            Feature::Ptr ft_cur = mpt_ft.find(mpt)->second;
+
+            const Vector2d px(ft_ref->px_ - ft_cur->px_);
+            disparity.push_back(px.norm());
         }
 
         std::sort(disparity.begin(), disparity.end());
