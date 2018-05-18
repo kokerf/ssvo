@@ -4,9 +4,9 @@ project(ssvo)
 ## -----------------------
 ## User's option
 ## -----------------------
-option(SSVO_TEST_ENABLE "If build the test files." TRUE)
+option(SSVO_TEST_ENABLE "If build the test files." ON)
 option(SSVO_DBOW_ENABLE "If use the DBoW library." OFF)
-option(SSVO_TRACE_ENABLE "If use the time tracing." TRUE)
+option(SSVO_TRACE_ENABLE "If use the time tracing." ON)
 message(STATUS "Test Enable  : "   ${SSVO_TEST_ENABLE})
 message(STATUS "DBoW Enable  : "   ${SSVO_DBOW_ENABLE})
 message(STATUS "Trace Enable : "   ${SSVO_TRACE_ENABLE})
@@ -27,7 +27,7 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-message(STATUS "Build Type  : " ${CMAKE_BUILD_TYPE})
+message(STATUS "Build Type   : " ${CMAKE_BUILD_TYPE})
 
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
