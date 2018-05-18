@@ -111,7 +111,7 @@ TimeTracing::Ptr dfltTrace = nullptr;
 
 //! DepthFilter
 DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback &callback, bool report, bool verbose) :
-    fast_detector_(fast_detector), seed_coverged_callback_(callback),
+    seed_coverged_callback_(callback), fast_detector_(fast_detector),
     report_(report), verbose_(report&&verbose), filter_thread_(nullptr), track_thread_enabled_(true), stop_require_(false)
 {
     options_.max_kfs = 5;
@@ -264,8 +264,10 @@ void DepthFilter::run()
 bool DepthFilter::checkNewFrame(Frame::Ptr &frame, KeyFrame::Ptr &keyframe)
 {
     std::unique_lock<std::mutex> lock(mutex_frame_);
-    while(frames_buffer_.empty())
-        cond_process_main_.wait(lock);
+    cond_process_main_.wait_for(lock, std::chrono::microseconds(5));
+
+    if(frames_buffer_.empty())
+        return false;
 
     frame = frames_buffer_.front().first;
     keyframe = frames_buffer_.front().second;

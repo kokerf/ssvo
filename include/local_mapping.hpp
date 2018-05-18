@@ -77,8 +77,6 @@ private:
         double min_found_ratio_;
     } options_;
 
-    FastDetector::Ptr fast_detector_;
-
     std::deque<KeyFrame::Ptr> keyframes_buffer_;
     KeyFrame::Ptr keyframe_last_;
 

@@ -427,7 +427,7 @@ void System::finishFrame()
 {
     sysTrace->startTimer("finish");
     cv::Mat image_show;
-    Stage last_stage = stage_;
+//    Stage last_stage = stage_;
     if(STAGE_NORMAL_FRAME == stage_)
     {
         if(STATUS_TRACKING_BAD == status_)

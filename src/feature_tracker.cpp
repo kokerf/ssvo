@@ -14,7 +14,7 @@ inline size_t Grid<Feature::Ptr>::getIndex(const Feature::Ptr &element)
 }
 
 FeatureTracker::FeatureTracker(int width, int height, int grid_size, int border, bool report, bool verbose) :
-    report_(report), verbose_(report&&verbose), grid_(width, height, grid_size)
+    grid_(width, height, grid_size), report_(report), verbose_(report&&verbose)
 {
     options_.border = border;
     options_.max_matches = 200;

@@ -149,10 +149,9 @@ void LocalMapper::stopMainThread()
 
 void LocalMapper::setStop()
 {
-    std::unique_lock<std::mutex> lock(mutex_stop_);
-    stop_require_ = true;
+        std::unique_lock<std::mutex> lock(mutex_stop_);
+        stop_require_ = true;
 }
-
 bool LocalMapper::isRequiredStop()
 {
     std::unique_lock<std::mutex> lock(mutex_stop_);
@@ -205,8 +204,10 @@ void LocalMapper::run()
 KeyFrame::Ptr LocalMapper::checkNewKeyFrame()
 {
     std::unique_lock<std::mutex> lock(mutex_keyframe_);
-    while(keyframes_buffer_.empty())
-        cond_process_.wait(lock);
+    cond_process_.wait_for(lock, std::chrono::microseconds(5));
+
+    if(keyframes_buffer_.empty())
+        return nullptr;
 
     KeyFrame::Ptr keyframe = keyframes_buffer_.front();
     keyframes_buffer_.pop_front();
@@ -790,7 +791,7 @@ void LocalMapper::checkCulling(const KeyFrame::Ptr &keyframe)
             if(obs.size() > observations_threshold)
             {
                 int observations = 0;
-                const Feature::Ptr &ft = obs[kf];
+//                const Feature::Ptr &ft = obs[kf];
                 for(const auto &it : obs)
                 {
                     if(it.first == kf)

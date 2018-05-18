@@ -94,14 +94,13 @@ private:
     //! main thread
     std::shared_ptr<std::thread> filter_thread_;
 
+    bool track_thread_enabled_;
     bool stop_require_;
     std::mutex mutex_stop_;
     std::mutex mutex_frame_;
     //! track thread
     std::condition_variable cond_process_main_;
     std::future<int> seeds_track_future_;
-    bool track_thread_enabled_;
-
 };
 
 }

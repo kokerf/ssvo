@@ -22,7 +22,7 @@ inline size_t Grid<Corner>::getIndex(const Corner &element)
 }
 
 FastGrid::FastGrid(int width, int height, int cell_size, int max_threshold, int min_threshold) :
-    width_(width), height_(height), cell_size_(cell_size), max_threshold_(max_threshold), min_threshold_(min_threshold)
+    width_(width), height_(height), max_threshold_(max_threshold), min_threshold_(min_threshold), cell_size_(cell_size)
 {
     cell_size_ = MIN(MIN(width_, height_), cell_size_);
     if(cell_size_ < MIN_CEIL_SIZE) cell_size_ = MIN_CEIL_SIZE;
