@@ -905,6 +905,8 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
 
             if(score < score_best)
             {
+                score_second = score_best;
+                index_second = index_best;
                 score_best = score;
                 index_best = i;
             }
@@ -915,7 +917,7 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
             }
         }
 
-        if(score_best > 0.8 * score_second && std::abs(index_best - index_second) > 2)
+        if(score_best > 0.8 * score_second && std::abs(index_best - index_second) > 3)
             return false;
 
         if(score_best > zssd.threshold())
