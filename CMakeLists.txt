@@ -190,8 +190,8 @@ endif(SSVO_TEST_ENABLE)
 ## -----------------------
 ## Build VO
 ## -----------------------
-add_executable(monoVO_dataset demo/monoVO_dataset.cpp)
-target_link_libraries(monoVO_dataset ${PROJECT_NAME})
+add_executable(monoVO_euroc demo/monoVO_euroc.cpp)
+target_link_libraries(monoVO_euroc ${PROJECT_NAME})
 
 add_executable(monoVO_live demo/monoVO_live.cpp)
 target_link_libraries(monoVO_live ${PROJECT_NAME})
