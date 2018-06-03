@@ -35,10 +35,10 @@ After build and install, copy the file `FindDBoW3.cmake` to the directory `cmake
 ### 2. Usages & Evalution
 the Euroc Dataset is used for evalution. In the project directory, run the demo by the following commond
 ```shell
-./bin/monoVO ./config/euroc.yaml dataset_image_path dataset_csv_file
+./bin/monoVO_euroc ./config/euroc.yaml dataset_image_path dataset_csv_file
 ```
 for example, the dataset `MH_01_easy`'s directory is in `/home`, just run
 ```shell
-./bin/monoVO ./config/euroc.yaml ~/MH_01_easy/cam0/data ~/MH_01_easy/cam0/data.csv
+./bin/monoVO_euroc ./config/euroc.yaml ~/MH_01_easy/cam0/data ~/MH_01_easy/cam0/data.csv
 ```
 finally, there will be a `trajectory.txt` saved, and you can use the [evo](https://github.com/MichaelGrupp/evo) to evaluate.
