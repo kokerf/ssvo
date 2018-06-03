@@ -17,7 +17,8 @@ class AbstractCamera : public noncopyable
 {
 public:
 
-    enum Type {
+    enum Model {
+        UNKNOW      = -2,
         ABSTRACT    = -1,
         PINHOLE     = 0,
         ATAN        = 1
@@ -27,13 +28,19 @@ public:
 
     typedef std::shared_ptr<AbstractCamera> Ptr;
 
-    AbstractCamera() {}
+    AbstractCamera();
 
-    AbstractCamera(int width, int height, Type type = ABSTRACT);
+    AbstractCamera(Model model = ABSTRACT);
 
-    AbstractCamera(int width, int height, double fx, double fy, double cx, double cy, Type type = ABSTRACT);
+    AbstractCamera(int width, int height, Model model = ABSTRACT);
+
+    AbstractCamera(int width, int height, double fx, double fy, double cx, double cy, Model model = ABSTRACT);
 
     virtual ~AbstractCamera() {};
+
+    static Model checkCameraModel(std::string calib_file);
+
+    inline const int fps() const { return fps_; }
 
     inline const int width() const { return width_; }
 
@@ -47,7 +54,13 @@ public:
 
     inline const double cy() const { return cy_; };
 
-    inline const Type type() const { return type_; }
+    inline const cv::Mat K() const { return K_; };
+
+    inline const cv::Mat D() const { return D_; };
+
+    inline const cv::Mat T_BC() const { return T_BC_; };
+
+    inline const Model model() const { return model_; }
 
     virtual Vector3d lift(const Vector2d& px) const;
 
@@ -76,11 +89,14 @@ public:
     }
 
 protected:
+    const Model model_;
+    double fps_;
     int width_;
     int height_;
     double fx_, fy_, cx_, cy_;
+    cv::Mat K_, D_;
+    cv::Mat T_BC_;
     bool distortion_;
-    Type type_;
 };
 
 class PinholeCamera : public AbstractCamera
@@ -107,6 +123,9 @@ public:
     inline static PinholeCamera::Ptr create(int width, int height, const cv::Mat& K, const cv::Mat& D)
     {return PinholeCamera::Ptr(new PinholeCamera(width, height, K, D));}
 
+    inline static PinholeCamera::Ptr create(std::string calib_file)
+    {return PinholeCamera::Ptr(new PinholeCamera(calib_file));}
+
 private:
 
     PinholeCamera(int width, int height, double fx, double fy, double cx, double cy,
@@ -114,10 +133,11 @@ private:
 
     PinholeCamera(int width, int height, const cv::Mat& K, const cv::Mat& D);
 
+    PinholeCamera(std::string calib_file);
+
 private:
 
     double k1_, k2_, p1_, p2_;
-    cv::Mat cvK_, cvD_;
 
 };
 
@@ -144,11 +164,16 @@ public:
     inline static AtanCamera::Ptr create(int width, int height, const cv::Mat& K, const double s = 0.0)
     {return AtanCamera::Ptr(new AtanCamera(width, height, K, s));}
 
+    inline static AtanCamera::Ptr create(std::string calib_file)
+    {return AtanCamera::Ptr(new AtanCamera(calib_file));}
+
 private:
 
     AtanCamera(int width, int height, double fx, double fy, double cx, double cy, double s = 0.0);
 
     AtanCamera(int width, int height, const cv::Mat& K, const double s = 0.0);
+
+    AtanCamera(std::string calib_file);
 
 private:
 

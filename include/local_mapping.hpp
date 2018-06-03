@@ -27,7 +27,7 @@ public:
 
     void addOptimalizeMapPoint(const MapPoint::Ptr &mpt);
 
-    int refineMapPoints(const int max_optimalize_num = -1);
+    int refineMapPoints(const int max_optimalize_num = -1, const double outlier_thr = 2.0/480.0);
 
     void createFeatureFromSeed(const Seed::Ptr &seed);
 

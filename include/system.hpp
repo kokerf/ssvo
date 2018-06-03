@@ -31,7 +31,7 @@ public:
         STATUS_TRACKING_GOOD,
     };
 
-    System(std::string config_file);
+    System(std::string config_file, std::string calib_flie);
 
     void saveTrajectoryTUM(const std::string &file_name);
 

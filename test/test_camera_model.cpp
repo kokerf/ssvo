@@ -57,6 +57,10 @@ public:
 
 };
 
+//#define ATAN_MODLE
+
+#ifdef ATAN_MODLE
+
 int main(int argc, char *argv[])
 {
     LOG_ASSERT(argc == 2) << "run as: ./test_camera_model dataset_dir";
@@ -133,3 +137,29 @@ int main(int argc, char *argv[])
 
     return 0;
 }
+
+#else
+
+int main(int argc, char *argv[])
+{
+    LOG_ASSERT(argc == 2) << "run as: ./test_camera_model calib_file";
+    std::string calib_file = argv[1];
+
+    ssvo::PinholeCamera::Ptr pinhole_cam = ssvo::PinholeCamera::create(calib_file);
+
+    ssvo::AbstractCamera::Ptr abstract_cam = std::static_pointer_cast<ssvo::AbstractCamera>(pinhole_cam);
+
+    std::cout << "!!! Camera Class !!!"
+              << "\n* Type: " << (int) abstract_cam->model()
+              << "\n* Fps: " << abstract_cam->fps()
+              << "\n* Resolution: [" << abstract_cam->width() << "x" << abstract_cam->height() << "]"
+              << "\n* Intrinsics: ["  << abstract_cam->fx() << " " << abstract_cam->fy() << " " << abstract_cam->cx() << " " << abstract_cam->cy() << "]"
+              << "\n* K:\n"  << abstract_cam->K()
+              << "\n* Distortion coefficients: " << abstract_cam->D()
+              << "\n* T_BS:\n" << abstract_cam->T_BC();
+    std::cout << std::endl;
+
+    return 0;
+}
+
+#endif

@@ -1,26 +1,8 @@
 %YAML:1.0
 
-# for EuRoc cam0
-
-# Camera calibration and distortion parameters (OpenCV)
-Camera.model: "pinhole" # "pinhole" or "atan"
-Camera.fx: 458.654
-Camera.fy: 457.296
-Camera.cx: 367.215
-Camera.cy: 248.375
-
-Camera.k1: -0.28340811    # parameters for "pinhole" camera
-Camera.k2: 0.07395907
-Camera.p1: 0.00019359
-Camera.p2: 1.76187114e-05
-
-# Camera frames per second
-Camera.fps: 20.0
-
 # Image
-Image.width: 752
-Image.height: 480
-Image.pyramid_levels: 3  # 0-based
+Image.nlevels: 4
+Image.sigma: 1.0
 
 # Fast detector
 FastDetector.grid_size: 64
@@ -34,7 +16,6 @@ Initializer.min_corners: 200
 Initializer.min_tracked: 150
 Initializer.min_inliers: 80
 Initializer.min_disparity: 30
-Initializer.sigma: 1.0
 Initializer.ransac_max_iters: 1000
 
 # Map

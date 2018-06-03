@@ -109,32 +109,32 @@ int main(int argc, char const *argv[])
 {
     google::InitGoogleLogging(argv[0]);
 
-    if (argc != 3) {
-        std::cout << "Usge: ./test_initializer path_to_sequence configflie" << std::endl;
+    if (argc != 4) {
+        std::cout << "Usge: ./test_initializer calib_file config_flie path_to_sequence" << std::endl;
         return -1;
     }
 
-    Config::FileName = std::string(argv[2]);
-    int fps = Config::cameraFps();
-    int width = Config::imageWidth();
-    int height = Config::imageHeight();
-    int levels = Config::imageTopLevel();
+    AbstractCamera::Ptr camera = std::static_pointer_cast<AbstractCamera>(PinholeCamera::create(argv[1]));
+    Config::file_name_ = std::string(argv[2]);
+    int fps = camera->fps();
+    int width = camera->width();
+    int height = camera->height();
+    int nlevel = Config::imageNLevel();
     int image_border = 8;
     int grid_size = Config::gridSize();
     int grid_min_size = Config::gridMinSize();
     int fast_max_threshold = Config::fastMaxThreshold();
     int fast_min_threshold = Config::fastMinThreshold();
 
-    std::string dir_name = argv[1];
+    std::string dir_name = argv[3];
     std::vector<string> img_file_names;
     loadImages(dir_name, img_file_names);
     LOG_ASSERT(!img_file_names.empty()) << "Error! No image in directory: " << dir_name;
 
-    cv::Mat K = Config::cameraIntrinsic();
-    cv::Mat DistCoef = Config::cameraDistCoefs();
+    cv::Mat K = camera->K();
+    cv::Mat DistCoef = camera->D();
 
-    AbstractCamera::Ptr camera = std::static_pointer_cast<AbstractCamera>(PinholeCamera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef));
-    FastDetector::Ptr detector = FastDetector::create(width, height, image_border, levels+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
+    FastDetector::Ptr detector = FastDetector::create(width, height, image_border, nlevel, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
 
     Initializer::Ptr initializer = Initializer::create(detector, true);
 

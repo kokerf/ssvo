@@ -380,7 +380,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe, const 
         }
     }
 
-    const int max_new_count = options_.max_features * 1.5 - mpts_cur.size();
+    const size_t max_new_count = options_.max_features * 1.5 - mpts_cur.size();
     //! match the mappoints from nearby keyframes
     int project_count = 0;
     std::list<Feature::Ptr> new_fts;
@@ -696,7 +696,7 @@ bool mptOptimizeOrder(const MapPoint::Ptr &mpt1, const MapPoint::Ptr &mpt2)
     return false;
 }
 
-int LocalMapper::refineMapPoints(const int max_optimalize_num)
+int LocalMapper::refineMapPoints(const int max_optimalize_num, const double outlier_thr)
 {
     double t0 = (double)cv::getTickCount();
     static uint64_t optimal_time = 0;
@@ -733,11 +733,10 @@ int LocalMapper::refineMapPoints(const int max_optimalize_num)
         Optimizer::refineMapPoint(mpt, 10);
 
         const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
-        double max_residual = Config::imagePixelUnSigma2() * 2;
         for(const auto &item : obs)
         {
             double residual = utils::reprojectError(item.second->fn_.head<2>(), item.first->Tcw(), mpt->pose());
-            if(residual < max_residual)
+            if(residual < outlier_thr)
                 continue;
 
             mpt->removeObservation(item.first);

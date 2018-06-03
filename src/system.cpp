@@ -7,46 +7,48 @@
 
 namespace ssvo{
 
-std::string Config::FileName;
+std::string Config::file_name_;
 
 TimeTracing::Ptr sysTrace = nullptr;
 
-System::System(std::string config_file) :
+System::System(std::string config_file, std::string calib_flie) :
     stage_(STAGE_INITALIZE), status_(STATUS_INITAL_RESET),
     last_frame_(nullptr), current_frame_(nullptr), reference_keyframe_(nullptr)
 {
+    LOG_ASSERT(!calib_flie.empty()) << "Empty Calibration file input!!!";
     LOG_ASSERT(!config_file.empty()) << "Empty Config file input!!!";
-    Config::FileName = config_file;
+    Config::file_name_ = config_file;
 
-    double fps = Config::cameraFps();
+    AbstractCamera::Model model = AbstractCamera::checkCameraModel(calib_flie);
+    if(AbstractCamera::Model::PINHOLE == model)
+    {
+        PinholeCamera::Ptr pinhole_camera = PinholeCamera::create(calib_flie);
+        camera_ = std::static_pointer_cast<AbstractCamera>(pinhole_camera);
+    }
+    else if(AbstractCamera::Model::ATAN == model)
+    {
+        AtanCamera::Ptr atan_camera = AtanCamera::create(calib_flie);
+        camera_ = std::static_pointer_cast<AbstractCamera>(atan_camera);
+    }
+    else
+    {
+        LOG(FATAL) << "Error camera model: " << model;
+    }
+
+    double fps = camera_->fps();
     if(fps < 1.0) fps = 1.0;
     //! image
-    const int width = Config::imageWidth();
-    const int height = Config::imageHeight();
-    const int level = Config::imageTopLevel();
+    const int nlevel = Config::imageNLevel();
+    const int width = camera_->width();
+    const int height = camera_->height();
     const int image_border = AlignPatch::Size;
-    //! camera
-    const cv::Mat K = Config::cameraIntrinsic();
-    const cv::Mat DistCoef = Config::cameraDistCoefs(); //! for pinhole
-    const double s = Config::cameraDistCoef();  //! for atan
     //! corner detector
     const int grid_size = Config::gridSize();
     const int grid_min_size = Config::gridMinSize();
     const int fast_max_threshold = Config::fastMaxThreshold();
     const int fast_min_threshold = Config::fastMinThreshold();
 
-    if(Config::cameraModel() == Config::CameraModel::PINHOLE)
-    {
-        PinholeCamera::Ptr pinhole_camera = PinholeCamera::create(width, height, K, DistCoef);
-        camera_ = std::static_pointer_cast<AbstractCamera>(pinhole_camera);
-    }
-    else if(Config::cameraModel() == Config::CameraModel::ATAN)
-    {
-        AtanCamera::Ptr atan_camera = AtanCamera::create(width, height, K, s);
-        camera_ = std::static_pointer_cast<AbstractCamera>(atan_camera);
-    }
-
-    fast_detector_ = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
+    fast_detector_ = FastDetector::create(width, height, image_border, nlevel, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
     feature_tracker_ = FeatureTracker::create(width, height, 20, image_border, true);
     initializer_ = Initializer::create(fast_detector_, true);
     mapper_ = LocalMapper::create(true, false);

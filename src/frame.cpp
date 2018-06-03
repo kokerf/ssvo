@@ -14,7 +14,7 @@ float Frame::light_affine_a_ = 1.0f;
 float Frame::light_affine_b_ = 0.0f;
 
 Frame::Frame(const cv::Mat &img, const double timestamp, const AbstractCamera::Ptr &cam) :
-    id_(next_id_++), timestamp_(timestamp), cam_(cam), max_level_(Config::imageTopLevel())
+    id_(next_id_++), timestamp_(timestamp), cam_(cam), max_level_(Config::imageNLevel()-1)
 {
     Tcw_ = SE3d(Matrix3d::Identity(), Vector3d::Zero());
     Twc_ = Tcw_.inverse();
@@ -32,7 +32,7 @@ Frame::Frame(const cv::Mat &img, const double timestamp, const AbstractCamera::P
 }
 
 Frame::Frame(const ImgPyr &img_pyr, const uint64_t id, const double timestamp, const AbstractCamera::Ptr &cam) :
-    id_(id), timestamp_(timestamp), cam_(cam), max_level_(Config::imageTopLevel()), img_pyr_(img_pyr),
+    id_(id), timestamp_(timestamp), cam_(cam), max_level_(Config::imageNLevel()-1), img_pyr_(img_pyr),
     Tcw_(SE3d(Matrix3d::Identity(), Vector3d::Zero())), Twc_(Tcw_.inverse())
 {}
 

@@ -7,10 +7,11 @@ using namespace ssvo;
 int main(int argc, char *argv[])
 {
     google::InitGoogleLogging(argv[0]);
-    LOG_ASSERT(argc == 3) << "\n Usage : ./monoVO_dataset config_file dataset_path";
+    LOG_ASSERT(argc == 4) << "\n Usage : ./monoVO_dataset config_file calib_file dataset_path";
 
-    System vo(argv[1]);
-    EuRocDataReader dataset(argv[2]);
+    System vo(argv[1], argv[2]);
+
+    EuRocDataReader dataset(argv[3]);
 
     ssvo::Timer<std::micro> timer;
     const size_t N = dataset.leftImageSize();

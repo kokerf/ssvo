@@ -13,29 +13,28 @@ int main(int argc, char const *argv[])
     google::InitGoogleLogging(argv[0]);
     if(argc != 2)
     {
-        std::cout << " Usage: ./test_optimizer config_file" << std::endl;
+        std::cout << " Usage: ./test_optimizer calib_file config_file" << std::endl;
         return -1;
     }
 
-    Config::FileName = std::string(argv[1]);
-    int width = Config::imageWidth();
-    int height = Config::imageHeight();
-    cv::Mat K = Config::cameraIntrinsic();
-    cv::Mat DistCoef = Config::cameraDistCoefs();
+    AbstractCamera::Ptr cam = std::static_pointer_cast<AbstractCamera>(PinholeCamera::create(argv[1]));
+    Config::file_name_ = std::string(argv[2]);
+    int width = cam->width();
+    int height = cam->height();
+    cv::Mat K = cam->K();
+    cv::Mat DistCoef = cam->D();
 
-    AbstractCamera::Ptr cam = std::static_pointer_cast<AbstractCamera>(PinholeCamera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef));
     std::cout << "K: \n" << K << std::endl;
     K.at<double>(0,0) += 0.5;
     K.at<double>(0,2) -= 0.5;
     K.at<double>(1,1) += 1.5;
     K.at<double>(1,2) += 1.0;
     std::cout << "K with noise: \n" << K << std::endl;
-    AbstractCamera::Ptr cam_err = std::static_pointer_cast<AbstractCamera>(PinholeCamera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef));
     cv::Mat img = cv::Mat(width, height, CV_8UC1);
 
-    KeyFrame::Ptr kf1 = KeyFrame::create(Frame::create(img, 0, cam_err));
-    KeyFrame::Ptr kf2 = KeyFrame::create(Frame::create(img, 0, cam_err));
-    KeyFrame::Ptr kf3 = KeyFrame::create(Frame::create(img, 0, cam_err));
+    KeyFrame::Ptr kf1 = KeyFrame::create(Frame::create(img, 0, cam));
+    KeyFrame::Ptr kf2 = KeyFrame::create(Frame::create(img, 0, cam));
+    KeyFrame::Ptr kf3 = KeyFrame::create(Frame::create(img, 0, cam));
 
     kf1->setPose(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.0,0.0,0.0));
     kf2->setPose(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.1,0.0,0.0));

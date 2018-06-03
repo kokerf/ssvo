@@ -298,8 +298,10 @@ Initializer::Result Initializer::addImage(Frame::Ptr frame_cur)
     //! find fundamental matrix
     Matrix3d E;
     cand_cur_->createFts(); //! get undistorted points
+    static double focus_length = MAX(cand_ref_->frame->cam_->fx(), cand_ref_->frame->cam_->fy());
+    static double pixel_usigma2 = (Config::imagePixelSigma()*Config::imagePixelSigma())/(focus_length*focus_length);
     bool succeed = utils::Fundamental::findFundamentalMat(cand_ref_->fts, cand_cur_->fts, E, inliers_,
-                                                          Config::imagePixelUnSigma2(), Config::initMaxRansacIters(), true);
+                                                          pixel_usigma2, Config::initMaxRansacIters(), true);
 
     cand_cur_->updateInliers(inliers_);
     int inliers_count = std::count(inliers_.begin(), inliers_.end(), true);
@@ -322,8 +324,7 @@ Initializer::Result Initializer::addImage(Frame::Ptr frame_cur)
     double t5 = (double)cv::getTickCount();
 
     //! [5] reprojective check
-    inliers_count = checkReprejectErr(cand_ref_->pts, cand_cur_->pts, cand_ref_->fts, cand_cur_->fts, T_, inliers_, p3ds_,
-                                      Config::imagePixelUnSigma2()*4);
+    inliers_count = checkReprejectErr(cand_ref_->pts, cand_cur_->pts, cand_ref_->fts, cand_cur_->fts, T_, inliers_, p3ds_, pixel_usigma2*4);
     cand_cur_->updateInliers(inliers_);
     LOG_IF(INFO, verbose_) << "[INIT][5] Inliers after reprojective check: " << inliers_count;
     if(inliers_count < Config::initMinInliers()) return FAILURE;

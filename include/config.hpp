@@ -15,98 +15,66 @@ class Config
 {
 public:
 
-    enum CameraModel
-    {
-        PINHOLE     = 0,
-        ATAN        = 1
-    };
+    static int imageNLevel(){return getInstance().image_nlevel_;}
 
-    static CameraModel cameraModel(){return getInstance().camera_model;}
+    static double imagePixelSigma(){return getInstance().image_sigma_;}
 
-    static cv::Mat cameraIntrinsic(){return getInstance().K;}
+    static int initMinCorners(){return getInstance().init_min_corners_;}
 
-    static cv::Mat cameraDistCoefs(){return getInstance().DistCoef;}
+    static int initMinTracked(){return getInstance().init_min_tracked_;}
 
-    static double cameraDistCoef(){return getInstance().s;}
+    static int initMinDisparity(){return getInstance().init_min_disparity_;}
 
-    static int imageWidth(){return getInstance().image_width;}
+    static int initMinInliers(){return getInstance().init_min_inliers_;}
 
-    static int imageHeight(){return getInstance().image_height;}
+    static int initMaxRansacIters(){return getInstance().init_max_iters_;}
 
-    static int imageTopLevel(){return getInstance().image_top_level;}
+    static int gridSize(){return getInstance().grid_size_;}
 
-    static double imagePixelSigma(){return getInstance().image_sigma;}
+    static int gridMinSize(){return getInstance().grid_min_size_;}
 
-    static double imagePixelSigma2(){return getInstance().image_sigma2;}
+    static int fastMaxThreshold(){return getInstance().fast_max_threshold_;}
 
-    static double imagePixelUnSigma(){return getInstance().image_unsigma;}
+    static int fastMinThreshold(){return getInstance().fast_min_threshold_;}
 
-    static double imagePixelUnSigma2(){return getInstance().image_unsigma2;}
+    static double fastMinEigen(){return getInstance().fast_min_eigen_;}
 
-    static double cameraFps(){return getInstance().fps;}
+    static double mapScale(){return getInstance().mapping_scale_;}
 
-    static double unitPlanePixelLength() {return  getInstance().unit_plane_pixel_length;}
+    static int minConnectionObservations(){return getInstance().mapping_min_connection_observations_;}
 
-    static int initMinCorners(){return getInstance().init_min_corners;}
+    static int minCornersPerKeyFrame(){return getInstance().mapping_min_corners_;}
 
-    static int initMinTracked(){return getInstance().init_min_tracked;}
+    static int maxReprojectKeyFrames(){return getInstance().mapping_max_reproject_kfs_;}
 
-    static int initMinDisparity(){return getInstance().init_min_disparity;}
+    static int maxLocalBAKeyFrames(){return getInstance().mapping_max_local_ba_kfs_;}
 
-    static int initMinInliers(){return getInstance().init_min_inliers;}
+    static int minLocalBAConnectedFts(){return getInstance().mapping_min_local_ba_connected_fts_;}
 
-    static int initMaxRansacIters(){return getInstance().init_max_iters;}
+    static int alignTopLevel(){return getInstance().align_top_level_;}
 
-//    static int imageBorder(){return getInstance().image_border;}
+    static int alignBottomLevel(){return getInstance().align_bottom_level_;}
 
-    static int gridSize(){return getInstance().grid_size;}
+    static int alignPatchSize(){return getInstance().align_patch_size_;}
 
-    static int gridMinSize(){return getInstance().grid_min_size;}
+    static int maxTrackKeyFrames(){return getInstance().max_local_kfs_;}
 
-    //static int gridMaxFeatures(){return getInstance().grid_max_fts;}
+    static int minQualityFts(){return getInstance().min_quality_fts_;}
 
-    static int fastMaxThreshold(){return getInstance().fast_max_threshold;}
+    static int maxQualityDropFts(){return getInstance().max_quality_drop_fts_;}
 
-    static int fastMinThreshold(){return getInstance().fast_min_threshold;}
+    static int maxSeedsBuffer(){return getInstance().max_seeds_buffer_;}
 
-    static double fastMinEigen(){return getInstance().fast_min_eigen;}
+    static int maxPerprocessKeyFrames(){return getInstance().max_perprocess_kfs_;}
 
-    static double mapScale(){return getInstance().mapping_scale;}
+    static string timeTracingDirectory(){return getInstance().time_trace_dir_;}
 
-    static int minConnectionObservations(){return getInstance().mapping_min_connection_observations;}
-
-    static int minCornersPerKeyFrame(){return getInstance().mapping_min_corners;}
-
-    static int maxReprojectKeyFrames(){return getInstance().mapping_max_reproject_kfs;}
-
-    static int maxLocalBAKeyFrames(){return getInstance().mapping_max_local_ba_kfs;}
-
-    static int minLocalBAConnectedFts(){return getInstance().mapping_min_local_ba_connected_fts;}
-
-    static int alignTopLevel(){return getInstance().align_top_level;}
-
-    static int alignBottomLevel(){return getInstance().align_bottom_level;}
-
-    static int alignPatchSize(){return getInstance().align_patch_size;}
-
-    static int maxTrackKeyFrames(){return getInstance().max_local_kfs;}
-
-    static int minQualityFts(){return getInstance().min_quality_fts;}
-
-    static int maxQualityDropFts(){return getInstance().max_quality_drop_fts;}
-
-    static int maxSeedsBuffer(){return getInstance().max_seeds_buffer;}
-
-    static int maxPerprocessKeyFrames(){return getInstance().max_perprocess_kfs;}
-
-    static string timeTracingDirectory(){return getInstance().time_trace_dir;}
-
-    static std::string DBoWDirectory(){return getInstance().dbow_dir;}
+    static std::string DBoWDirectory(){return getInstance().dbow_dir_;}
 
 private:
     static Config& getInstance()
     {
-        static Config instance(FileName);
+        static Config instance(file_name_);
         return instance;
     }
 
@@ -115,100 +83,47 @@ private:
         cv::FileStorage fs(file_name.c_str(), cv::FileStorage::READ);
         LOG_ASSERT(fs.isOpened()) << "Failed to open settings file at: " << file_name;
 
-        //! camera parameters
-        std::string str_camera_model;
-        if(!fs["Camera.model"].empty())
-            fs["Camera.model"] >> str_camera_model;
-
-        if(str_camera_model == "pinhole")
-            camera_model = CameraModel::PINHOLE;
-        else if(str_camera_model == "atan")
-            camera_model = CameraModel::ATAN;
-        else
-            LOG(FATAL) << "Unidentify camera modle: " << str_camera_model;
-
-        fx = (double)fs["Camera.fx"];
-        fy = (double)fs["Camera.fy"];
-        cx = (double)fs["Camera.cx"];
-        cy = (double)fs["Camera.cy"];
-
-        image_width = (int)fs["Image.width"];
-        image_height = (int)fs["Image.height"];
-
-        if(camera_model == CameraModel::PINHOLE)
-        {
-            k1 = (double) fs["Camera.k1"];
-            k2 = (double) fs["Camera.k2"];
-            p1 = (double) fs["Camera.p1"];
-            p2 = (double) fs["Camera.p2"];
-        }
-        else if(camera_model == CameraModel::ATAN)
-        {
-            s = (double) fs["Camera.s"];
-            fx *= image_width;
-            fy *= image_height;
-            cx = cx * image_width - 0.5;
-            cy = cy * image_height - 0.5;
-        }
-
-        K = cv::Mat::eye(3,3,CV_64F);
-        K.at<double>(0,0) = fx;
-        K.at<double>(1,1) = fy;
-        K.at<double>(0,2) = cx;
-        K.at<double>(1,2) = cy;
-
-        DistCoef = cv::Mat::zeros(4,1,CV_64F);
-        DistCoef.at<double>(0) = k1;
-        DistCoef.at<double>(1) = k2;
-        DistCoef.at<double>(2) = p1;
-        DistCoef.at<double>(3) = p2;
-
-        image_top_level = (int)fs["Image.pyramid_levels"];
-        image_sigma = (double)fs["Initializer.sigma"];
-        image_sigma2 = image_sigma*image_sigma;
-        image_unsigma2 = image_sigma2 / (fx > fy ? fy*fy : fx*fx);
-        image_unsigma = sqrt(image_unsigma2);
-        fps = (double)fs["Camera.fps"];
-        unit_plane_pixel_length = 2.0 / (fx*fx+fy*fy);
+        //! Image
+        image_nlevel_ = (int)fs["Image.nlevels"];
+        image_sigma_ = (double)fs["Image.sigma"];
+        image_sigma2_ = image_sigma_*image_sigma_;
 
         //! FAST detector parameters
-//        image_border = (int)fs["FastDetector.image_border"];
-        grid_size = (int)fs["FastDetector.grid_size"];
-        grid_min_size = (int)fs["FastDetector.grid_min_size"];
-        //grid_max_fts = (int)fs["FastDetector.grid_max_fts"];
-        fast_max_threshold = (int)fs["FastDetector.fast_max_threshold"];
-        fast_min_threshold = (int)fs["FastDetector.fast_min_threshold"];
-        fast_min_eigen = (double)fs["FastDetector.fast_min_eigen"];
+        grid_size_ = (int)fs["FastDetector.grid_size"];
+        grid_min_size_ = (int)fs["FastDetector.grid_min_size"];
+        fast_max_threshold_ = (int)fs["FastDetector.fast_max_threshold"];
+        fast_min_threshold_ = (int)fs["FastDetector.fast_min_threshold"];
+        fast_min_eigen_ = (double)fs["FastDetector.fast_min_eigen"];
 
         //! initializer parameters
-        init_min_corners = (int)fs["Initializer.min_corners"];
-        init_min_tracked = (int)fs["Initializer.min_tracked"];
-        init_min_disparity = (int)fs["Initializer.min_disparity"];
-        init_min_inliers = (int)fs["Initializer.min_inliers"];
-        init_max_iters = (int)fs["Initializer.ransac_max_iters"];
+        init_min_corners_ = (int)fs["Initializer.min_corners"];
+        init_min_tracked_ = (int)fs["Initializer.min_tracked"];
+        init_min_disparity_ = (int)fs["Initializer.min_disparity"];
+        init_min_inliers_ = (int)fs["Initializer.min_inliers"];
+        init_max_iters_ = (int)fs["Initializer.ransac_max_iters"];
 
         //! map
-        mapping_scale = (double)fs["Mapping.scale"];
-        mapping_min_connection_observations = (int)fs["Mapping.min_connection_observations"];
-        mapping_min_corners = (int)fs["Mapping.min_corners"];
-        mapping_max_reproject_kfs = (int)fs["Mapping.max_reproject_kfs"];
-        mapping_max_local_ba_kfs = (int)fs["Mapping.max_local_ba_kfs"];
-        mapping_min_local_ba_connected_fts = (int)fs["Mapping.min_local_ba_connected_fts"];
+        mapping_scale_ = (double)fs["Mapping.scale"];
+        mapping_min_connection_observations_ = (int)fs["Mapping.min_connection_observations"];
+        mapping_min_corners_ = (int)fs["Mapping.min_corners"];
+        mapping_max_reproject_kfs_ = (int)fs["Mapping.max_reproject_kfs"];
+        mapping_max_local_ba_kfs_ = (int)fs["Mapping.max_local_ba_kfs"];
+        mapping_min_local_ba_connected_fts_ = (int)fs["Mapping.min_local_ba_connected_fts"];
 
         //! Align
-        align_top_level = (int)fs["Align.top_level"];
-        align_top_level = MIN(align_top_level, image_top_level);
-        align_bottom_level = (int)fs["Align.bottom_level"];
-        align_bottom_level = MAX(align_bottom_level, 0);
-        align_patch_size = (int)fs["Align.patch_size"];
+        align_top_level_ = (int)fs["Align.top_level"];
+        align_top_level_ = MIN(align_top_level_, image_nlevel_-1);
+        align_bottom_level_ = (int)fs["Align.bottom_level"];
+        align_bottom_level_ = MAX(align_bottom_level_, 0);
+        align_patch_size_ = (int)fs["Align.patch_size"];
 
         //! Tracking
-        max_local_kfs = (int)fs["Tracking.max_local_kfs"];
-        min_quality_fts = (int)fs["Tracking.min_quality_fts"];
-        max_quality_drop_fts = (int)fs["Tracking.max_quality_drop_fts"];
+        max_local_kfs_ = (int)fs["Tracking.max_local_kfs"];
+        min_quality_fts_ = (int)fs["Tracking.min_quality_fts"];
+        max_quality_drop_fts_ = (int)fs["Tracking.max_quality_drop_fts"];
 
-        max_seeds_buffer = (int)fs["DepthFilter.max_seeds_buffer"];
-        max_perprocess_kfs = (int)fs["DepthFilter.max_perprocess_kfs"];
+        max_seeds_buffer_ = (int)fs["DepthFilter.max_seeds_buffer"];
+        max_perprocess_kfs_ = (int)fs["DepthFilter.max_perprocess_kfs"];
 
         //! glog
         if(!fs["Glog.alsologtostderr"].empty())
@@ -231,80 +146,68 @@ private:
 
         //! Time Trace
         if(!fs["Trace.log_dir"].empty())
-            fs["Trace.log_dir"] >> time_trace_dir;
+            fs["Trace.log_dir"] >> time_trace_dir_;
 
         //! DBoW
         if(!fs["DBoW.voc_dir"].empty())
-            fs["DBoW.voc_dir"] >> dbow_dir;
+            fs["DBoW.voc_dir"] >> dbow_dir_;
 
         fs.release();
     }
 
 public:
     //! config file's name
-    static string FileName;
+    static string file_name_;
 
 private:
-    //! camera parameters
-    CameraModel camera_model;
-    int image_width;
-    int image_height;
-    double fx, fy, cx, cy;
-    double k1, k2, p1, p2;
-    double s;
-    cv::Mat K;
-    cv::Mat DistCoef;
-    int image_top_level;
-    double image_sigma;
-    double image_sigma2;
-    double image_unsigma;
-    double image_unsigma2;
-    double fps;
-    double unit_plane_pixel_length;
+
+    int image_nlevel_;
+    double image_sigma_;
+    double image_sigma2_;
+    double image_unsigma_;
+    double image_unsigma2_;
 
     //! FAST detector parameters
-//    int image_border;
-    int grid_size;
-    int grid_min_size;
-    //int grid_max_fts;
-    int fast_max_threshold;
-    int fast_min_threshold;
+    int grid_size_;
+    int grid_min_size_;
+    int fast_max_threshold_;
+    int fast_min_threshold_;
+    double fast_min_eigen_;
 
-    double fast_min_eigen;
     //! initializer parameters
-    int init_min_corners;
-    int init_min_tracked;
-    int init_min_disparity;
-    int init_min_inliers;
-    int init_max_iters;
+    int init_min_corners_;
+    int init_min_tracked_;
+    int init_min_disparity_;
+    int init_min_inliers_;
+    int init_max_iters_;
 
     //! map
-    double mapping_scale;
-    int mapping_min_connection_observations;
-    int mapping_min_corners;
-    int mapping_max_reproject_kfs;
-    int mapping_max_local_ba_kfs;
-    int mapping_min_local_ba_connected_fts;
+    double mapping_scale_;
+    int mapping_min_connection_observations_;
+    int mapping_min_corners_;
+    int mapping_max_reproject_kfs_;
+    int mapping_max_local_ba_kfs_;
+    int mapping_min_local_ba_connected_fts_;
 
     //! Align
-    int align_top_level;
-    int align_bottom_level;
-    int align_patch_size;
+    int align_top_level_;
+    int align_bottom_level_;
+    int align_patch_size_;
 
     //! Tracking
-    int max_local_kfs;
-    int min_quality_fts;
-    int max_quality_drop_fts;
+    int max_local_kfs_;
+    int min_quality_fts_;
+    int max_quality_drop_fts_;
 
     //! DepthFilter
-    int max_seeds_buffer;
-    int max_perprocess_kfs;
+    int max_seeds_buffer_;
+    int max_perprocess_kfs_;
 
     //! TimeTrace
-    string time_trace_dir;
+    string time_trace_dir_;
     
     //! DBoW
-    std::string dbow_dir;
+    std::string dbow_dir_;
 };
 
 }

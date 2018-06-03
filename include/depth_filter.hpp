@@ -78,7 +78,7 @@ private:
         double epl_dist2_threshold;
         double klt_epslion;
         double align_epslion;
-        double px_error_normlized;
+        double pixel_error_threshold;
         double min_frame_disparity;
         double min_pixel_disparity;
     } options_;

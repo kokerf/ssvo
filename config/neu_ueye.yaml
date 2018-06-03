@@ -1,26 +1,8 @@
 %YAML:1.0
 
-# for uEye camera, UI122xLE-M-GL
-
-# Camera calibration and distortion parameters (OpenCV)
-Camera.model: "pinhole" # "pinhole" or "atan"
-Camera.fx: 478.491563
-Camera.fy: 478.450925
-Camera.cx: 360.715771
-Camera.cy: 272.341780
-
-Camera.k1: -0.372236
-Camera.k2: 0.112996
-Camera.p1: 0.002456
-Camera.p2: 0.000866
-
-# Camera frames per second
-Camera.fps: 40.0
-
 # Image
-Image.width: 752
-Image.height: 480
-Image.pyramid_levels: 3  # 0-based
+Image.nlevels: 4  # 0-based
+Image.sigma: 1.0
 
 # Fast detector
 FastDetector.grid_size: 64
@@ -33,14 +15,13 @@ FastDetector.fast_min_eigen: 30.0
 Initializer.min_corners: 200
 Initializer.min_tracked: 150
 Initializer.min_inliers: 80
-Initializer.min_disparity: 50
-Initializer.sigma: 1.0
+Initializer.min_disparity: 30
 Initializer.ransac_max_iters: 1000
 
 # Map
 Mapping.scale: 1
 Mapping.min_connection_observations: 5 # min shared fts in connected kfs
-Mapping.min_corners: 300 # min corners per keyframe
+Mapping.min_corners: 200 # min corners per keyframe
 Mapping.max_reproject_kfs: 25
 Mapping.max_local_ba_kfs: 10
 Mapping.min_local_ba_connected_fts: 20

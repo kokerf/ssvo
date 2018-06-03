@@ -228,9 +228,9 @@ int main(int argc, char *argv[])
 {
     google::InitGoogleLogging(argv[0]);
 
-    LOG_ASSERT(argc == 4) << "Usge: ./test_alignment configfile path_to_sequence path_to_association";
+    LOG_ASSERT(argc == 5) << "Usge: ./test_alignment calib_file config_file path_to_sequence path_to_association";
 
-    TUMDataReader dataset(argv[2], argv[3], true);
+    TUMDataReader dataset(argv[3], argv[4], true);
 
     std::string rgb_file0, rgb_file1, depth_file0, depth_file1;
     double timestamp0, timestamp1;
@@ -253,20 +253,19 @@ int main(int argc, char *argv[])
 
     std::cout << "Timestamp: " << std::setprecision(16) << timestamp0 << " " << timestamp1 << std::endl;
 
-    Config::FileName = std::string(argv[1]);
-    int width = Config::imageWidth();
-    int height = Config::imageHeight();
-    int level = Config::imageTopLevel();
+    AbstractCamera::Ptr camera = std::static_pointer_cast<AbstractCamera>(PinholeCamera::create(argv[1]));
+    Config::file_name_ = std::string(argv[2]);
+    int width = camera->width();
+    int height = camera->height();
+    int nlevel = Config::imageNLevel();
     int grid_size = Config::gridSize();
     int grid_min_size = Config::gridMinSize();
     int fast_max_threshold = Config::fastMaxThreshold();
     int fast_min_threshold = Config::fastMinThreshold();
     double fast_min_eigen = Config::fastMinEigen();
 
-    cv::Mat K = Config::cameraIntrinsic();
-    cv::Mat DistCoef = Config::cameraDistCoefs();
-
-    AbstractCamera::Ptr camera = std::static_pointer_cast<AbstractCamera>(PinholeCamera::create(Config::imageWidth(), Config::imageHeight(), K, DistCoef));
+    cv::Mat K = camera->K();
+    cv::Mat DistCoef = camera->D();
 
     Frame::Ptr frame0 = Frame::create(rgb0, 0, camera);
     Frame::Ptr frame1 = Frame::create(rgb1, 0, camera);
@@ -274,7 +273,7 @@ int main(int argc, char *argv[])
     frame1->setPose(Matrix3d::Identity(), Vector3d::Zero());
 
     std::vector<Corner> corners, old_corners;
-    FastDetector::Ptr fast_detector = FastDetector::create(width, height, 8, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
+    FastDetector::Ptr fast_detector = FastDetector::create(width, height, 8, nlevel, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
     fast_detector->detect(frame0->images(), corners, old_corners, 200, fast_min_eigen);
 
     cv::Mat kps_img;

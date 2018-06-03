@@ -1,27 +1,8 @@
 %YAML:1.0
 
-# Camera calibration and distortion parameters (OpenCV)
-Camera.model: "pinhole" # "pinhole" or "atan"
-Camera.fx: 517.306408
-Camera.fy: 516.469215
-Camera.cx: 318.643040
-Camera.cy: 255.313989
-
-Camera.k1: 0.262383       # parameters for "pinhole" camera
-Camera.k2: -0.953104
-Camera.p1: -0.005358
-Camera.p2: 0.002628
-#Camera.k3: 1.163314
-
-Camera.s: 0.0             # parameter for "atan" camera
-
-# Camera frames per second
-Camera.fps: 30.0
-
 # Image
-Image.width: 640
-Image.height: 480
-Image.pyramid_levels: 3  # 0-based
+Image.nlevels: 4  # 0-based
+Image.sigma: 1.0
 
 # Fast detector
 FastDetector.grid_size: 64
@@ -35,7 +16,6 @@ Initializer.min_corners: 200
 Initializer.min_tracked: 150
 Initializer.min_inliers: 80
 Initializer.min_disparity: 30
-Initializer.sigma: 1.0
 Initializer.ransac_max_iters: 1000
 
 # Map

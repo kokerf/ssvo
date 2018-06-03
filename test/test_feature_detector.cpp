@@ -4,6 +4,7 @@
 
 #include "config.hpp"
 #include "feature_detector.hpp"
+#include "camera.hpp"
 #ifdef WIN32
 #include <io.h>
 #else
@@ -62,23 +63,24 @@ int computePyramid(const cv::Mat& image, std::vector<cv::Mat>& image_pyramid, co
 
 int main(int argc, char const *argv[])
 {
-    if(argc != 3)
+    if(argc != 4)
     {
-        std::cout << "Usge: ./test_feature_detector path_to_sequence configfile" << std::endl;
+        std::cout << "Usge: ./test_feature_detector calib_file config_file path_to_sequence" << std::endl;
         return -1;
     }
 
     google::InitGoogleLogging(argv[0]);
 
-    std::string dir_name = argv[1];
+    std::string dir_name = argv[3];
     std::vector<string> img_file_names;
     loadImages(dir_name, img_file_names);
     LOG_ASSERT(!img_file_names.empty()) << "No images load from " << dir_name;
 
-    Config::FileName = std::string(argv[2]);
-    int width = Config::imageWidth();
-    int height = Config::imageHeight();
-    int level = Config::imageTopLevel();
+    ssvo::PinholeCamera::Ptr pinhole_cam = ssvo::PinholeCamera::create(argv[1]);
+    Config::file_name_ = std::string(argv[2]);
+    int width = pinhole_cam->width();
+    int height = pinhole_cam->height();
+    int level = Config::imageNLevel()-1;
     int image_border = 8;
     int grid_size = Config::gridSize();
     int grid_min_size = Config::gridMinSize();

@@ -5,9 +5,9 @@ using namespace ssvo;
 int main(int argc, char *argv[])
 {
     google::InitGoogleLogging(argv[0]);
-    LOG_ASSERT(argc == 3) << "\n Usage : ./monoVO_live config_file videoID";
+    LOG_ASSERT(argc == 4) << "\n Usage : ./monoVO_live config_file calib_file videoID";
 
-    const std::string video_stream_address = argv[2];
+    const std::string video_stream_address = argv[3];
 
     cv::VideoCapture vc;
 
@@ -17,7 +17,7 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    System vo(argv[1]);
+    System vo(argv[1], argv[2]);
 
     std::string image_name;
     double timestamp;

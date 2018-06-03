@@ -117,11 +117,11 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback 
     options_.max_kfs = 5;
     options_.max_features = Config::minCornersPerKeyFrame();
     options_.max_epl_length = 1000;
-    options_.epl_dist2_threshold = 16 * Config::imagePixelUnSigma2();
+    options_.epl_dist2_threshold = 16;
     options_.klt_epslion = 0.0001;
     options_.align_epslion = 0.0001;
     options_.max_perprocess_kfs = Config::maxPerprocessKeyFrames();
-    options_.px_error_normlized = Config::imagePixelUnSigma();
+    options_.pixel_error_threshold = 1;
     options_.min_frame_disparity = 0.0;//2.0;
     options_.min_pixel_disparity = 4.5;
 
@@ -474,6 +474,11 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &fr
 
 int DepthFilter::updateByConnectedKeyFrames(const KeyFrame::Ptr &keyframe, int num)
 {
+    const double focus_length = MAX(keyframe->cam_->fx(), keyframe->cam_->fy());
+    const double pixel_usigma = Config::imagePixelSigma()/focus_length;
+    const double epl_threshold = options_.epl_dist2_threshold*pixel_usigma*pixel_usigma;
+    const double px_threshold = options_.pixel_error_threshold*pixel_usigma;
+
     KeyFrame::Ptr reference_keyframe = keyframe->getRefKeyFrame();
     std::set<KeyFrame::Ptr> connect_keyframes = reference_keyframe->getConnectedKeyFrames(num);
     connect_keyframes.insert(reference_keyframe);
@@ -484,7 +489,7 @@ int DepthFilter::updateByConnectedKeyFrames(const KeyFrame::Ptr &keyframe, int n
     int matched_count = 0;
     for(const KeyFrame::Ptr &kf : connect_keyframes)
     {
-        int matched_count_cur = reprojectSeeds(keyframe, kf, options_.epl_dist2_threshold, options_.align_epslion*options_.px_error_normlized, false);
+        int matched_count_cur = reprojectSeeds(keyframe, kf, epl_threshold, options_.align_epslion*px_threshold, false);
 
         matched_count+=matched_count_cur;
         if(matched_count_cur == 0)
@@ -561,6 +566,10 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
     }
 
 //    static double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
+    const double focus_length = MAX(frame->cam_->fx(), frame->cam_->fy());
+    const double pixel_usigma = Config::imagePixelSigma()/focus_length;
+    const double epl_threshold = options_.epl_dist2_threshold*pixel_usigma*pixel_usigma;
+    const double px_threshold = options_.pixel_error_threshold*pixel_usigma;
     int updated_count = 0;
     for(const auto &seed_map : seeds_map)
     {
@@ -575,7 +584,7 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
             double err2 = utils::Fundamental::computeErrorSquared(
                 kf->pose().translation(), seed->fn_ref/seed->getInvDepth(), T_cur_from_ref, fn_cur.head<2>());
 
-            if(err2 > options_.epl_dist2_threshold)
+            if(err2 > epl_threshold)
             {
                 frame->removeSeed(seed);
                 continue;
@@ -592,7 +601,7 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
             if(utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->fn_ref, fn_cur, depth))
             {
 //                double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
-                double tau = seed->computeVar(T_cur_from_ref, depth, options_.klt_epslion*options_.px_error_normlized);
+                double tau = seed->computeVar(T_cur_from_ref, depth, options_.klt_epslion*px_threshold);
 //                tau = tau + Config::pixelUnSigma();
                 seed->update(1.0/depth, tau*tau);
 
@@ -685,6 +694,10 @@ int DepthFilter::reprojectSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr 
 
 int DepthFilter::reprojectAllSeeds(const Frame::Ptr &frame)
 {
+    static double focus_length = MAX(frame->cam_->fx(), frame->cam_->fy());
+    static double pixel_usigma = Config::imagePixelSigma()/focus_length;
+    static double epl_threshold = options_.epl_dist2_threshold*pixel_usigma*pixel_usigma;
+    static double px_threshold = options_.pixel_error_threshold*pixel_usigma;
     //! get new seeds for track
     std::set<KeyFrame::Ptr> candidate_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_kfs);
     candidate_keyframes.insert(frame->getRefKeyFrame());
@@ -695,7 +708,7 @@ int DepthFilter::reprojectAllSeeds(const Frame::Ptr &frame)
     int matched_count = 0;
     for(const KeyFrame::Ptr &kf : candidate_keyframes)
     {
-        matched_count += reprojectSeeds(kf, frame, options_.epl_dist2_threshold, options_.px_error_normlized);
+        matched_count += reprojectSeeds(kf, frame, epl_threshold, px_threshold);
     }
 
     return matched_count;

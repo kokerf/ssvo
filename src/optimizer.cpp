@@ -63,6 +63,9 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
 
 void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size, int min_shared_fts, bool report, bool verbose)
 {
+    static double focus_length = MAX(keyframe->cam_->fx(), keyframe->cam_->fy());
+    static double pixel_usigma = Config::imagePixelSigma()/focus_length;
+
     double t0 = (double)cv::getTickCount();
     size = size > 0 ? size-1 : 0;
     std::set<KeyFrame::Ptr> actived_keyframes = keyframe->getConnectedKeyFrames(size, min_shared_fts);
@@ -110,7 +113,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
             problem.SetParameterBlockConstant(kf->optimal_Tcw_.data());
     }
 
-    double scale = Config::imagePixelUnSigma() * 2;
+    double scale = pixel_usigma * 2;
     ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
     for(const MapPoint::Ptr &mpt : local_mappoints)
     {
@@ -141,7 +144,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
 
     //! update mpts & remove mappoint with large error
     std::set<KeyFrame::Ptr> changed_keyframes;
-    static const double max_residual = Config::imagePixelUnSigma2() * std::sqrt(3.81);
+    static const double max_residual = pixel_usigma * pixel_usigma * std::sqrt(3.81);
     for(const MapPoint::Ptr &mpt : local_mappoints)
     {
         const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
@@ -335,6 +338,9 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
 
 void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_seeds, bool reject, bool report, bool verbose)
 {
+    const double focus_length = MAX(frame->cam_->fx(), frame->cam_->fy());
+    const double pixel_usigma = Config::imagePixelSigma()/focus_length;
+
     static const size_t OPTIMAL_MPTS = 150;
 
     frame->optimal_Tcw_ = frame->Tcw();
@@ -343,7 +349,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_see
     ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
     problem.AddParameterBlock(frame->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
 
-    static const double scale = Config::imagePixelUnSigma() * std::sqrt(3.81);
+    static const double scale = pixel_usigma * std::sqrt(3.81);
     ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
 
     std::vector<Feature::Ptr> fts;
@@ -410,7 +416,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_see
     {
         int remove_count = 0;
 
-        static const double TH_REPJ = 3.81 * Config::imagePixelUnSigma2();
+        static const double TH_REPJ = 3.81 * pixel_usigma * pixel_usigma;
         for(size_t i = 0; i < N; ++i)
         {
             Feature::Ptr ft = fts[i];
