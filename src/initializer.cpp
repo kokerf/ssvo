@@ -298,7 +298,7 @@ Initializer::Result Initializer::addImage(Frame::Ptr frame_cur)
     //! find fundamental matrix
     Matrix3d E;
     cand_cur_->createFts(); //! get undistorted points
-    static double focus_length = MAX(cand_ref_->frame->cam_->fx(), cand_ref_->frame->cam_->fy());
+    static double focus_length = MIN(cand_ref_->frame->cam_->fx(), cand_ref_->frame->cam_->fy());
     static double pixel_usigma2 = (Config::imagePixelSigma()*Config::imagePixelSigma())/(focus_length*focus_length);
     bool succeed = utils::Fundamental::findFundamentalMat(cand_ref_->fts, cand_cur_->fts, E, inliers_,
                                                           pixel_usigma2, Config::initMaxRansacIters(), true);

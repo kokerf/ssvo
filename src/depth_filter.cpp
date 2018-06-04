@@ -474,7 +474,7 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &fr
 
 int DepthFilter::updateByConnectedKeyFrames(const KeyFrame::Ptr &keyframe, int num)
 {
-    const double focus_length = MAX(keyframe->cam_->fx(), keyframe->cam_->fy());
+    const double focus_length = MIN(keyframe->cam_->fx(), keyframe->cam_->fy());
     const double pixel_usigma = Config::imagePixelSigma()/focus_length;
     const double epl_threshold = options_.epl_dist2_threshold*pixel_usigma*pixel_usigma;
     const double px_threshold = options_.pixel_error_threshold*pixel_usigma;
@@ -566,7 +566,7 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
     }
 
 //    static double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
-    const double focus_length = MAX(frame->cam_->fx(), frame->cam_->fy());
+    const double focus_length = MIN(frame->cam_->fx(), frame->cam_->fy());
     const double pixel_usigma = Config::imagePixelSigma()/focus_length;
     const double epl_threshold = options_.epl_dist2_threshold*pixel_usigma*pixel_usigma;
     const double px_threshold = options_.pixel_error_threshold*pixel_usigma;
@@ -694,7 +694,7 @@ int DepthFilter::reprojectSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr 
 
 int DepthFilter::reprojectAllSeeds(const Frame::Ptr &frame)
 {
-    static double focus_length = MAX(frame->cam_->fx(), frame->cam_->fy());
+    static double focus_length = MIN(frame->cam_->fx(), frame->cam_->fy());
     static double pixel_usigma = Config::imagePixelSigma()/focus_length;
     static double epl_threshold = options_.epl_dist2_threshold*pixel_usigma*pixel_usigma;
     static double px_threshold = options_.pixel_error_threshold*pixel_usigma;

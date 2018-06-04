@@ -63,7 +63,7 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
 
 void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size, int min_shared_fts, bool report, bool verbose)
 {
-    static double focus_length = MAX(keyframe->cam_->fx(), keyframe->cam_->fy());
+    static double focus_length = MIN(keyframe->cam_->fx(), keyframe->cam_->fy());
     static double pixel_usigma = Config::imagePixelSigma()/focus_length;
 
     double t0 = (double)cv::getTickCount();
@@ -338,7 +338,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
 
 void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_seeds, bool reject, bool report, bool verbose)
 {
-    const double focus_length = MAX(frame->cam_->fx(), frame->cam_->fy());
+    const double focus_length = MIN(frame->cam_->fx(), frame->cam_->fy());
     const double pixel_usigma = Config::imagePixelSigma()/focus_length;
 
     static const size_t OPTIMAL_MPTS = 150;
