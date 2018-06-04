@@ -58,7 +58,9 @@ public:
 
     inline const cv::Mat D() const { return D_; };
 
-    inline const cv::Mat T_BC() const { return T_BC_; };
+    inline const SE3d T_BC() const { return T_BC_; };
+
+    inline const SE3d T_CB() const { return T_CB_; };
 
     inline const Model model() const { return model_; }
 
@@ -95,7 +97,8 @@ protected:
     int height_;
     double fx_, fy_, cx_, cy_;
     cv::Mat K_, D_;
-    cv::Mat T_BC_;
+    SE3d T_BC_;
+    SE3d T_CB_;
     bool distortion_;
 };
 

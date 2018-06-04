@@ -156,7 +156,8 @@ int main(int argc, char *argv[])
               << "\n* Intrinsics: ["  << abstract_cam->fx() << " " << abstract_cam->fy() << " " << abstract_cam->cx() << " " << abstract_cam->cy() << "]"
               << "\n* K:\n"  << abstract_cam->K()
               << "\n* Distortion coefficients: " << abstract_cam->D()
-              << "\n* T_BS:\n" << abstract_cam->T_BC();
+              << "\n* T_BS:\n" << abstract_cam->T_BC().matrix()
+              << "\n* T_SB:\n" << abstract_cam->T_CB().matrix();
     std::cout << std::endl;
 
     return 0;

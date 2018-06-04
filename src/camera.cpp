@@ -83,7 +83,8 @@ PinholeCamera::PinholeCamera(int width, int height, double fx, double fy, double
     D_.at<double>(1) = k2;
     D_.at<double>(2) = p1;
     D_.at<double>(3) = p2;
-    T_BC_ = cv::Mat::eye(4, 4, CV_64FC1);
+    T_BC_ = SE3d();
+    T_CB_ = SE3d();
 }
 
 PinholeCamera::PinholeCamera(int width, int height, const cv::Mat& K, const cv::Mat& D):
@@ -113,7 +114,8 @@ PinholeCamera::PinholeCamera(int width, int height, const cv::Mat& K, const cv::
 
     distortion_ = (fabs(k1_) > 0.0000001);
 
-    T_BC_ = cv::Mat::eye(4, 4, CV_64FC1);
+    T_BC_ = SE3d();
+    T_CB_ = SE3d();
 }
 
 PinholeCamera::PinholeCamera(std::string calib_file) :
@@ -165,11 +167,13 @@ PinholeCamera::PinholeCamera(std::string calib_file) :
 
     cv::FileNode T = fs["Camera.T_BC"];
     LOG_ASSERT(T.size() == 16) << "Failed to load Camera.T_BC with error size: " << T.size();
-    T_BC_ = cv::Mat::eye(4,4,CV_64FC1);
+    Eigen::Matrix4d T_BC = Eigen::Matrix4d::Identity();
     for (int i = 0; i < 16; ++i)
     {
-        *(T_BC_.ptr<double>(0) + i) = T[i];
+        T_BC(i/4,i%4) = T[i];
     }
+    T_BC_ = SE3d(T_BC);
+    T_CB_ = T_BC_.inverse();
 
     fs.release();
 }
@@ -357,10 +361,13 @@ AtanCamera::AtanCamera(std::string calib_file) :
 
     cv::FileNode T = fs["Camera.T_BC"];
     LOG_ASSERT(T.size() == 16) << "Failed to load Camera.T_BC with error size: " << T.size();
-    T_BC_ = cv::Mat::eye(4,4,CV_64FC1);
-    for (int i = 0; i < 16; ++i) {
-        *(T_BC_.ptr<double>(0) + i) = T[i];
+    Eigen::Matrix4d T_BC = Eigen::Matrix4d::Identity();
+    for (int i = 0; i < 16; ++i)
+    {
+        T_BC(i/4,i%4) = T[i];
     }
+    T_BC_ = SE3d(T_BC);
+    T_CB_ = T_BC_.inverse();
 
     fs.release();
 }
