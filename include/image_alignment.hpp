@@ -40,13 +40,15 @@ public:
     AlignSE3(bool verbose=false, bool visible=false);
 
     int run(Frame::Ptr reference_frame, Frame::Ptr current_frame,
-             int top_level, int bottom_level, int max_iterations = 30, double epslion = 1E-5f);
+             int top_level, int bottom_level, int max_iterations = 30, double epslion = 1E-5f, bool use_prior = false);
 
 private:
 
     int computeReferencePatches(int level, std::vector<Feature::Ptr> &fts);
 
     double computeResidual(int level, int N);
+
+    double computeResidualPrior();
 
 private:
 
@@ -61,6 +63,8 @@ private:
     Matrix<double, 3, Dynamic, RowMajor> ref_feature_cache_;
 
     SE3d T_cur_from_ref_;
+
+    SE3d::Tangent Tangent_cur_from_ref_prior_;
 };
 
 

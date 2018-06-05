@@ -55,11 +55,12 @@ AlignSE3::AlignSE3(bool verbose, bool visible) :
 {}
 
 int AlignSE3::run(Frame::Ptr reference_frame,
-                   Frame::Ptr current_frame,
-                   int top_level,
-                   int bottom_level,
-                   int max_iterations,
-                   double epslion)
+                  Frame::Ptr current_frame,
+                  int top_level,
+                  int bottom_level,
+                  int max_iterations,
+                  double epslion,
+                  bool use_prior)
 {
     logs_.clear();
     double epslion_squared = epslion * epslion;
@@ -80,6 +81,9 @@ int AlignSE3::run(Frame::Ptr reference_frame,
     T_cur_from_ref_ = cur_frame_->Tcw() * ref_frame_->pose();
     LOG_IF(INFO, verbose_) << "T_cur_from_ref_ " << T_cur_from_ref_.log().transpose();
 
+    //! load prior
+    Tangent_cur_from_ref_prior_ = T_cur_from_ref_.log();
+
     for(int l = top_level; l >= bottom_level; l--)
     {
         const int n = computeReferencePatches(l, fts);
@@ -90,6 +94,9 @@ int AlignSE3::run(Frame::Ptr reference_frame,
         {
             //! compute residual
             double res = computeResidual(l, n);
+
+            if(use_prior)
+                computeResidualPrior();
 
             if(res > res_old)
             {
@@ -221,6 +228,22 @@ double AlignSE3::computeResidual(int level, int N)
     }
 
     return res / count_;
+}
+
+double AlignSE3::computeResidualPrior()
+{
+    const Sophus::SO3d::Tangent phi_prior = Tangent_cur_from_ref_prior_.tail<3>();
+
+    const Sophus::SO3d R_delta = Sophus::SO3d::exp(-phi_prior) * T_cur_from_ref_.so3();
+    const Sophus::SO3d::Tangent phi_delta = R_delta.log();
+    const Matrix3d phi_delta_hat = Sophus::SO3d::hat(phi_delta);
+
+    Matrix3d Jr_inv = Matrix3d::Identity() + 0.5 * phi_delta_hat + 1.0/12.0 * phi_delta_hat * phi_delta_hat;
+
+    Jres_.tail<3>() += Jr_inv.transpose() * phi_delta;
+    Hessian_.bottomRightCorner(3,3) += Jr_inv.transpose() * Jr_inv;
+
+    return phi_delta.norm();
 }
 
 namespace utils{

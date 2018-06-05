@@ -221,12 +221,12 @@ System::Status System::tracking()
     depth_filter_->trackFrame(last_frame_, current_frame_);
 
     // set prior
-    setMotionPrior();
+    bool use_prior = setMotionPrior();
 
     //! alignment by SE3
     AlignSE3 align;
     sysTrace->startTimer("img_align");
-    align.run(last_frame_, current_frame_, Config::alignTopLevel(), Config::alignBottomLevel(), 30, 1e-8);
+    align.run(last_frame_, current_frame_, Config::alignTopLevel(), Config::alignBottomLevel(), 30, 1e-8, use_prior);
     sysTrace->stopTimer("img_align");
 
     //! track local map
