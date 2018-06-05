@@ -56,6 +56,10 @@ System::System(std::string config_file, std::string calib_flie) :
     depth_filter_ = DepthFilter::create(fast_detector_, depth_fliter_callback, true);
     viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));
 
+    imu_processor_ = nullptr;
+    if(Config::useIMU())
+        imu_processor_ = IMUProcessor::create();
+
     mapper_->startMainThread();
     depth_filter_->startMainThread();
 
@@ -96,6 +100,12 @@ System::~System()
     viewer_->waitForFinish();
 }
 
+void System::addIMUData(const ssvo::IMUData &imu_data)
+{
+    if(imu_processor_)
+        imu_processor_->addIMUData(imu_data);
+}
+
 void System::process(const cv::Mat &image, const double timestamp)
 {
     sysTrace->startTimer("total");
@@ -106,6 +116,11 @@ void System::process(const cv::Mat &image, const double timestamp)
     cv::Mat gray = image.clone();
     if(gray.channels() == 3)
         cv::cvtColor(gray, gray, cv::COLOR_RGB2GRAY);
+
+    if(imu_processor_ && !imu_processor_->isInitialized())
+    {
+        imu_processor_->initializeGravityAndBias();
+    }
 
     current_frame_ = Frame::create(gray, timestamp, camera_);
     double t1 = (double)cv::getTickCount();
@@ -167,6 +182,37 @@ System::Status System::initialize()
     return STATUS_INITAL_SUCCEED;
 }
 
+bool System::setMotionPrior()
+{
+    bool use_prior = false;
+
+    Matrix3d R_ref_cur = Matrix3d::Identity();
+    if(imu_processor_ && imu_processor_->isInitialized())
+    {
+        std::vector<IMUData> imu_data;
+        imu_processor_->getIMUData(current_frame_->timestamp_, imu_data);
+        if(!imu_data.empty())
+        {
+            Vector3d mean_angle_vel(0.0, 0.0, 0.0);
+            for (const IMUData &data : imu_data)
+                mean_angle_vel += (data.gyro - imu_processor_->gyroBais());
+
+            mean_angle_vel *= 1.0 / imu_data.size();
+
+            Vector3d cam_angle_vel =  current_frame_->cam_->T_CB().rotationMatrix() * mean_angle_vel;
+            const double angle = (current_frame_->timestamp_ - last_frame_->timestamp_) * cam_angle_vel.norm();
+            cam_angle_vel.normalize();
+
+            R_ref_cur = AngleAxisd(angle, cam_angle_vel).toRotationMatrix();
+            use_prior = true;
+        }
+    }
+
+    current_frame_->setPose(R_ref_cur.transpose() * last_frame_->pose().rotationMatrix(), last_frame_->pose().translation());
+
+    return use_prior;
+}
+
 System::Status System::tracking()
 {
     current_frame_->setRefKeyFrame(reference_keyframe_);
@@ -174,8 +220,9 @@ System::Status System::tracking()
     //! track seeds
     depth_filter_->trackFrame(last_frame_, current_frame_);
 
-    // TODO 先验信息怎么设置？
-    current_frame_->setPose(last_frame_->pose());
+    // set prior
+    setMotionPrior();
+
     //! alignment by SE3
     AlignSE3 align;
     sysTrace->startTimer("img_align");

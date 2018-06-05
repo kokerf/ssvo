@@ -365,8 +365,10 @@ void Initializer::createInitalMap(double map_scale)
     SE3d T_cur_from_ref(T_.topLeftCorner(3,3), T_.rightCols(1));
     SE3d T_ref_from_cur = T_cur_from_ref.inverse();
     T_ref_from_cur.translation() = T_ref_from_cur.translation() * scale;
-    cand_ref_->frame->setPose(Matrix3d::Identity(), Vector3d::Zero());
-    cand_cur_->frame->setPose(T_ref_from_cur);
+    SE3d T_body_from_ref = cand_ref_->frame->cam_->T_BC();
+    SE3d T_body_from_cur = T_body_from_ref * T_ref_from_cur;
+    cand_ref_->frame->setPose(T_body_from_ref);
+    cand_cur_->frame->setPose(T_body_from_cur);
 
     //! create and rescale map points
     for(size_t i = 0; i < N; ++i)

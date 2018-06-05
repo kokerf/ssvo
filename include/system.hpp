@@ -11,6 +11,7 @@
 #include "local_mapping.hpp"
 #include "depth_filter.hpp"
 #include "viewer.hpp"
+#include "imu.hpp"
 
 namespace ssvo {
 
@@ -37,11 +38,13 @@ public:
 
     ~System();
 
+    void addIMUData(const IMUData& imu_data);
+
     void process(const cv::Mat& image, const double timestamp);
 
 private:
 
-    void processFrame();
+    bool setMotionPrior();
 
     Status tracking();
 
@@ -74,6 +77,7 @@ private:
     Initializer::Ptr initializer_;
     DepthFilter::Ptr depth_filter_;
     LocalMapper::Ptr mapper_;
+    IMUProcessor::Ptr imu_processor_;
 
     Viewer::Ptr viewer_;
 

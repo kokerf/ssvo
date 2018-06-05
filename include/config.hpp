@@ -15,6 +15,8 @@ class Config
 {
 public:
 
+    static int useIMU(){return getInstance().imu_enable_;}
+
     static int imageNLevel(){return getInstance().image_nlevel_;}
 
     static double imagePixelSigma(){return getInstance().image_sigma_;}
@@ -82,6 +84,10 @@ private:
     {
         cv::FileStorage fs(file_name.c_str(), cv::FileStorage::READ);
         LOG_ASSERT(fs.isOpened()) << "Failed to open settings file at: " << file_name;
+
+        //! IMU
+        const int imu_enable = (int)fs["IMU.enable"];
+        imu_enable_ = (bool)imu_enable;
 
         //! Image
         image_nlevel_ = (int)fs["Image.nlevels"];
@@ -160,6 +166,8 @@ public:
     static string file_name_;
 
 private:
+
+    bool imu_enable_;
 
     int image_nlevel_;
     double image_sigma_;

@@ -15,6 +15,7 @@ int main(int argc, char *argv[])
 
     ssvo::Timer<std::micro> timer;
     const size_t N = dataset.leftImageSize();
+    size_t imu_idx = 0;
     for(size_t i = 0; i < N; i++)
     {
         const EuRocDataReader::Image image_data = dataset.leftImage(i);
@@ -22,6 +23,19 @@ int main(int argc, char *argv[])
         cv::Mat image = cv::imread(image_data.path, CV_LOAD_IMAGE_UNCHANGED);
         if(image.empty())
             continue;
+
+        while (1)
+        {
+            EuRocDataReader::IMUData imu_data = dataset.imu(imu_idx);
+
+            if (imu_data.timestamp >= image_data.timestamp)
+                break;
+
+            vo.addIMUData(ssvo::IMUData(imu_data.timestamp,
+                                        Vector3d(imu_data.gyro[0], imu_data.gyro[1], imu_data.gyro[2]),
+                                        Vector3d(imu_data.acc[0], imu_data.acc[1], imu_data.acc[2])));
+            imu_idx++;
+        }
 
         timer.start();
         vo.process(image, image_data.timestamp);

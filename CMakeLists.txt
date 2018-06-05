@@ -140,6 +140,7 @@ LIST(APPEND SOURCEFILES
     src/system.cpp
     src/viewer.cpp
     src/brief.cpp
+    src/imu.cpp
 )
 
 add_library(${PROJECT_NAME} STATIC ${SOURCEFILES})
@@ -178,6 +179,9 @@ target_link_libraries(test_optimizer ${PROJECT_NAME})
 
 add_executable(test_camera_model test/test_camera_model.cpp src/camera.cpp)
 target_link_libraries(test_camera_model ${LINK_LIBS})
+
+add_executable(test_imu test/test_imu.cpp src/imu.cpp src/camera.cpp)
+target_link_libraries(test_imu ${LINK_LIBS})
 
 add_executable(test_timer test/test_timer.cpp)
 

@@ -1,5 +1,8 @@
 %YAML:1.0
 
+# IMU
+IMU.enable: 0
+
 # Image
 Image.nlevels: 4  # 0-based
 Image.sigma: 1.0
