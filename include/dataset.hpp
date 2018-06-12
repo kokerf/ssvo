@@ -4,6 +4,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <array>
 #include <opencv2/opencv.hpp>
 
 namespace ssvo {

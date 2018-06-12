@@ -590,7 +590,9 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
                 continue;
             }
 
-            double pixel_disparity = (seed->px_ref - ft->px_).norm() / (1 << ft->level_);// seed->level_ref);
+			// TODO!!! dont know why it occur 0xC0000005 error when run in windows
+			//double pixel_disparity = (seed->px_ref - ft->px_).norm() / (1 << ft->level_);// seed->level_ref);
+            double pixel_disparity = (seed->px_ref - Vector2d(ft->px_)).norm() / (1 << ft->level_);// seed->level_ref);
             if(pixel_disparity < options_.min_pixel_disparity)
             {
                 continue;

@@ -70,6 +70,19 @@ void MapPoint::addObservation(const KeyFrame::Ptr &kf, const Feature::Ptr &ft)
     obs_.emplace(kf, ft);
 }
 
+void MapPoint::updateObservation(const KeyFrame::Ptr &kf, const Feature::Ptr &ft)
+{
+	LOG_ASSERT(kf && kf) << " Error input kf: " << kf << ", or ft: " << ft;
+
+	std::lock_guard<std::mutex> lock(mutex_obs_);
+	LOG_ASSERT(type_ != BAD) << " Error to use a BAD MapPoint!";
+
+	auto iter = obs_.find(kf);
+	LOG_ASSERT(iter != obs_.end()) << " Error to update a unobserve keyframe!";
+
+	iter->second = ft;
+}
+
 //! it do not change the connections of keyframe
 bool MapPoint::fusion(const MapPoint::Ptr &mpt)
 {

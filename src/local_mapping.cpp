@@ -493,7 +493,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe, const 
             if(obs_old.size() >= obs_new.size())
             {
                 //! match all ft in obs_new
-                std::list<std::tuple<Feature::Ptr, double, double, int> > fts_to_update;
+				std::map<KeyFrame::Ptr, Feature::Ptr> obs_to_change;
                 for(const auto &it_new : obs_new)
                 {
                     const KeyFrame::Ptr &kf_new = it_new.first;
@@ -532,18 +532,15 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe, const 
                         continue;
 
                     //! observation for update
-                    fts_to_update.emplace_back(obs_new.find(kf_new)->second, px_new[0], px_new[1], level_new);
+					obs_to_change.emplace(kf_new, Feature::create(px_new, kf_new->cam_->lift(px_new), level_new, mpt_new));
                 }
 
                 //! update ft if succeed
-                const AbstractCamera::Ptr &cam = keyframe->cam_;//! all camera is the same
-                for(const auto &it : fts_to_update)
+                for(const auto &it : obs_to_change)
                 {
-                    const Feature::Ptr &ft_update = std::get<0>(it);
-                    ft_update->px_[0] = std::get<1>(it);
-                    ft_update->px_[1] = std::get<2>(it);
-                    ft_update->level_ = std::get<3>(it);
-                    ft_update->fn_ = cam->lift(ft_update->px_);
+					it.first->removeMapPoint(mpt_new);
+					it.first->addFeature(it.second);
+					mpt_new->updateObservation(it.first, it.second);
                 }
 
                 //! fusion the mappoint
@@ -559,7 +556,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe, const 
             else
             {
                 //! match all ft in obs_old
-                std::list<std::tuple<Feature::Ptr, double, double, int> > fts_to_update;
+				std::map<KeyFrame::Ptr, Feature::Ptr> obs_to_change;
                 for(const auto &it_old : obs_old)
                 {
                     const KeyFrame::Ptr &kf_old = it_old.first;
@@ -599,19 +596,16 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe, const 
                         continue;
 
                     //! observation for update
-                    fts_to_update.emplace_back(obs_old.find(kf_old)->second, px_old[0], px_old[1], level_old);
+					obs_to_change.emplace(kf_old, Feature::create(px_old, kf_old->cam_->lift(px_old), level_old, mpt_old));
                 }
 
                 //! update ft if succeed
-                const AbstractCamera::Ptr &cam = keyframe->cam_;//! all camera is the same
-                for(const auto &it : fts_to_update)
-                {
-                    const Feature::Ptr &ft_update = std::get<0>(it);
-                    ft_update->px_[0] = std::get<1>(it);
-                    ft_update->px_[1] = std::get<2>(it);
-                    ft_update->level_ = std::get<3>(it);
-                    ft_update->fn_ = cam->lift(ft_update->px_);
-                }
+				for (const auto &it : obs_to_change)
+				{
+					it.first->removeMapPoint(mpt_old);
+					it.first->addFeature(it.second);
+					mpt_old->updateObservation(it.first, it.second);
+				}
 
                 //! add new feature for keyframe, then fusion the mappoint
                 ft->mpt_ = mpt_new;

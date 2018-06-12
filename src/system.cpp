@@ -374,7 +374,9 @@ bool System::createNewKeyFrame()
             if(!mpt_ft.count(mpt)) continue;
             Feature::Ptr ft_cur = mpt_ft.find(mpt)->second;
 
-            const Vector2d px(ft_ref->px_ - ft_cur->px_);
+			// TODO!!! dont know why it occur 0xC0000005 error when run in windows
+            //const Vector2d px(ft_ref->px_ - ft_cur->px_);
+			const Vector2d px = ft_ref->px_ - Vector2d(ft_cur->px_);
             disparity.push_back(px.norm());
         }
 

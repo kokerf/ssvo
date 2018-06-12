@@ -40,6 +40,8 @@ public:
 
     void addObservation(const KeyFramePtr &kf, const Feature::Ptr &ft);
 
+    void updateObservation(const KeyFramePtr &kf, const Feature::Ptr &ft);
+
     int observations();
 
     std::map<KeyFramePtr, Feature::Ptr> getObservations();
