@@ -54,7 +54,7 @@ void Viewer::run()
     glEnable(GL_BLEND);
     glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    pangolin::CreatePanel("menu").SetBounds(pangolin::Attach::Pix(WIN_HEIGHT-UI_HEIGHT), 1.0, 0.0, pangolin::Attach::Pix(UI_WIDTH));
+    pangolin::CreatePanel("menu").SetBounds(0.0, 1.0, 0.0, pangolin::Attach::Pix(UI_WIDTH));
     pangolin::Var<bool> menu_follow_camera("menu.Follow Camera", true, true);
     pangolin::Var<bool> menu_show_trajectory("menu.Show Trajectory", true, true);
     pangolin::Var<bool> menu_show_keyframe("menu.Show KeyFrame", true, true);
@@ -129,7 +129,6 @@ void Viewer::run()
 
             //s_cam.SetModelViewMatrix(pangolin::ModelViewLookAt(0, -1, -0.5, 0, 0, 0, 0, -1, 0));
             s_cam.Follow(camera_pose);
-            following_camera = true;
         }
 
         pangolin::glDrawAxis(0.1);
@@ -143,7 +142,9 @@ void Viewer::run()
         }
 
         if(show_trajectory)
+		{
             drawTrajectory(trajectory_duration);
+		}
 
         if(frame)
             drawCurrentFrame(frame->pose().matrix(), cv::Scalar(0.0, 0.0, 1.0));
