@@ -68,12 +68,18 @@ System::System(std::string config_file, std::string calib_flie) :
     TimeTracing::TraceNames time_names;
     time_names.push_back("total");
     time_names.push_back("processing");
+	time_names.push_back("tracking");
+	time_names.push_back("seeds");
     time_names.push_back("frame_create");
     time_names.push_back("img_align");
     time_names.push_back("feature_reproj");
     time_names.push_back("motion_ba");
+    time_names.push_back("createKF");
+    time_names.push_back("insert_KF_to_map");
     time_names.push_back("light_affine");
     time_names.push_back("per_depth_filter");
+    time_names.push_back("logs");
+    time_names.push_back("display");
     time_names.push_back("finish");
 
     TimeTracing::TraceNames log_names;
@@ -100,16 +106,13 @@ void System::process(const cv::Mat &image, const double timestamp)
 {
     sysTrace->startTimer("total");
     sysTrace->startTimer("frame_create");
+
     //! get gray image
     double t0 = (double)cv::getTickCount();
-    rgb_ = image;
-    cv::Mat gray = image.clone();
-    if(gray.channels() == 3)
-        cv::cvtColor(gray, gray, cv::COLOR_RGB2GRAY);
-
-    current_frame_ = Frame::create(gray, timestamp, camera_);
+    current_frame_ = Frame::create(image, timestamp, camera_);
     double t1 = (double)cv::getTickCount();
-    LOG(WARNING) << "[System] Frame " << current_frame_->id_ << " create time: " << (t1-t0)/cv::getTickFrequency();
+
+    LOG(INFO) << "[System] Frame " << current_frame_->id_ << " create time: " << (t1-t0)/cv::getTickFrequency();
     sysTrace->log("frame_id", current_frame_->id_);
     sysTrace->stopTimer("frame_create");
 
@@ -169,10 +172,13 @@ System::Status System::initialize()
 
 System::Status System::tracking()
 {
+	sysTrace->startTimer("tracking");
     current_frame_->setRefKeyFrame(reference_keyframe_);
 
     //! track seeds
+	sysTrace->startTimer("seeds");
     depth_filter_->trackFrame(last_frame_, current_frame_);
+	sysTrace->startTimer("seeds");
 
     // TODO 先验信息怎么设置？
     current_frame_->setPose(last_frame_->pose());
@@ -187,7 +193,6 @@ System::Status System::tracking()
     int matches = feature_tracker_->reprojectLoaclMap(current_frame_);
     sysTrace->stopTimer("feature_reproj");
     sysTrace->log("num_feature_reproj", matches);
-    LOG(WARNING) << "[System] Track with " << matches << " points";
 
     // TODO tracking status
     if(matches < Config::minQualityFts())
@@ -198,17 +203,18 @@ System::Status System::tracking()
     Optimizer::motionOnlyBundleAdjustment(current_frame_, false, false, true);
     sysTrace->stopTimer("motion_ba");
 
-    sysTrace->startTimer("per_depth_filter");
-    if(createNewKeyFrame())
-    {
-        depth_filter_->insertFrame(current_frame_, reference_keyframe_);
-        mapper_->insertKeyFrame(reference_keyframe_);
-    }
-    else
-    {
-        depth_filter_->insertFrame(current_frame_, nullptr);
-    }
-    sysTrace->stopTimer("per_depth_filter");
+	sysTrace->startTimer("createKF");
+	bool created_new_keyframe = createNewKeyFrame();
+	sysTrace->stopTimer("createKF");
+
+	sysTrace->startTimer("per_depth_filter");
+	depth_filter_->insertFrame(current_frame_, created_new_keyframe ? reference_keyframe_ : nullptr);
+	sysTrace->stopTimer("per_depth_filter");
+
+	sysTrace->startTimer("insert_KF_to_map");
+    if(created_new_keyframe)
+		mapper_->insertKeyFrame(reference_keyframe_);
+	sysTrace->stopTimer("insert_KF_to_map");
 
     sysTrace->startTimer("light_affine");
     calcLightAffine();
@@ -218,6 +224,8 @@ System::Status System::tracking()
     frame_timestamp_buffer_.push_back(current_frame_->timestamp_);
     reference_keyframe_buffer_.push_back(current_frame_->getRefKeyFrame());
     frame_pose_buffer_.push_back(current_frame_->pose());//current_frame_->getRefKeyFrame()->Tcw() * current_frame_->pose());
+
+	sysTrace->stopTimer("tracking");
 
     return STATUS_TRACKING_GOOD;
 }
@@ -432,7 +440,7 @@ void System::finishFrame()
 {
     sysTrace->startTimer("finish");
     cv::Mat image_show;
-//    Stage last_stage = stage_;
+    Stage last_stage = stage_;
     if(STAGE_NORMAL_FRAME == stage_)
     {
         if(STATUS_TRACKING_BAD == status_)
@@ -462,13 +470,26 @@ void System::finishFrame()
     last_frame_ = current_frame_;
 
     //! display
+	sysTrace->startTimer("display");
     viewer_->setCurrentFrame(current_frame_, image_show);
+	sysTrace->stopTimer("display");
 
     sysTrace->log("stage", stage_);
     sysTrace->stopTimer("finish");
     sysTrace->stopTimer("total");
-    const double time = sysTrace->getTimer("total");
-    LOG(WARNING) << "[System] Finish Current Frame with Stage: " << stage_ << ", total time: " << time;
+    const double total_time = sysTrace->getTimer("total");
+	const double reproj_time = sysTrace->getTimer("feature_reproj");
+
+	if (STAGE_NORMAL_FRAME == last_stage)
+		LOG(WARNING) << "-------\n"
+		<< "[System][*] Finish Frame: " << current_frame_->id_ << " with Stage: " << stage_ << ", total time: " << total_time << "\n"
+		<< "> Fts: " << feature_tracker_->logs_.matches_from_frame + feature_tracker_->logs_.matches_from_cells << " = "
+		<< feature_tracker_->logs_.matches_from_frame << "(F) + "
+		<< feature_tracker_->logs_.matches_from_cells << "(C), " << feature_tracker_->logs_.total_project << "\n"
+		<< "> Tim: " << reproj_time << " = " << feature_tracker_->logs_.match_frame_time << " + " << feature_tracker_->logs_.create_cells_time << " + " << feature_tracker_->logs_.match_cells_time;
+	else
+		LOG(WARNING) << "-------\n"
+		<< "[System][*] Finish Frame: " << current_frame_->id_ << " with Stage: " << stage_ << ", total time: " << total_time;
 
     sysTrace->writeToFile();
 

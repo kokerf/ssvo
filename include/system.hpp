@@ -79,7 +79,6 @@ private:
 
     std::thread viewer_thread_;
 
-    cv::Mat rgb_;
     Frame::Ptr last_frame_;
     Frame::Ptr current_frame_;
     KeyFrame::Ptr reference_keyframe_;

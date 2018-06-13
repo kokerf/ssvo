@@ -19,9 +19,15 @@ Frame::Frame(const cv::Mat &img, const double timestamp, const AbstractCamera::P
     Tcw_ = SE3d(Matrix3d::Identity(), Vector3d::Zero());
     Twc_ = Tcw_.inverse();
 
+	cv::Mat gray;
+	if(img.channels() == 3)
+		cv::cvtColor(img, gray, cv::COLOR_RGB2GRAY);
+	else
+		gray = img;
+
 //    utils::createPyramid(img, img_pyr_, nlevels_);
     //! create pyramid for optical flow
-    cv::buildOpticalFlowPyramid(img, optical_pyr_, optical_win_size_, max_level_, false);
+    cv::buildOpticalFlowPyramid(gray, optical_pyr_, optical_win_size_, max_level_, false);
     LOG_ASSERT(max_level_ == (int) optical_pyr_.size()-1) << "The pyramid level is unsuitable! maxlevel should be " << optical_pyr_.size()-1;
 
     //! copy to image pyramid

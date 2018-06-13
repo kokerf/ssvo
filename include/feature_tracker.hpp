@@ -30,6 +30,16 @@ class FeatureTracker : public noncopyable
 //    };
 
 public:
+
+	struct LogInfo {
+		int matches_from_frame;
+		int matches_from_cells;
+		int total_project;
+		double match_frame_time;
+		double create_cells_time;
+		double match_cells_time;
+	} logs_;
+
     typedef std::shared_ptr<FeatureTracker> Ptr;
 
     int reprojectLoaclMap(const Frame::Ptr &frame);
@@ -69,7 +79,6 @@ private:
 
     bool report_;
     bool verbose_;
-    int total_project_;
 };
 
 }//! end of ssvo

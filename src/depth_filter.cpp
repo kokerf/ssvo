@@ -224,12 +224,15 @@ void DepthFilter::run()
 
             dfltTrace->stopTimer("total_without_klt");
 
+			const double klt_time = dfltTrace->getTimer("klt_track");
+			const double other_time = dfltTrace->getTimer("total_without_klt");
 			dfltTrace->getTimer("logs");
-			LOG_IF(WARNING, report_) << "[Filter][*] Frame: " << frame->id_
+			LOG_IF(WARNING, report_) << "[Filter][*] Finish Frame: " << frame->id_
 				<< ", KLT: " << logs_.klt_track_count
 				<< ", EPL: " << logs_.update_count
 				<< ", PRJ: " << logs_.project_count
-				<< ", NEW: " << logs_.new_create_count << ", " << logs_.per_match_count;
+				<< ", NEW: " << logs_.new_create_count << ", " << logs_.per_match_count << "\n"
+				<< "> Tim: " << klt_time + other_time << " = " << klt_time << " + " << other_time;
 			dfltTrace->stopTimer("logs");
 
 			dfltTrace->log("frame_id", frame->id_);
@@ -371,12 +374,15 @@ void DepthFilter::insertFrame(const Frame::Ptr &frame, const KeyFrame::Ptr keyfr
 
         dfltTrace->stopTimer("total_without_klt");
 
+		const double klt_time = dfltTrace->getTimer("klt_track");
+		const double other_time = dfltTrace->getTimer("total_without_klt");
 		dfltTrace->getTimer("logs");
-		LOG_IF(WARNING, report_) << "[Filter][*] Frame: " << frame->id_
+		LOG_IF(WARNING, report_) << "[Filter][*] Finish Frame: " << frame->id_
 			<< ", KLT: " << logs_.klt_track_count
 			<< ", EPL: " << logs_.update_count
 			<< ", PRJ: " << logs_.project_count
-			<< ", NEW: " << logs_.new_create_count << ", " << logs_.per_match_count;
+			<< ", NEW: " << logs_.new_create_count << ", " << logs_.per_match_count << "\n"
+			<< "> Tim: " << klt_time + other_time << " = " << klt_time << " + " << other_time;
 		dfltTrace->stopTimer("logs");
 
 		dfltTrace->log("frame_id", frame->id_);
