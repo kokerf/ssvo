@@ -7,9 +7,9 @@ project(ssvo)
 option(SSVO_TEST_ENABLE "If build the test files." ON)
 option(SSVO_DBOW_ENABLE "If use the DBoW library." OFF)
 option(SSVO_TRACE_ENABLE "If use the time tracing." ON)
-message(STATUS "Test Enable  : "   ${SSVO_TEST_ENABLE})
-message(STATUS "DBoW Enable  : "   ${SSVO_DBOW_ENABLE})
-message(STATUS "Trace Enable : "   ${SSVO_TRACE_ENABLE})
+message(STATUS "Test Enable    : "   ${SSVO_TEST_ENABLE})
+message(STATUS "DBoW Enable    : "   ${SSVO_DBOW_ENABLE})
+message(STATUS "Trace Enable   : "   ${SSVO_TRACE_ENABLE})
 
 # Definitions
 if(SSVO_TRACE_ENABLE)
@@ -27,42 +27,52 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
-message(STATUS "Build Type   : " ${CMAKE_BUILD_TYPE})
-
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
-# Check C++11 or C++0x support
-include(CheckCXXCompilerFlag)
-CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
-CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
-if(COMPILER_SUPPORTS_CXX11)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-    add_definitions(-DCOMPILEDWITHC11)
-    message(STATUS "Using flag -std=c++11.")
-elseif(COMPILER_SUPPORTS_CXX0X)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
-    add_definitions(-DCOMPILEDWITHC0X)
-    message(STATUS "Using flag -std=c++0x.")
+if(NOT MSVC)
+	# Check C++11 or C++0x support
+	include(CheckCXXCompilerFlag)
+	CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+	CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
+	if(COMPILER_SUPPORTS_CXX11)
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+		add_definitions(-DCOMPILEDWITHC11)
+		message(STATUS "Using flag -std=c++11.")
+	elseif(COMPILER_SUPPORTS_CXX0X)
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+		add_definitions(-DCOMPILEDWITHC0X)
+		message(STATUS "Using flag -std=c++0x.")
+	else()
+		message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+	endif()
+
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O0 -march=native")
+	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -mmmx -msse -msse -msse2 -msse3 -mssse3")
+
 else()
-    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+	add_definitions(-D_USE_MATH_DEFINES)
+	add_definitions(-D__SSE2__)
+
+	set(SSVO_EXTRA_FLAGS		"/Gy /bigobj /Oi /arch:SSE /arch:SSE2 /arch:SSE3 /std:c++11")
+	set(CMAKE_CXX_FLAGS			"${CMAKE_CXX_FLAGS} ${SSVO_EXTRA_FLAGS}")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${SSVO_EXTRA_FLAGS}")
+
+	#string(REPLACE "/DNDEBUG" "/DEBUG" CMAKE_CXX_FLAGS_RELEASE ${CMAKE_CXX_FLAGS_RELEASE})
+    #et(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Zi /OPT:REF /OPT:ICF /INCREMENTAL:NO")
 endif()
 
-IF(MSVC)
-  ADD_DEFINITIONS(-D_USE_MATH_DEFINES)
-  ADD_DEFINITIONS(-D__SSE2__)
-ENDIF()
-
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O0 -march=native")
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -mmmx -msse -msse -msse2 -msse3 -mssse3")
+message(STATUS "Build Type     : " ${CMAKE_BUILD_TYPE})
+message(STATUS "Debug Flages   : " ${CMAKE_CXX_FLAGS})
+message(STATUS "Release Flages : " ${CMAKE_CXX_FLAGS_RELEASE})
 
 ## -----------------------
 ## Library required
 ## -----------------------
-LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
 # fast
-LIST(APPEND CMAKE_MODULE_PATH  ${PROJECT_SOURCE_DIR}/Thirdparty/fast/build)
+list(APPEND CMAKE_MODULE_PATH  ${PROJECT_SOURCE_DIR}/Thirdparty/fast/build)
 find_package(fast REQUIRED)
 include_directories(${fast_INCLUDE_DIR})
 
@@ -106,7 +116,7 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/include
 )
 
-LIST(APPEND LINK_LIBS
+list(APPEND LINK_LIBS
     ${OpenCV_LIBS}
     ${Sophus_LIBRARIES}
     ${GLOG_LIBRARY}
@@ -121,7 +131,7 @@ LIST(APPEND LINK_LIBS
 ## -----------------------
 
 # Set sourcefiles
-LIST(APPEND SOURCEFILES
+list(APPEND SOURCEFILES
     src/camera.cpp
     src/map_point.cpp
     src/seed.cpp
