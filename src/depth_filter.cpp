@@ -132,12 +132,15 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback 
     time_names.push_back("update_seeds");
     time_names.push_back("epl_search");
     time_names.push_back("create_seeds");
+    time_names.push_back("update_by_kf");
+    time_names.push_back("logs");
 
     TimeTracing::TraceNames log_names;
     log_names.push_back("frame_id");
     log_names.push_back("num_tracked");
     log_names.push_back("num_updated");
     log_names.push_back("num_repoj");
+    log_names.push_back("num_permatch");
 
     string trace_dir = Config::timeTracingDirectory();
     dfltTrace.reset(new TimeTracing("ssvo_trace_filter", trace_dir, time_names, log_names));
@@ -192,38 +195,50 @@ void DepthFilter::run()
         if(checkNewFrame(frame, keyframe))
         {
             dfltTrace->startTimer("total_without_klt");
+			logs_.update_count = -1;
+			logs_.project_count = -1;
+			logs_.new_create_count = -1;
+			logs_.per_match_count = -1;
 
-            int updated_count = 0;
-            int project_count = 0;
             if(checkDisparity(frame))
             {
                 dfltTrace->startTimer("update_seeds");
-                updated_count = updateSeeds(frame);
+				logs_.update_count = updateSeeds(frame);
                 dfltTrace->stopTimer("update_seeds");
-                dfltTrace->log("num_updated", updated_count);
 
                 dfltTrace->startTimer("epl_search");
-                project_count = reprojectAllSeeds(frame);
+				logs_.project_count = reprojectAllSeeds(frame);
                 dfltTrace->stopTimer("epl_search");
-                dfltTrace->log("num_repoj", project_count);
             }
 
-            dfltTrace->startTimer("create_seeds");
             if(keyframe)
             {
-                int new_seeds = createSeeds(keyframe, frame);
-                updateByConnectedKeyFrames(keyframe, 3);
-                LOG(INFO) << "[Filter] New created depth filter seeds: " << new_seeds;
+				dfltTrace->startTimer("create_seeds");
+				logs_.new_create_count = createSeeds(keyframe, frame);
+				dfltTrace->stopTimer("create_seeds");
+
+				dfltTrace->startTimer("update_by_kf");
+				logs_.per_match_count = updateByConnectedKeyFrames(keyframe, options_.max_perprocess_kfs);
+				dfltTrace->stopTimer("update_by_kf");
             }
-            dfltTrace->stopTimer("create_seeds");
 
             dfltTrace->stopTimer("total_without_klt");
 
-            dfltTrace->writeToFile();
+			dfltTrace->getTimer("logs");
+			LOG_IF(WARNING, report_) << "[Filter][*] Frame: " << frame->id_
+				<< ", KLT: " << logs_.klt_track_count
+				<< ", EPL: " << logs_.update_count
+				<< ", PRJ: " << logs_.project_count
+				<< ", NEW: " << logs_.new_create_count << ", " << logs_.per_match_count;
+			dfltTrace->stopTimer("logs");
 
-            LOG_IF(WARNING, report_) << "[Filter][2] Frame: " << frame->id_
-                                     << ", Seeds after updated: " << updated_count
-                                     << ", new reprojected: " << project_count;
+			dfltTrace->log("frame_id", frame->id_);
+			dfltTrace->log("num_tracked", logs_.klt_track_count);
+			dfltTrace->log("num_updated", logs_.update_count);
+			dfltTrace->log("num_repoj", logs_.project_count);
+			dfltTrace->log("num_permatch", logs_.per_match_count);
+
+			dfltTrace->writeToFile();
         }
 
     }
@@ -300,65 +315,77 @@ bool DepthFilter::checkDisparity(const Frame::Ptr &frame)
 
 void DepthFilter::trackFrame(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur)
 {
-    dfltTrace->log("frame_id", frame_cur->id_);
+	logs_.klt_track_count = -1;
     if(track_thread_enabled_)
     {
         seeds_track_future_ = std::async(std::launch::async, &DepthFilter::trackSeeds, this, frame_last, frame_cur);
     }
     else
     {
-        int tracked_count = trackSeeds(frame_last, frame_cur);
-        dfltTrace->log("num_tracked", tracked_count);
-        LOG_IF(WARNING, report_) << "[Filter][1] Frame: " << frame_cur->id_ << ", Tracking seeds: " << tracked_count;
+        logs_.klt_track_count = trackSeeds(frame_last, frame_cur);
     }
 }
 
 void DepthFilter::insertFrame(const Frame::Ptr &frame, const KeyFrame::Ptr keyframe)
 {
+	double t0 = cv::getTickCount();
     LOG_ASSERT(frame != nullptr) << "[Filter] Error input! Frame should not be null!";
 
+    double t1 = cv::getTickCount();
     if(track_thread_enabled_ && seeds_track_future_.valid())
     {
         seeds_track_future_.wait();
-        int tracked_count = seeds_track_future_.get();
-        dfltTrace->log("num_tracked", tracked_count);
-        LOG_IF(WARNING, report_) << "[Filter][1] Frame: " << frame->id_ << ", Tracking seeds: " << tracked_count;
+		logs_.klt_track_count = seeds_track_future_.get();
     }
+    double t2 = cv::getTickCount();
 
     if(filter_thread_ == nullptr)
     {
         dfltTrace->startTimer("total_without_klt");
-        int updated_count = 0;
-        int project_count = 0;
+		logs_.update_count = -1;
+		logs_.project_count = -1;
+		logs_.new_create_count = -1;
+		logs_.per_match_count = -1;
+
         if(checkDisparity(frame))
         {
             dfltTrace->startTimer("update_seeds");
-            updated_count = updateSeeds(frame);
+			logs_.update_count = updateSeeds(frame);
             dfltTrace->stopTimer("update_seeds");
-            dfltTrace->log("num_updated", updated_count);
 
             dfltTrace->startTimer("epl_search");
-            project_count = reprojectAllSeeds(frame);
+			logs_.project_count = reprojectAllSeeds(frame);
             dfltTrace->stopTimer("epl_search");
-            dfltTrace->log("num_repoj", project_count);
         }
 
-        dfltTrace->startTimer("create_seeds");
         if(keyframe)
         {
-            int new_seeds = createSeeds(keyframe, frame);
-            updateByConnectedKeyFrames(keyframe, 3);
-            LOG(INFO) << "[Filter] New created depth filter seeds: " << new_seeds;
+			dfltTrace->startTimer("create_seeds");
+			logs_.new_create_count = createSeeds(keyframe, frame);
+			dfltTrace->stopTimer("create_seeds");
+
+			dfltTrace->startTimer("update_by_kf");
+			logs_.per_match_count = updateByConnectedKeyFrames(keyframe, options_.max_perprocess_kfs);
+			dfltTrace->stopTimer("update_by_kf");
         }
-        dfltTrace->stopTimer("create_seeds");
 
         dfltTrace->stopTimer("total_without_klt");
 
-        dfltTrace->writeToFile();
+		dfltTrace->getTimer("logs");
+		LOG_IF(WARNING, report_) << "[Filter][*] Frame: " << frame->id_
+			<< ", KLT: " << logs_.klt_track_count
+			<< ", EPL: " << logs_.update_count
+			<< ", PRJ: " << logs_.project_count
+			<< ", NEW: " << logs_.new_create_count << ", " << logs_.per_match_count;
+		dfltTrace->stopTimer("logs");
 
-        LOG_IF(WARNING, report_) << "[Filter][2] Frame: " << frame->id_
-                                 << ", Seeds after updated: " << updated_count
-                                 << ", new reprojected: " << project_count;
+		dfltTrace->log("frame_id", frame->id_);
+		dfltTrace->log("num_tracked", logs_.klt_track_count);
+		dfltTrace->log("num_updated", logs_.update_count);
+		dfltTrace->log("num_repoj", logs_.project_count);
+		dfltTrace->log("num_permatch", logs_.per_match_count);
+
+		dfltTrace->writeToFile();
     }
     else
     {
@@ -366,6 +393,11 @@ void DepthFilter::insertFrame(const Frame::Ptr &frame, const KeyFrame::Ptr keyfr
         frames_buffer_.emplace_back(frame, keyframe);
         cond_process_main_.notify_one();
     }
+	double t3 = cv::getTickCount();
+
+	LOG_IF(INFO, report_) << "[Filter][*] time:" <<  (t1-t0) / cv::getTickFrequency()
+                        << ", " << (t2-t1) / cv::getTickFrequency()
+                        << ", " << (t3-t2) / cv::getTickFrequency();
 }
 
 //int DepthFilter::getSeedsForMapping(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame)

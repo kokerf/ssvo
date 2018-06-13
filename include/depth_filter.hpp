@@ -83,6 +83,14 @@ private:
         double min_pixel_disparity;
     } options_;
 
+	struct LogInfo {
+		int klt_track_count;
+		int update_count;
+		int project_count;
+		int new_create_count;
+		int per_match_count;
+	} logs_;
+
     FastDetector::Ptr fast_detector_;
 
     std::deque<std::pair<Frame::Ptr, KeyFrame::Ptr> > frames_buffer_;
