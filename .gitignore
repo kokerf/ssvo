@@ -1,6 +1,8 @@
 *.a
 *.so
 *~
+*.csv
+*.json
 
 data/
 bin/

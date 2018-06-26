@@ -131,26 +131,7 @@ list(APPEND LINK_LIBS
 ## -----------------------
 
 # Set sourcefiles
-list(APPEND SOURCEFILES
-    src/camera.cpp
-    src/map_point.cpp
-    src/seed.cpp
-    src/frame.cpp
-    src/keyframe.cpp
-    src/map.cpp
-    src/utils.cpp
-    src/feature_detector.cpp
-    src/feature_tracker.cpp
-    src/feature_alignment.cpp
-    src/image_alignment.cpp
-    src/initializer.cpp
-    src/optimizer.cpp
-    src/depth_filter.cpp
-    src/local_mapping.cpp
-    src/system.cpp
-    src/viewer.cpp
-    src/brief.cpp
-)
+file(GLOB SOURCEFILES "${PROJECT_SOURCE_DIR}/src/*.c*")
 
 add_library(${PROJECT_NAME} STATIC ${SOURCEFILES})
 target_link_libraries(${PROJECT_NAME} ${LINK_LIBS})
@@ -188,6 +169,9 @@ target_link_libraries(test_optimizer ${PROJECT_NAME})
 
 add_executable(test_camera_model test/test_camera_model.cpp src/camera.cpp)
 target_link_libraries(test_camera_model ${LINK_LIBS})
+
+add_executable(test_preintegration test/test_preintegration.cpp src/preintegration.cpp)
+target_link_libraries(test_preintegration ${LINK_LIBS})
 
 add_executable(test_timer test/test_timer.cpp)
 
