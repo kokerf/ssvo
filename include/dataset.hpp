@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <string>
 #include <vector>
 #include <array>
 #include <opencv2/opencv.hpp>
@@ -11,7 +12,7 @@ namespace ssvo {
 
 class TUMDataReader {
 public:
-    TUMDataReader(const string &dataset_path, const string &association_file, const bool with_ground_truth = false):
+    TUMDataReader(const std::string &dataset_path, const std::string &association_file, const bool with_ground_truth = false):
         dataset_path_(dataset_path), association_file_(association_file)
     {
         size_t found = dataset_path.find_last_of("/\\");
@@ -21,13 +22,13 @@ public:
         std::ifstream file_stream;
         file_stream.open(association_file_.c_str());
         while (!file_stream.eof()) {
-            string s;
+            std::string s;
             getline(file_stream, s);
             if (!s.empty()) {
                 std::stringstream ss;
                 ss << s;
                 double time;
-                string rgb, depth;
+                std::string rgb, depth;
                 ss >> time;
                 timestamps_.push_back(time);
                 ss >> rgb;

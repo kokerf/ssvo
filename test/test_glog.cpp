@@ -1,3 +1,4 @@
+#include <direct.h> 
 #include "glog/logging.h"
 
 int main(int argc, char const *argv[])

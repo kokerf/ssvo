@@ -1,3 +1,4 @@
+#include <direct.h> 
 #include <opencv2/opencv.hpp>
 #include "feature_alignment.hpp"
 #include "utils.hpp"
@@ -130,7 +131,7 @@ int main(int argc, char *argv[])
     FLAGS_alsologtostderr = true;
     FLAGS_colorlogtostderr = true;
     FLAGS_log_prefix = true;
-    //FLAGS_log_dir = std::string(getcwd(NULL,0))+"/../log";
+    FLAGS_log_dir = std::string(getcwd(NULL,0))+"/../log";
     google::InitGoogleLogging(argv[0]);
 
     LOG_ASSERT(argc == 2) << " Usage: ./test_alignment_2d image";
