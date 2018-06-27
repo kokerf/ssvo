@@ -588,4 +588,11 @@ void Optimizer::reportInfo(const ceres::Problem &problem, const ceres::Solver::S
 }
 
 
+//! ===============================  for vio  ====================================
+void Optimizer::sloveInitialGyroBias(const std::vector<Frame::Ptr> &frames)
+{
+
+}
+
+
 }

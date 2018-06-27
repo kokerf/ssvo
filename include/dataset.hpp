@@ -182,6 +182,19 @@ public:
 
     const GroundTruthData& groundtruth(size_t idx) const { return groundtruth_.at(idx); }
 
+	bool getGroundtruthAtTime(double time, GroundTruthData &data, const double dt = 1e-3) const {
+		for (size_t i = 0; i < groundtruth_.size(); i++)
+		{
+			if (std::abs(groundtruth_[i].timestamp - time) > dt)
+				continue;
+
+			data = groundtruth_[i];
+			return true;
+		}
+
+		return false;
+	}
+
 private:
 
     int loadCameraData(std::string root_path, std::string data_path, std::vector<Image> &images)

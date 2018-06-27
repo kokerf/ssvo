@@ -4,10 +4,47 @@
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
 
+#include "preintegration.hpp"
 #include "map_point.hpp"
 #include "keyframe.hpp"
 #include "map.hpp"
 #include "global.hpp"
+
+namespace Sophus {
+	
+	//! G.S. Chirikjian, "Stochastic Models, Information Theory, and Lie Groups", Volume 2, Eq(10.86)
+	inline Matrix3d SO3JacobianR(const Vector3d& omega)
+	{
+		double theta2 = omega.dot(omega);
+		if (theta2 < 1E-10) return Matrix3d::Identity();
+
+		double theta = std::sqrt(theta2);
+		Matrix3d W = SO3d::hat(omega);
+		return Matrix3d::Identity() - (1 - std::cos(theta))/theta2 * W + (1.0 - std::sin(theta)/theta)/theta2 * W * W;
+	}
+
+	inline Matrix3d SO3JacobianRInv(const Vector3d& omega)
+	{
+		double theta2 = omega.dot(omega);
+
+		if (theta2 < 1E-10) return Matrix3d::Identity();
+
+		double theta = std::sqrt(theta2);
+		Matrix3d W = SO3d::hat(omega);
+		double scale = 1.0 / theta2 - 0.5*(1 + std::cos(theta)) / (theta * std::sin(theta));
+		return Matrix3d::Identity() + 0.5 * W + scale * W * W;
+	}
+
+	inline Matrix3d SO3JacobianL(const Vector3d& omega)
+	{
+		return SO3JacobianR(-omega);
+	}
+	
+	inline Matrix3d SO3JacobianLInv(const Vector3d& omega)
+	{
+		return SO3JacobianRInv(-omega);
+	}
+}
 
 namespace ssvo {
 
@@ -28,6 +65,9 @@ public:
     static Vector2d reprojectionError(const ceres::Problem &problem, ceres::ResidualBlockId id);
 
     static void reportInfo(const ceres::Problem &problem, const ceres::Solver::Summary summary, bool report=false, bool verbose=false);
+
+	//! for vio
+	static void sloveInitialGyroBias(const std::vector<Frame::Ptr> &frames);
 };
 
 namespace ceres_slover {
@@ -301,6 +341,59 @@ private:
 
 };
 
+typedef Eigen::Matrix<double, 3, 3, Eigen::RowMajor> RowMatrix3d;
+
+//! rdRij(3) - Rwi(4) Rwj(4) dBaisgyro(3)
+class PreintegrationRotationError : public ceres::SizedCostFunction<3, 4, 4, 3>
+{
+	PreintegrationRotationError(const Preintegration& pin) :
+		dRij_(pin.deltaRij()), jacob_dR_biasgyro_(pin.jacobdRBiasGyro()){}
+
+	virtual bool Evaluate(double const *const *parameters, double *residuals, double **jacobians) const
+	{
+		//! parameters
+		Eigen::Map<const Sophus::SO3d> Rwi(parameters[0]);
+		Eigen::Map<const Sophus::SO3d> Rwj(parameters[1]);
+		Eigen::Map<const Vector3d> delta_biasgyro(parameters[2]);
+
+		//! residuals
+		Eigen::Map<Vector3d> res(residuals);
+		Vector3d tangent_dRbg = jacob_dR_biasgyro_ * delta_biasgyro;
+		const Sophus::SO3d dRbg = Sophus::SO3d::exp(tangent_dRbg);
+		const Sophus::SO3d res_dRij = (dRij_ * dRbg).inverse() * Rwi.inverse() * Rwj;
+		res = res_dRij.log();
+
+		//! jacobians
+		if (!jacobians) return true;
+		double* jacobian0 = jacobians[0];
+		double* jacobian1 = jacobians[1];
+		double* jacobian2 = jacobians[2];
+
+		if (nullptr != jacobian0)
+		{
+			Eigen::Map<RowMatrix3d> jacob_dR_Ri(jacobian0);
+		}
+
+		if (nullptr != jacobian1)
+		{
+			Eigen::Map<RowMatrix3d> jacob_dR_Rj(jacobian1);
+		}
+
+		if (nullptr != jacobian2)
+		{
+			Eigen::Map<RowMatrix3d> jacob_dR_dbiasgyro(jacobian2);
+			Matrix3d left_jacob_of_res = Sophus::SO3JacobianLInv(res);
+			Matrix3d right_jacob_of_dR_dbiasgyro = Sophus::SO3JacobianR(tangent_dRbg);
+			jacob_dR_dbiasgyro = -left_jacob_of_res * right_jacob_of_dR_dbiasgyro * jacob_dR_biasgyro_;
+		}
+	}
+
+private:
+
+	const Sophus::SO3d dRij_;
+	const Matrix3d jacob_dR_biasgyro_;
+
+};
 
 }//! namespace ceres
 

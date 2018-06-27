@@ -4,92 +4,98 @@
 #include "optimizer.hpp"
 #include "preintegration.hpp"
 #include "utils.hpp"
+#include "config.hpp"
 
 using namespace ssvo;
 
 int main(int argc, char *argv[])
 {
-	FLAGS_alsologtostderr = true;
-	FLAGS_colorlogtostderr = true;
-	FLAGS_log_prefix = false;
+	//FLAGS_alsologtostderr = true;
+	//FLAGS_colorlogtostderr = true;
+	//FLAGS_log_prefix = false;
 	google::InitGoogleLogging(argv[0]);
-	LOG_ASSERT(argc == 2) << "\n Usage : ./test_perintegration dataset_path";
+	LOG_ASSERT(argc == 3) << "\n Usage : ./test_perintegration config_file dataset_path";
 
-	EuRocDataReader dataset(argv[1]);
+	ssvo::Config::file_name_ = argv[1];
+
+	EuRocDataReader dataset(argv[2]);
 	IMUPara::setMeasCov(2.0000e-3, 1.6968e-04);
 	IMUPara::setBiasCov(3.0000e-3, 1.9393e-05);
-
-	ssvo::Timer<std::micro> timer;
-	const size_t N = dataset.groundtruthSize();
-	const double keyframe_duration = 1.0;
-	double keyframe_timestamp_last = 0.0;
-	size_t imu_idx = 0;
-	size_t groundtruth_idx = 0;
-	EuRocDataReader::IMUData imu_data_last = dataset.imu(0);
-	EuRocDataReader::GroundTruthData ground_truth_last = dataset.groundtruth(0);
-	//! align timestamp
-	while (ground_truth_last.timestamp < imu_data_last.timestamp)
-	{
-		groundtruth_idx++;
-		ground_truth_last = dataset.groundtruth(groundtruth_idx);
-	}
-	while (imu_data_last.timestamp < ground_truth_last.timestamp)
-	{
-		imu_idx++;
-		imu_data_last = dataset.imu(imu_idx);
-	}
-
-	Quaterniond qwi(ground_truth_last.q[0], ground_truth_last.q[1], ground_truth_last.q[2], ground_truth_last.q[3]);
-	Vector3d twi(ground_truth_last.p[0], ground_truth_last.p[1], ground_truth_last.p[2]);
-	Sophus::SE3d Twi(qwi, twi);
-
 	Vector3d acc_bias(-0.022996, 0.125896, 0.057076);
 	Vector3d gyro_bias(-0.002571, 0.021269, 0.076861);
 	IMUBias imu_bias_zero(gyro_bias, acc_bias);
-	std::list<Preintegration> preintegration_list;
-	for (size_t i = 0; groundtruth_idx < N; i++)
+	Preintegration init_preint(imu_bias_zero);
+
+	ssvo::Timer<std::micro> timer;
+	const size_t N = dataset.leftImageSize();
+	const double keyframe_duration = 0.30;
+
+
+	std::vector<Frame::Ptr> all_frames;
+	
+	size_t imu_idx = 0;
+	for (size_t i = 0; i < N; i++)
 	{
-		EuRocDataReader::GroundTruthData ground_truth = dataset.groundtruth(groundtruth_idx);
-		while (ground_truth.timestamp - ground_truth_last.timestamp < keyframe_duration &&  groundtruth_idx < N)
-		{
-			groundtruth_idx++;
-			ground_truth = dataset.groundtruth(groundtruth_idx);
-		}
-		Quaterniond qwj(ground_truth.q[0], ground_truth.q[1], ground_truth.q[2], ground_truth.q[3]);
-		Vector3d twj(ground_truth.p[0], ground_truth.p[1], ground_truth.p[2]);
-		Sophus::SE3d Twj(qwj, twj);
-		Sophus::SE3d Tij = Twi.inverse() * Twj;
-		Twi = Twj;
+		const EuRocDataReader::Image image_data = dataset.leftImage(i);
+		std::cout << std::fixed << std::setprecision(7);
+		std::cout << "=== Load Image " << i << ": " << image_data.path << ", time: " << image_data.timestamp << std::endl;
+		cv::Mat image = cv::imread(image_data.path, CV_LOAD_IMAGE_UNCHANGED);
+		if (image.empty())
+			continue;
 
-		Quaterniond qij = Tij.unit_quaternion();
-		LOG(INFO) << "Start frame " << i << ": , time from " << std::fixed << std::setprecision(7) << ground_truth_last.timestamp  << " to " << ground_truth.timestamp 
-				<< "\n pose: " << Tij.translation().transpose() << ", [" << qij.x() << ", " << qij.y() << ", " << qij.z() << ", " << qij.w() << "]" << std::endl;
+		EuRocDataReader::GroundTruthData ground_truth;
+		bool succeed = dataset.getGroundtruthAtTime(image_data.timestamp, ground_truth);
+		if (!succeed) continue;
 
-		Preintegration preintegration(imu_bias_zero);
-		bool first_data = true;
-		while(1)
+		std::cout << "Get groundtruth at timestamp: " << ground_truth.timestamp << std::endl;
+
+		Quaterniond quat_wc(ground_truth.q[0], ground_truth.q[1], ground_truth.q[2], ground_truth.q[3]);
+		Vector3d tran_wc(ground_truth.p[0], ground_truth.p[1], ground_truth.p[2]);
+		Sophus::SE3d Twc(quat_wc, tran_wc);
+
+		Frame::Ptr frame_cur = Frame::create(image, image_data.timestamp, nullptr);
+		frame_cur->setPose(Twc);
+
+		//! set first frame
+		if (all_frames.empty())
 		{
-			EuRocDataReader::IMUData imu_data = dataset.imu(imu_idx);
-			EuRocDataReader::IMUData imu_data_next = dataset.imu(++imu_idx);
-			Vector3d acc_meas(imu_data.acc[0], imu_data.acc[1], imu_data.acc[2]);
-			Vector3d gyro_meas(imu_data.gyro[0], imu_data.gyro[1], imu_data.gyro[2]);
-			double dt = imu_data_next.timestamp - imu_data.timestamp;
-			double dt_res = ground_truth.timestamp - imu_data.timestamp;
-			if (first_data)
+			while(1)
 			{
-				dt = imu_data_next.timestamp - ground_truth_last.timestamp;
-				first_data = false;
+				EuRocDataReader::IMUData data = dataset.imu(imu_idx);
+				if (data.timestamp >= frame_cur->timestamp_)
+					break;
+
+				imu_idx++;
 			}
-			else if (dt_res < dt)
-				dt = dt_res;
 
-			preintegration.update(gyro_meas, acc_meas, dt);
-			if (imu_data_next.timestamp >= ground_truth.timestamp)
-				break;
+			frame_cur->setPreintergration(init_preint);
+			all_frames.push_back(frame_cur);
+			continue;
 		}
-		LOG(INFO) << preintegration << std::endl;
 
-		ground_truth_last = ground_truth;
+		std::vector<IMUData> imu_datas;
+		while (1)
+		{
+			EuRocDataReader::IMUData data = dataset.imu(imu_idx);
+
+			if(data.timestamp >= frame_cur->timestamp_)
+				break;
+
+			IMUData imu_data(data.timestamp, Vector3d(data.gyro[0], data.gyro[1], data.gyro[2]), Vector3d(data.acc[0], data.acc[1], data.acc[2]));
+			imu_datas.push_back(imu_data);
+			
+			imu_idx++;
+		}
+
+		frame_cur->setIMUData(imu_datas);
+		frame_cur->computeIMUPreintegrationSinceLastFrame(all_frames.back());
+
+		Sophus::SE3d Tij = all_frames.back()->Tcw() * frame_cur->Twc();
+		Quaterniond qij = Tij.unit_quaternion();
+		std::cout << "Tij[t, q]: " << Tij.translation().transpose() << ", (" << qij.x() << ", " << qij.y() << ", " << qij.z() << ", " << qij.w() << ")" << std::endl;
+		std::cout << "Preint:\n" << frame_cur->getPreintergration() << std::endl;
+
+		all_frames.push_back(frame_cur);
 	}
 
 

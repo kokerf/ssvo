@@ -14,6 +14,9 @@ typedef Matrix<double, 9, 9> Matrix9d;
 class Preintegration
 {
 public:
+
+	Preintegration();
+
 	Preintegration(const IMUBias &bias);
 
 	void update(const Vector3d &measured_gyro, const Vector3d &measured_acc, const double dt);
@@ -27,11 +30,11 @@ public:
 	const Vector3d deltaVij() const { return delta_vel_; }
 	const Matrix3d deltaRij() const { return delta_rot_; }
 
-	const Matrix3d jacobdRBiasGyro() const { return jacob_rot_biasgyro_; }
-	const Matrix3d jacobdPBiasAcc() const { return jacob_pos_biasacc_; }
-	const Matrix3d jacobdPBiasGyro() const { return jacob_pos_biasgyro_; }
-	const Matrix3d jacobdVBiasAcc() const { return jacob_vel_biasacc_; }
-	const Matrix3d jacobdVBiasGyro() const { return jacob_vel_biasgyro_; }
+	const Matrix3d jacobdRBiasGyro() const { return jacob_delta_rot_biasgyro_; }
+	const Matrix3d jacobdPBiasAcc() const { return jacob_delta_pos_biasacc_; }
+	const Matrix3d jacobdPBiasGyro() const { return jacob_delta_pos_biasgyro_; }
+	const Matrix3d jacobdVBiasAcc() const { return jacob_delta_vel_biasacc_; }
+	const Matrix3d jacobdVBiasGyro() const { return jacob_delta_vel_biasgyro_; }
 
 	const IMUBias getBias() const { return bias_; };
 	const Matrix9d getMeasCov() const { return imu_meas_cov_; }
@@ -46,11 +49,11 @@ private:
 	Matrix3d delta_rot_;
 
 	//! jacob for bias update, Appendix-B
-	Matrix3d jacob_rot_biasgyro_;
-	Matrix3d jacob_pos_biasacc_;
-	Matrix3d jacob_pos_biasgyro_;
-	Matrix3d jacob_vel_biasacc_;
-	Matrix3d jacob_vel_biasgyro_;
+	Matrix3d jacob_delta_rot_biasgyro_;
+	Matrix3d jacob_delta_pos_biasacc_;
+	Matrix3d jacob_delta_pos_biasgyro_;
+	Matrix3d jacob_delta_vel_biasacc_;
+	Matrix3d jacob_delta_vel_biasgyro_;
 
 	//! bias
 	IMUBias bias_;

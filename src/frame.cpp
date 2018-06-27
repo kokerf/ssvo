@@ -295,4 +295,53 @@ std::map<KeyFrame::Ptr, int> Frame::getOverLapKeyFrames()
     return overlap_kfs;
 }
 
+//! for IMU
+void Frame::setIMUData(const std::vector<IMUData> &data)
+{
+	imu_datas_ = data;
+}
+
+void Frame::computeIMUPreintegrationSinceLastFrame(const Frame::Ptr &frame)
+{
+	LOG_ASSERT(!imu_datas_.empty()) << "Empty IMU data!!!";
+
+	const IMUBias bias_last = frame->getPreintergration().getBias();
+
+	preint_ = Preintegration(bias_last);
+
+	//! get time gap between last frame
+	double timestamp_last;
+	{
+		timestamp_last = frame->timestamp_;
+		const IMUData imu = imu_datas_.front();
+		const double dt = imu.timestamp - timestamp_last;
+
+		LOG_ASSERT(dt >= 0) << "Error timestamp between last frame: " << frame->timestamp_ << ", and current imu : " << imu.timestamp;
+	}
+
+	//! preintegration
+	size_t N = imu_datas_.size() - 1;
+	for (size_t i = 0; i < N; i++)
+	{
+		const IMUData imu = imu_datas_[i];
+		const double timestamp_cur = imu_datas_[i + 1].timestamp;
+		const double dt = timestamp_cur - timestamp_last;
+
+		LOG_ASSERT(dt >= 0) << "Error timestamp between last imu: " << timestamp_last << ", and current imu : " << timestamp_cur;
+
+		preint_.update(imu.gyro, imu.acc, dt);
+
+		timestamp_last = timestamp_cur;
+	}
+
+	//! update last data
+	{
+		const IMUData imu = imu_datas_.back();
+		const double dt = this->timestamp_ - timestamp_last;
+		LOG_ASSERT(dt >= 0) << "Error timestamp between last imu: " << timestamp_last << ", and current frame : " << this->timestamp_;
+
+		preint_.update(imu.gyro, imu.acc, dt);
+	}
+}
+
 }

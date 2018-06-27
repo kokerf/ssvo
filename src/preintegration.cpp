@@ -1,4 +1,5 @@
 #include <glog/logging.h>
+#include "optimizer.hpp"
 #include "utils.hpp"
 #include "preintegration.hpp"
 
@@ -9,29 +10,9 @@ Matrix3d IMUPara::gyro_meas_cov_;
 Matrix3d IMUPara::acc_bias_rw_cov_;
 Matrix3d IMUPara::gyro_bias_rw_cov_;
 
-namespace utils{
-
-//! https://github.com/jingpang/LearnVIORB/blob/RT/src/IMU/so3.cpp#L32
-// right jacobian of SO(3)
-Matrix3d JacobianR(const Vector3d& w)
+Preintegration::Preintegration()
 {
-	Matrix3d Jr = Matrix3d::Identity();
-	double theta = w.norm();
-	if (theta<0.00001)
-	{
-		return Jr;
-	}
-	else
-	{
-		Vector3d k = w.normalized();
-		Matrix3d K = Sophus::SO3d::hat(k);
-		Jr = Matrix3d::Identity()
-			- (1 - cos(theta)) / theta * K
-			+ (1 - sin(theta) / theta)*K*K;
-	}
-	return Jr;
-}
-
+	reset();
 }
 
 Preintegration::Preintegration(const IMUBias &bias) :
@@ -46,11 +27,11 @@ void Preintegration::reset()
 	delta_pos_.setZero();
 	delta_rot_.setIdentity();
 	delta_vel_.setZero();
-	jacob_pos_biasacc_.setZero();
-	jacob_pos_biasgyro_.setZero();
-	jacob_rot_biasgyro_.setZero();
-	jacob_vel_biasgyro_.setZero();
-	jacob_vel_biasacc_.setZero();
+	jacob_delta_pos_biasacc_.setZero();
+	jacob_delta_pos_biasgyro_.setZero();
+	jacob_delta_rot_biasgyro_.setZero();
+	jacob_delta_vel_biasgyro_.setZero();
+	jacob_delta_vel_biasacc_.setZero();
 	imu_meas_cov_.setZero();
 }
 
@@ -63,7 +44,7 @@ void Preintegration::update(const Vector3d &measured_gyro, const Vector3d &measu
 	Vector3d dphi = gyro * dt;
 	Matrix3d dR = Sophus::SO3d::exp(dphi).matrix();
 	Matrix3d dRt = dR.transpose();
-	Matrix3d Jr = utils::JacobianR(dphi);
+	Matrix3d Jr = Sophus::SO3JacobianR(dphi);
 	double half_dt2 = 0.5 * dt * dt;
 
 	//! covariance [dP dR dV]
@@ -84,13 +65,13 @@ void Preintegration::update(const Vector3d &measured_gyro, const Vector3d &measu
 	imu_meas_cov_.noalias() += Bg * (IMUPara::gyroMeasCov() / dt) * Bg.transpose();
 
 	//! jacobian of bias
-	Matrix3d delta_acc_biasgyro = rot_acc_hat * jacob_rot_biasgyro_;
+	Matrix3d delta_acc_biasgyro = rot_acc_hat * jacob_delta_rot_biasgyro_;
 	//! P V R
-	jacob_pos_biasacc_.noalias()  += jacob_vel_biasacc_ * dt - delta_rot_ * half_dt2;
-	jacob_pos_biasgyro_.noalias() += jacob_vel_biasgyro_ * dt - delta_acc_biasgyro * half_dt2;
-	jacob_vel_biasacc_.noalias()  += delta_rot_ * (-dt);
-	jacob_vel_biasgyro_.noalias() += delta_acc_biasgyro * (-dt);
-	jacob_rot_biasgyro_ = dRt * jacob_rot_biasgyro_ - Jr * dt;
+	jacob_delta_pos_biasacc_.noalias()  += jacob_delta_vel_biasacc_ * dt - delta_rot_ * half_dt2;
+	jacob_delta_pos_biasgyro_.noalias() += jacob_delta_vel_biasgyro_ * dt - delta_acc_biasgyro * half_dt2;
+	jacob_delta_vel_biasacc_.noalias()  += delta_rot_ * (-dt);
+	jacob_delta_vel_biasgyro_.noalias() += delta_acc_biasgyro * (-dt);
+	jacob_delta_rot_biasgyro_ = dRt * jacob_delta_rot_biasgyro_ - Jr * dt;
 
 	//! preintegration
 	Vector3d roted_acc = delta_rot_ * acc;
@@ -106,9 +87,9 @@ void Preintegration::correct(const IMUBias &bias)
 	const Vector3d delta_biasgyro = bias.gyro_bias_ - bias_.gyro_bias_;
 	bias_ = bias;
 
-	delta_rot_ = delta_rot_ * Sophus::SO3d::exp(jacob_rot_biasgyro_ * delta_biasgyro).matrix();
-	delta_vel_ += jacob_vel_biasacc_ * delta_biasacc + jacob_vel_biasgyro_ * delta_biasgyro;
-	delta_pos_ += jacob_pos_biasacc_ * delta_biasacc + jacob_pos_biasgyro_ * delta_biasgyro;
+	delta_rot_ = delta_rot_ * Sophus::SO3d::exp(jacob_delta_rot_biasgyro_ * delta_biasgyro).matrix();
+	delta_vel_ += jacob_delta_vel_biasacc_ * delta_biasacc + jacob_delta_vel_biasgyro_ * delta_biasgyro;
+	delta_pos_ += jacob_delta_pos_biasacc_ * delta_biasacc + jacob_delta_pos_biasgyro_ * delta_biasgyro;
 }
 
 std::ostream& operator<<(std::ostream& os, const Preintegration& pint) {
@@ -119,7 +100,7 @@ std::ostream& operator<<(std::ostream& os, const Preintegration& pint) {
 	os << "    deltaVij " << pint.deltaVij().transpose() << std::endl;
 	os << "    acc bias " << pint.getBias().acc_bias_.transpose() << std::endl;
 	os << "    gyrobias " << pint.getBias().gyro_bias_.transpose() << std::endl;
-	os << "    meas cov \n" << pint.getMeasCov() << std::endl;
+	os << "    meas cov \n" << std::scientific << pint.getMeasCov() << std::endl;
 	return os;
 }
 

@@ -7,6 +7,7 @@
 #include "map_point.hpp"
 #include "seed.hpp"
 #include "feature_detector.hpp"
+#include "preintegration.hpp"
 
 namespace ssvo{
 
@@ -47,6 +48,16 @@ public:
     //! Set Extrinsic Matrix
     void setTcw(const SE3d& Tcw);
 
+	//! IMU Parameters
+	void setIMUData(const std::vector<IMUData> &data);
+
+	void computeIMUPreintegrationSinceLastFrame(const Frame::Ptr &frame);
+
+	void setPreintergration(const Preintegration &preint) { preint_ = preint; }
+
+	const Preintegration & getPreintergration() const { return preint_; }
+
+	//! 
     bool isVisiable(const Vector3d &xyz_w, const int border = 0);
 
     //! Feature created by MapPoint
@@ -150,6 +161,9 @@ protected:
     Vector3d Dw_;
 
     std::shared_ptr<KeyFrame> ref_keyframe_;
+
+	std::vector<IMUData> imu_datas_;
+	Preintegration preint_;
 
     std::mutex mutex_pose_;
     std::mutex mutex_feature_;
