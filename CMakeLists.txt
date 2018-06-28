@@ -171,7 +171,10 @@ add_executable(test_camera_model test/test_camera_model.cpp src/camera.cpp)
 target_link_libraries(test_camera_model ${LINK_LIBS})
 
 add_executable(test_preintegration test/test_preintegration.cpp src/preintegration.cpp)
-target_link_libraries(test_preintegration ${PROJECT_NAME})
+target_link_libraries(test_preintegration ${LINK_LIBS})
+
+add_executable(test_preintegration_init test/test_preintegration_init.cpp src/preintegration.cpp)
+target_link_libraries(test_preintegration_init ${PROJECT_NAME})
 
 add_executable(test_timer test/test_timer.cpp)
 

@@ -92,6 +92,46 @@ void Preintegration::correct(const IMUBias &bias)
 	delta_pos_ += jacob_delta_pos_biasacc_ * delta_biasacc + jacob_delta_pos_biasgyro_ * delta_biasgyro;
 }
 
+void Preintegration::integrate(Preintegration &preint, const std::vector<IMUData> &imu_data, const IMUBias &bias_last, double timestampi, double timestamej)
+{
+	LOG_ASSERT(!imu_data.empty()) << "Empty IMU data!!!";
+
+	preint = Preintegration(bias_last);
+
+	//! get time gap between last frame
+	double timestamp_last = timestampi;
+	{
+		const IMUData imu = imu_data.front();
+		const double dt = imu.timestamp - timestamp_last;
+
+		LOG_ASSERT(dt >= 0) << "Error timestamp between start time: " << timestamp_last << ", and first imu: " << imu.timestamp;
+	}
+
+	//! preintegration
+	size_t N = imu_data.size() - 1;
+	for (size_t i = 0; i < N; i++)
+	{
+		const IMUData imu = imu_data[i];
+		const double timestamp_cur = imu_data[i + 1].timestamp;
+		const double dt = timestamp_cur - timestamp_last;
+
+		LOG_ASSERT(dt >= 0) << "Error timestamp between last imu: " << timestamp_last << ", and current imu: " << timestamp_cur;
+
+		preint.update(imu.gyro, imu.acc, dt);
+
+		timestamp_last = timestamp_cur;
+	}
+
+	//! update last data
+	{
+		const IMUData imu = imu_data.back();
+		const double dt = timestamej - timestamp_last;
+		LOG_ASSERT(dt >= 0) << "Error timestamp between last imu: " << timestamp_last << ", and end time: " << timestamej;
+
+		preint.update(imu.gyro, imu.acc, dt);
+	}
+}
+
 std::ostream& operator<<(std::ostream& os, const Preintegration& pint) {
 	os << "    deltaTij " << pint.deltaTij() << std::endl;
 	Quaterniond qij = Quaterniond(pint.deltaRij());

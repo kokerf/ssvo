@@ -49,9 +49,11 @@ public:
     void setTcw(const SE3d& Tcw);
 
 	//! IMU Parameters
-	void setIMUData(const std::vector<IMUData> &data);
+	void setIMUData(const std::vector<IMUData> &data) { imu_data_ = data; };
 
-	void computeIMUPreintegrationSinceLastFrame(const Frame::Ptr &frame);
+	std::vector<IMUData> getIMUData() const { return imu_data_; }
+
+	void computeIMUPreintegrationSinceLastFrame(const Frame::Ptr &frame_last);
 
 	void setPreintergration(const Preintegration &preint) { preint_ = preint; }
 
@@ -162,7 +164,7 @@ protected:
 
     std::shared_ptr<KeyFrame> ref_keyframe_;
 
-	std::vector<IMUData> imu_datas_;
+	std::vector<IMUData> imu_data_;
 	Preintegration preint_;
 
     std::mutex mutex_pose_;

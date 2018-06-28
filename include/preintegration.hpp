@@ -25,6 +25,8 @@ public:
 
 	void reset();
 
+	static void integrate(Preintegration &preint, const std::vector<IMUData> &imu_data, const IMUBias &bias_last, double timestampi, double timestamej);
+
 	const double deltaTij() const { return delta_t_; }
 	const Vector3d deltaPij() const { return delta_pos_; }
 	const Vector3d deltaVij() const { return delta_vel_; }
