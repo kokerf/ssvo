@@ -16,7 +16,8 @@ AbstractCamera::AbstractCamera(Model model) :
 AbstractCamera::AbstractCamera(int width, int height, cv::Mat Tbc, Model type) :
         model_(type), width_(width), height_(height)
 {
-	cv:cv2eigen(Tbc, T_BC_);
+	cv::cv2eigen(Tbc, T_BC_);
+	T_CB_ = T_BC_.inverse();
 }
 
 AbstractCamera::AbstractCamera(int width, int height, double fx, double fy, double cx, double cy, cv::Mat Tbc, Model model) :
@@ -28,7 +29,8 @@ AbstractCamera::AbstractCamera(int width, int height, double fx, double fy, doub
     K_(1,1) = fy_;
     K_(1,2) = cy_;
 
-	cv:cv2eigen(Tbc, T_BC_);
+	cv::cv2eigen(Tbc, T_BC_);
+	T_CB_ = T_BC_.inverse();
 }
 
 AbstractCamera::Model AbstractCamera::checkCameraModel(std::string calib_file)
@@ -171,7 +173,8 @@ PinholeCamera::PinholeCamera(std::string calib_file) :
 	cv::Mat T;
 	fs["Camera.T_BC"] >> T;
     LOG_ASSERT(T.size() == cv::Size(4, 4)) << "Failed to load Camera.T_BC with error size: " << T.size();
-	cv:cv2eigen(T, T_BC_);
+	cv::cv2eigen(T, T_BC_);
+	T_CB_ = T_BC_.inverse();
 
     fs.release();
 }
@@ -359,7 +362,8 @@ AtanCamera::AtanCamera(std::string calib_file) :
 	cv::Mat T;
 	fs["Camera.T_BC"] >> T;
 	LOG_ASSERT(T.size() == cv::Size(4, 4)) << "Failed to load Camera.T_BC with error size: " << T.size();
-	cv:cv2eigen(T, T_BC_);
+	cv::cv2eigen(T, T_BC_);
+	T_CB_ = T_BC_.inverse();
 
     fs.release();
 }

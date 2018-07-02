@@ -58,7 +58,9 @@ public:
 
     inline const VectorXd D() const { return D_; };
 
-    inline const Matrix4d T_BC() const { return T_BC_; };
+	inline const Matrix4d T_BC() const { return T_BC_; };
+
+	inline const Matrix4d T_CB() const { return T_CB_; };
 
     inline const Model model() const { return model_; }
 
@@ -96,7 +98,7 @@ protected:
     double fx_, fy_, cx_, cy_;
 	Matrix3d K_;
 	RowVectorXd D_;
-	Matrix4d T_BC_;
+	Matrix4d T_BC_, T_CB_;
     bool distortion_;
 };
 
