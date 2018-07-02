@@ -131,9 +131,6 @@ int main(int argc, char const *argv[])
     loadImages(dir_name, img_file_names);
     LOG_ASSERT(!img_file_names.empty()) << "Error! No image in directory: " << dir_name;
 
-    cv::Mat K = camera->K();
-    cv::Mat DistCoef = camera->D();
-
     FastDetector::Ptr detector = FastDetector::create(width, height, image_border, nlevel, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
 
     Initializer::Ptr initializer = Initializer::create(detector, true);

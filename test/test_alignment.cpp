@@ -264,9 +264,6 @@ int main(int argc, char *argv[])
     int fast_min_threshold = Config::fastMinThreshold();
     double fast_min_eigen = Config::fastMinEigen();
 
-    cv::Mat K = camera->K();
-    cv::Mat DistCoef = camera->D();
-
     Frame::Ptr frame0 = Frame::create(rgb0, 0, camera);
     Frame::Ptr frame1 = Frame::create(rgb1, 0, camera);
     frame0->setPose(Matrix3d::Identity(), Vector3d::Zero());

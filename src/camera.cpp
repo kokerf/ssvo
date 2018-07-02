@@ -1,3 +1,5 @@
+#include <Eigen/Eigen>
+#include <opencv2/core/eigen.hpp>
 #include "camera.hpp"
 
 namespace ssvo {
@@ -11,17 +13,22 @@ AbstractCamera::AbstractCamera() :
 AbstractCamera::AbstractCamera(Model model) :
         model_(model) {}
 
-AbstractCamera::AbstractCamera(int width, int height, Model type) :
-        model_(type), width_(width), height_(height) {}
+AbstractCamera::AbstractCamera(int width, int height, cv::Mat Tbc, Model type) :
+        model_(type), width_(width), height_(height)
+{
+	cv:cv2eigen(Tbc, T_BC_);
+}
 
-AbstractCamera::AbstractCamera(int width, int height, double fx, double fy, double cx, double cy, Model model) :
+AbstractCamera::AbstractCamera(int width, int height, double fx, double fy, double cx, double cy, cv::Mat Tbc, Model model) :
         model_(model), width_(width), height_(height), fx_(fx), fy_(fy), cx_(cx), cy_(cy)
 {
-    K_ = cv::Mat::eye(3,3,CV_64FC1);
-    K_.at<double>(0,0) = fx_;
-    K_.at<double>(0,2) = cx_;
-    K_.at<double>(1,1) = fy_;
-    K_.at<double>(1,2) = cy_;
+    K_.setIdentity();
+    K_(0,0) = fx_;
+    K_(0,2) = cx_;
+    K_(1,1) = fy_;
+    K_(1,2) = cy_;
+
+	cv:cv2eigen(Tbc, T_BC_);
 }
 
 AbstractCamera::Model AbstractCamera::checkCameraModel(std::string calib_file)
@@ -73,33 +80,30 @@ void AbstractCamera::undistortPoints(const std::vector<cv::Point2f> &pts_dist, s
 //! PinholeCamera
 //! =========================
 PinholeCamera::PinholeCamera(int width, int height, double fx, double fy, double cx, double cy,
-           double k1, double k2, double p1, double p2) :
-            AbstractCamera(width, height, fx, fy, cx, cy, PINHOLE),
+           double k1, double k2, double p1, double p2, cv::Mat Tbc) :
+            AbstractCamera(width, height, fx, fy, cx, cy, Tbc, PINHOLE),
             k1_(k1), k2_(k2), p1_(p1), p2_(p2)
 {
     distortion_ = (fabs(k1_) > 0.0000001);
-    D_ = cv::Mat::zeros(1,4,CV_64FC1);
-    D_.at<double>(0) = k1;
-    D_.at<double>(1) = k2;
-    D_.at<double>(2) = p1;
-    D_.at<double>(3) = p2;
-    T_BC_ = cv::Mat::eye(4, 4, CV_64FC1);
+	D_.resize(4);
+    D_(0) = k1;
+    D_(1) = k2;
+    D_(2) = p1;
+    D_(3) = p2;
 }
 
-PinholeCamera::PinholeCamera(int width, int height, const cv::Mat& K, const cv::Mat& D):
-        AbstractCamera(width, height, PINHOLE)
+PinholeCamera::PinholeCamera(int width, int height, const cv::Mat& K, const cv::Mat& D, cv::Mat Tbc):
+        AbstractCamera(width, height, Tbc, PINHOLE)
 {
     assert(K.cols == 3 && K.rows == 3);
     assert(D.cols == 1 || D.rows == 1);
-    if(K.type() == CV_64FC1)
-        K_ = K.clone();
-    else
-        K.convertTo(K_, CV_64FC1);
 
-    if(D.type() == CV_64FC1)
-        D_ = D.clone();
-    else
-        D.convertTo(D_, CV_64FC1);
+	cvK_ = K.clone();
+	cvD_ = D.clone();
+
+	cv::cv2eigen(K, K_);
+
+	cv::cv2eigen(D, D_);
 
     fx_ = K.at<double>(0,0);
     fy_ = K.at<double>(1,1);
@@ -112,8 +116,6 @@ PinholeCamera::PinholeCamera(int width, int height, const cv::Mat& K, const cv::
     p2_ = D.at<double>(3);
 
     distortion_ = (fabs(k1_) > 0.0000001);
-
-    T_BC_ = cv::Mat::eye(4, 4, CV_64FC1);
 }
 
 PinholeCamera::PinholeCamera(std::string calib_file) :
@@ -142,11 +144,13 @@ PinholeCamera::PinholeCamera(std::string calib_file) :
     fy_ = intrinsics[1];
     cx_ = intrinsics[2];
     cy_ = intrinsics[3];
-    K_ = cv::Mat::eye(3,3,CV_64FC1);
-    K_.at<double>(0,0) = fx_;
-    K_.at<double>(0,2) = cx_;
-    K_.at<double>(1,1) = fy_;
-    K_.at<double>(1,2) = cy_;
+    cvK_ = cv::Mat::eye(3,3,CV_64FC1);
+    cvK_.at<double>(0,0) = fx_;
+    cvK_.at<double>(0,2) = cx_;
+    cvK_.at<double>(1,1) = fy_;
+    cvK_.at<double>(1,2) = cy_;
+
+    cv::cv2eigen(cvK_, K_);
 
     cv::FileNode distortion_coefficients = fs["Camera.distortion_coefficients"];
     LOG_ASSERT(distortion_coefficients.size() == 4) << "Failed to load Camera.distortion_coefficients with error size: " << distortion_coefficients.size();
@@ -155,21 +159,19 @@ PinholeCamera::PinholeCamera(std::string calib_file) :
     p1_ = distortion_coefficients[2];
     p2_ = distortion_coefficients[3];
 
-    D_ = cv::Mat::zeros(1,4,CV_64F);
-    D_.at<double>(0) = k1_;
-    D_.at<double>(1) = k2_;
-    D_.at<double>(2) = p1_;
-    D_.at<double>(3) = p2_;
+	cvD_ = cv::Mat::zeros(1, 4, CV_64FC1);
+	cvD_.at<double>(0) = k1_;
+	cvD_.at<double>(1) = k2_;
+	cvD_.at<double>(2) = p1_;
+	cvD_.at<double>(3) = p2_;
+    cv::cv2eigen(cvD_, D_);
 
     distortion_ = (fabs(k1_) > 0.0000001);
 
-    cv::FileNode T = fs["Camera.T_BC"];
-    LOG_ASSERT(T.size() == 16) << "Failed to load Camera.T_BC with error size: " << T.size();
-    T_BC_ = cv::Mat::eye(4,4,CV_64FC1);
-    for (int i = 0; i < 16; ++i)
-    {
-        *(T_BC_.ptr<double>(0) + i) = T[i];
-    }
+	cv::Mat T;
+	fs["Camera.T_BC"] >> T;
+    LOG_ASSERT(T.size() == cv::Size(4, 4)) << "Failed to load Camera.T_BC with error size: " << T.size();
+	cv:cv2eigen(T, T_BC_);
 
     fs.release();
 }
@@ -183,7 +185,7 @@ Vector3d PinholeCamera::lift(const Vector2d &px) const
         double p[2] = {px[0], px[1]};
         cv::Mat pt_d = cv::Mat(1, 1, CV_64FC2, p);
         cv::Mat pt_u = cv::Mat(1, 1, CV_64FC2, xyz.data());
-        cv::undistortPoints(pt_d, pt_u, K_, D_);
+        cv::undistortPoints(pt_d, pt_u, cvK_, cvD_);
     }
     else
     {
@@ -202,7 +204,7 @@ Vector3d PinholeCamera::lift(double x, double y) const
         double p[2] = {x, y};
         cv::Mat pt_d = cv::Mat(1, 1, CV_64FC2, p);
         cv::Mat pt_u = cv::Mat(1, 1, CV_64FC2, xyz.data());
-        cv::undistortPoints(pt_d, pt_u, K_, D_);
+        cv::undistortPoints(pt_d, pt_u, cvK_, cvD_);
     }
     else
     {
@@ -261,17 +263,17 @@ Vector2d PinholeCamera::project(double x, double y) const
 
 void PinholeCamera::undistortPoints(const std::vector<cv::Point2f> &pts_dist, std::vector<cv::Point2f> &pts_udist) const
 {
-    cv::undistortPoints(pts_dist, pts_udist, K_, D_);
+    cv::undistortPoints(pts_dist, pts_udist, cvK_, cvD_);
 }
 
 //! =========================
 //! AtanCamera
 //! =========================
-AtanCamera::AtanCamera(int width, int height, double fx, double fy, double cx, double cy, double s) :
-        AbstractCamera(width, height, width*fx, height*fy, width*cx-0.5, height*cy-0.5, ATAN), s_(s)
+AtanCamera::AtanCamera(int width, int height, double fx, double fy, double cx, double cy, double s, cv::Mat Tbc) :
+        AbstractCamera(width, height, width*fx, height*fy, width*cx-0.5, height*cy-0.5, Tbc, ATAN), s_(s)
 {
-    D_ = cv::Mat(1,1,CV_64FC1);
-    D_.at<double>(0) = s_;
+	D_.resize(1);
+    D_(0) = s_;
 
     if(fabs(s_) > 0.0000001)
     {
@@ -285,19 +287,18 @@ AtanCamera::AtanCamera(int width, int height, double fx, double fy, double cx, d
     }
 }
 
-AtanCamera::AtanCamera(int width, int height, const cv::Mat& K, const double s):
-        AbstractCamera(width, height, ATAN), s_(s)
+AtanCamera::AtanCamera(int width, int height, const cv::Mat& K, const double s, cv::Mat Tbc):
+        AbstractCamera(width, height, Tbc, ATAN), s_(s)
 {
     assert(K.cols == 3 && K.rows == 3);
 
-    K_ = K.clone();
     fx_ = K.at<double>(0,0);
     fy_ = K.at<double>(1,1);
     cx_ = K.at<double>(0,2);
     cy_ = K.at<double>(1,2);
 
-    D_ = cv::Mat(1,1,CV_64FC1);
-    D_.at<double>(0) = s_;
+	D_.resize(1);
+    D_(0) = s_;
 
     if(fabs(s_) > 0.0000001)
     {
@@ -346,21 +347,19 @@ AtanCamera::AtanCamera(std::string calib_file) :
     cx_ = cx_ * width_ - 0.5;
     cy_ = cy_ * height_ - 0.5;
 
-    D_ = cv::Mat::zeros(1,1,CV_64F);
-    D_.at<double>(0) = s;
+    D_.resize(1);
+    D_(0) = s;
 
-    K_ = cv::Mat::eye(3,3,CV_64F);
-    K_.at<double>(0,0) = fx_;
-    K_.at<double>(1,1) = fy_;
-    K_.at<double>(0,2) = cx_;
-    K_.at<double>(1,2) = cy_;
+    K_.setIdentity();
+    K_(0,0) = fx_;
+    K_(1,1) = fy_;
+    K_(0,2) = cx_;
+    K_(1,2) = cy_;
 
-    cv::FileNode T = fs["Camera.T_BC"];
-    LOG_ASSERT(T.size() == 16) << "Failed to load Camera.T_BC with error size: " << T.size();
-    T_BC_ = cv::Mat::eye(4,4,CV_64FC1);
-    for (int i = 0; i < 16; ++i) {
-        *(T_BC_.ptr<double>(0) + i) = T[i];
-    }
+	cv::Mat T;
+	fs["Camera.T_BC"] >> T;
+	LOG_ASSERT(T.size() == cv::Size(4, 4)) << "Failed to load Camera.T_BC with error size: " << T.size();
+	cv:cv2eigen(T, T_BC_);
 
     fs.release();
 }

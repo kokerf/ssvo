@@ -22,7 +22,6 @@ int main(int argc, char const *argv[])
     int width = cam->width();
     int height = cam->height();
     cv::Mat K = cam->K();
-    cv::Mat DistCoef = cam->D();
 
     std::cout << "K: \n" << K << std::endl;
     K.at<double>(0,0) += 0.5;

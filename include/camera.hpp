@@ -32,9 +32,9 @@ public:
 
     AbstractCamera(Model model = ABSTRACT);
 
-    AbstractCamera(int width, int height, Model model = ABSTRACT);
+    AbstractCamera(int width, int height, cv::Mat Tbc = cv::Mat::eye(4, 4, CV_64FC1), Model model = ABSTRACT);
 
-    AbstractCamera(int width, int height, double fx, double fy, double cx, double cy, Model model = ABSTRACT);
+	AbstractCamera(int width, int height, double fx, double fy, double cx, double cy, cv::Mat Tbc = cv::Mat::eye(4, 4, CV_64FC1), Model model = ABSTRACT);
 
     virtual ~AbstractCamera() {};
 
@@ -54,11 +54,11 @@ public:
 
     inline const double cy() const { return cy_; };
 
-    inline const cv::Mat K() const { return K_; };
+    inline const Matrix3d K() const { return K_; };
 
-    inline const cv::Mat D() const { return D_; };
+    inline const VectorXd D() const { return D_; };
 
-    inline const cv::Mat T_BC() const { return T_BC_; };
+    inline const Matrix4d T_BC() const { return T_BC_; };
 
     inline const Model model() const { return model_; }
 
@@ -94,8 +94,9 @@ protected:
     int width_;
     int height_;
     double fx_, fy_, cx_, cy_;
-    cv::Mat K_, D_;
-    cv::Mat T_BC_;
+	Matrix3d K_;
+	RowVectorXd D_;
+	Matrix4d T_BC_;
     bool distortion_;
 };
 
@@ -117,10 +118,10 @@ public:
     //! all undistort points are in the normlized plane
     virtual void undistortPoints(const std::vector<cv::Point2f> &pts_dist, std::vector<cv::Point2f> &pts_udist) const;
 
-    inline static PinholeCamera::Ptr create(int width, int height, double fx, double fy, double cx, double cy, double k1 = 0.0, double k2 = 0.0, double p1 = 0.0, double p2 = 0.0)
-    {return PinholeCamera::Ptr(new PinholeCamera(width, height, fx, fy, cx, cy, k1, k2, p1, p2));}
+    inline static PinholeCamera::Ptr create(int width, int height, double fx, double fy, double cx, double cy, double k1 = 0.0, double k2 = 0.0, double p1 = 0.0, double p2 = 0.0, cv::Mat Tbc = cv::Mat::eye(4, 4, CV_64FC1))
+    {return PinholeCamera::Ptr(new PinholeCamera(width, height, fx, fy, cx, cy, k1, k2, p1, p2, Tbc));}
 
-    inline static PinholeCamera::Ptr create(int width, int height, const cv::Mat& K, const cv::Mat& D)
+    inline static PinholeCamera::Ptr create(int width, int height, const cv::Mat& K, const cv::Mat& D, cv::Mat Tbc = cv::Mat::eye(4, 4, CV_64FC1))
     {return PinholeCamera::Ptr(new PinholeCamera(width, height, K, D));}
 
     inline static PinholeCamera::Ptr create(std::string calib_file)
@@ -128,16 +129,18 @@ public:
 
 private:
 
-    PinholeCamera(int width, int height, double fx, double fy, double cx, double cy,
-           double k1 = 0.0, double k2 = 0.0, double p1 = 0.0, double p2 = 0.0);
+	PinholeCamera(int width, int height, double fx, double fy, double cx, double cy,
+		double k1 = 0.0, double k2 = 0.0, double p1 = 0.0, double p2 = 0.0, cv::Mat Tbc = cv::Mat::eye(4, 4, CV_64FC1));
 
-    PinholeCamera(int width, int height, const cv::Mat& K, const cv::Mat& D);
+    PinholeCamera(int width, int height, const cv::Mat& K, const cv::Mat& D, cv::Mat Tbc = cv::Mat::eye(4, 4, CV_64FC1));
 
     PinholeCamera(std::string calib_file);
 
 private:
 
     double k1_, k2_, p1_, p2_;
+	cv::Mat cvK_;
+	cv::Mat cvD_;
 
 };
 
@@ -158,20 +161,20 @@ public:
 
     virtual void undistortPoints(const std::vector<cv::Point2f> &pts_dist, std::vector<cv::Point2f> &pts_udist) const;
 
-    inline static AtanCamera::Ptr create(int width, int height, double fx, double fy, double cx, double cy, double s = 0.0)
-    {return AtanCamera::Ptr(new AtanCamera(width, height, fx, fy, cx, cy, s));}
+    inline static AtanCamera::Ptr create(int width, int height, double fx, double fy, double cx, double cy, double s = 0.0, cv::Mat Tbc = cv::Mat::eye(4, 4, CV_64FC1))
+    {return AtanCamera::Ptr(new AtanCamera(width, height, fx, fy, cx, cy, s, Tbc));}
 
-    inline static AtanCamera::Ptr create(int width, int height, const cv::Mat& K, const double s = 0.0)
-    {return AtanCamera::Ptr(new AtanCamera(width, height, K, s));}
+    inline static AtanCamera::Ptr create(int width, int height, const cv::Mat& K, const double s = 0.0, cv::Mat Tbc = cv::Mat::eye(4, 4, CV_64FC1))
+    {return AtanCamera::Ptr(new AtanCamera(width, height, K, s, Tbc));}
 
     inline static AtanCamera::Ptr create(std::string calib_file)
     {return AtanCamera::Ptr(new AtanCamera(calib_file));}
 
 private:
 
-    AtanCamera(int width, int height, double fx, double fy, double cx, double cy, double s = 0.0);
+    AtanCamera(int width, int height, double fx, double fy, double cx, double cy, double s = 0.0, cv::Mat Tbc = cv::Mat::eye(4, 4, CV_64FC1));
 
-    AtanCamera(int width, int height, const cv::Mat& K, const double s = 0.0);
+    AtanCamera(int width, int height, const cv::Mat& K, const double s = 0.0, cv::Mat Tbc = cv::Mat::eye(4, 4, CV_64FC1));
 
     AtanCamera(std::string calib_file);
 

@@ -10,7 +10,11 @@ Camera.intrinsics: [478.491563, 478.450925, 360.715771, 272.341780] #fu, fv, cu,
 Camera.distortion_coefficients: [-0.372236, 0.112996, 0.002456, 0.000866]
 
 # Sensor extrinsics wrt. the body-frame.
-Camera.T_BC: [1.0, 0.0, 0.0, 0.0,
-              0.0, 1.0, 0.0, 0.0,
-              0.0, 0.0, 1.0, 0.0,
-              0.0, 0.0, 0.0, 1.0]
+Camera.T_BC: !!opencv-matrix
+   rows: 4
+   cols: 4
+   dt: d
+   data: [1.0, 0.0, 0.0, 0.0,
+          0.0, 1.0, 0.0, 0.0,
+          0.0, 0.0, 1.0, 0.0,
+          0.0, 0.0, 0.0, 1.0]
