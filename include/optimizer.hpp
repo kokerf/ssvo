@@ -48,6 +48,8 @@ namespace Sophus {
 
 namespace ssvo {
 
+typedef Eigen::Matrix<double, 3, 3, Eigen::RowMajor> RowMatrix3d;
+
 class Optimizer: public noncopyable
 {
 public:
@@ -62,12 +64,44 @@ public:
 
     static void refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool report=false, bool verbose=false);
 
-    static Vector2d reprojectionError(const ceres::Problem &problem, ceres::ResidualBlockId id);
+	template<int nRes>
+	static inline Eigen::Matrix<double, nRes, 1> evaluateResidual(const ceres::Problem& problem, ceres::ResidualBlockId id)
+	{
+		auto cost = problem.GetCostFunctionForResidualBlock(id);
+		std::vector<double*> parameterBlocks;
+		problem.GetParameterBlocksForResidualBlock(id, &parameterBlocks);
+		Eigen::Matrix<double, nRes, 1> residual;
+		cost->Evaluate(parameterBlocks.data(), residual.data(), nullptr);
+		return residual;
+	}
 
-    static void reportInfo(const ceres::Problem &problem, const ceres::Solver::Summary summary, bool report=false, bool verbose=false);
+	template<int nRes>
+	static inline void reportInfo(const ceres::Problem &problem, const ceres::Solver::Summary summary, bool report=false, bool verbose=false)
+	{
+		if (!report) return;
+
+		if (!verbose)
+		{
+			LOG(INFO) << summary.BriefReport();
+		}
+		else
+		{
+			LOG(INFO) << summary.FullReport();
+			std::vector<ceres::ResidualBlockId> ids;
+			problem.GetResidualBlocks(&ids);
+			for (size_t i = 0; i < ids.size(); ++i)
+			{
+				LOG(INFO) << "BlockId: " << std::setw(5) << i << " residual(RMSE): " << evaluateResidual<nRes>(problem, ids[i]).norm();
+			}
+		}
+	}
 
 	//! for vio
-	static void sloveInitialGyroBias(const std::vector<Frame::Ptr> &frames);
+	static Vector3d sloveInitialGyroBias(const std::vector<Frame::Ptr> &frames, bool report = false, bool verbose = false);
+
+	static Vector4d sloveGravityAndScale(const std::vector<Frame::Ptr> &frames, bool report = false, bool verbose = false);
+
+	static void initIMU(const std::vector<Frame::Ptr> &frames, bool report = false, bool verbose = false);
 };
 
 namespace ceres_slover {
@@ -88,15 +122,42 @@ public:
     // Set to Identity, for we have computed in ReprojectionErrorSE3::Evaluate
     virtual bool ComputeJacobian(double const *T_raw,
                                  double *jacobian_raw) const {
-        Eigen::Map<Eigen::Matrix<double, 6, 7> > jacobian(jacobian_raw);
+        Eigen::Map<Eigen::Matrix<double, 7, 6, Eigen::RowMajor> > jacobian(jacobian_raw);
         jacobian.block<6,6>(0, 0).setIdentity();
-        jacobian.rightCols<1>().setZero();
+        jacobian.bottomRows<1>().setZero();
         return true;
     }
 
     virtual int GlobalSize() const { return Sophus::SE3d::num_parameters; }
 
     virtual int LocalSize() const { return Sophus::SE3d::DoF; }
+};
+
+class SO3Parameterization : public ceres::LocalParameterization {
+public:
+	virtual ~SO3Parameterization() {}
+
+	virtual bool Plus(double const *R_raw, double const *delta_raw,
+		double *R_plus_delta_raw) const {
+		Eigen::Map<Sophus::SO3d const> const R(R_raw);
+		Eigen::Map<Sophus::SO3d::Tangent const> const delta(delta_raw);
+		Eigen::Map<Sophus::SO3d> R_plus_delta(R_plus_delta_raw);
+		R_plus_delta = R * Sophus::SO3d::exp(delta);
+		return true;
+	}
+
+	// Set to Identity, for we have computed in ReprojectionErrorSE3::Evaluate
+	virtual bool ComputeJacobian(double const *R_raw,
+		double *jacobian_raw) const {
+		Eigen::Map<Eigen::Matrix<double, 3, 4, Eigen::RowMajor>> jacobian(jacobian_raw);
+		jacobian.block<3, 3>(0, 0).setIdentity();
+		jacobian.rightCols<1>().setZero();
+		return true;
+	}
+
+	virtual int GlobalSize() const { return Sophus::SO3d::num_parameters; }
+
+	virtual int LocalSize() const { return Sophus::SO3d::DoF; }
 };
 
 struct ReprojectionError {
@@ -341,11 +402,13 @@ private:
 
 };
 
-typedef Eigen::Matrix<double, 3, 3, Eigen::RowMajor> RowMatrix3d;
-
 //! rdRij(3) - Rwi(4) Rwj(4) dBaisgyro(3)
 class PreintegrationRotationError : public ceres::SizedCostFunction<3, 4, 4, 3>
 {
+public:
+
+	EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
 	PreintegrationRotationError(const Preintegration& pin) :
 		dRij_(pin.deltaRij()), jacob_dR_biasgyro_(pin.jacobdRBiasGyro()){}
 
@@ -360,7 +423,8 @@ class PreintegrationRotationError : public ceres::SizedCostFunction<3, 4, 4, 3>
 		Eigen::Map<Vector3d> res(residuals);
 		Vector3d tangent_dRbg = jacob_dR_biasgyro_ * delta_biasgyro;
 		const Sophus::SO3d dRbg = Sophus::SO3d::exp(tangent_dRbg);
-		const Sophus::SO3d res_dRij = (dRij_ * dRbg).inverse() * Rwi.inverse() * Rwj;
+		Sophus::SO3d Rij = Rwi.inverse() * Rwj;
+		const Sophus::SO3d res_dRij = (dRij_ * dRbg).inverse() * Rij;
 		res = res_dRij.log();
 
 		//! jacobians
@@ -369,14 +433,24 @@ class PreintegrationRotationError : public ceres::SizedCostFunction<3, 4, 4, 3>
 		double* jacobian1 = jacobians[1];
 		double* jacobian2 = jacobians[2];
 
+		Matrix3d right_jacob_of_res_inv;
+		if (nullptr != jacobian0 || nullptr != jacobian1)
+		{
+			right_jacob_of_res_inv = Sophus::SO3JacobianRInv(res);
+		}
+
 		if (nullptr != jacobian0)
 		{
-			Eigen::Map<RowMatrix3d> jacob_dR_Ri(jacobian0);
+			Eigen::Map<Eigen::Matrix<double, 3, 4, Eigen::RowMajor> > jacob_dR_Ri(jacobian0);
+			jacob_dR_Ri.setZero();
+			jacob_dR_Ri.block<3, 3>(0, 0) = -right_jacob_of_res_inv * Rij.inverse().matrix();
 		}
 
 		if (nullptr != jacobian1)
 		{
-			Eigen::Map<RowMatrix3d> jacob_dR_Rj(jacobian1);
+			Eigen::Map<Eigen::Matrix<double, 3, 4, Eigen::RowMajor> > jacob_dR_Rj(jacobian1);
+			jacob_dR_Rj.setZero();
+			jacob_dR_Rj.block<3, 3>(0, 0) = right_jacob_of_res_inv;
 		}
 
 		if (nullptr != jacobian2)
@@ -386,6 +460,11 @@ class PreintegrationRotationError : public ceres::SizedCostFunction<3, 4, 4, 3>
 			Matrix3d right_jacob_of_dR_dbiasgyro = Sophus::SO3JacobianR(tangent_dRbg);
 			jacob_dR_dbiasgyro = -left_jacob_of_res * right_jacob_of_dR_dbiasgyro * jacob_dR_biasgyro_;
 		}
+		return true;
+	}
+
+	static inline ceres::CostFunction *Create(const Preintegration& pin) {
+		return (new PreintegrationRotationError(pin));
 	}
 
 private:

@@ -81,6 +81,23 @@ void Preintegration::update(const Vector3d &measured_gyro, const Vector3d &measu
 	delta_t_ += dt;
 }
 
+void Preintegration::correctDeltaBiasGyro(const Vector3d &delta_biasgyro)
+{
+	bias_.gyro_bias_.noalias() += delta_biasgyro;
+
+	delta_rot_ = delta_rot_ * Sophus::SO3d::exp(jacob_delta_rot_biasgyro_ * delta_biasgyro).matrix();
+	delta_vel_.noalias() += jacob_delta_vel_biasgyro_ * delta_biasgyro;
+	delta_pos_.noalias() += jacob_delta_pos_biasgyro_ * delta_biasgyro;
+}
+
+void Preintegration::correctDeltaBiasAcc(const Vector3d &delta_biasacc)
+{
+	bias_.acc_bias_.noalias() += delta_biasacc;
+
+	delta_vel_.noalias() += jacob_delta_vel_biasacc_ * delta_biasacc;
+	delta_pos_.noalias() += jacob_delta_pos_biasacc_ * delta_biasacc;
+}
+
 void Preintegration::correct(const IMUBias &bias)
 {
 	const Vector3d delta_biasacc = bias.acc_bias_ - bias_.acc_bias_;
@@ -88,8 +105,8 @@ void Preintegration::correct(const IMUBias &bias)
 	bias_ = bias;
 
 	delta_rot_ = delta_rot_ * Sophus::SO3d::exp(jacob_delta_rot_biasgyro_ * delta_biasgyro).matrix();
-	delta_vel_ += jacob_delta_vel_biasacc_ * delta_biasacc + jacob_delta_vel_biasgyro_ * delta_biasgyro;
-	delta_pos_ += jacob_delta_pos_biasacc_ * delta_biasacc + jacob_delta_pos_biasgyro_ * delta_biasgyro;
+	delta_vel_.noalias() += jacob_delta_vel_biasacc_ * delta_biasacc + jacob_delta_vel_biasgyro_ * delta_biasgyro;
+	delta_pos_.noalias() += jacob_delta_pos_biasacc_ * delta_biasacc + jacob_delta_pos_biasgyro_ * delta_biasgyro;
 }
 
 void Preintegration::integrate(Preintegration &preint, const std::vector<IMUData> &imu_data, const IMUBias &bias_last, double timestampi, double timestamej)
@@ -140,7 +157,7 @@ std::ostream& operator<<(std::ostream& os, const Preintegration& pint) {
 	os << "    deltaVij " << pint.deltaVij().transpose() << std::endl;
 	os << "    acc bias " << pint.getBias().acc_bias_.transpose() << std::endl;
 	os << "    gyrobias " << pint.getBias().gyro_bias_.transpose() << std::endl;
-	os << "    meas cov \n" << std::scientific << pint.getMeasCov() << std::endl;
+	//os << "    meas cov \n" << std::scientific << pint.getMeasCov() << std::endl;
 	return os;
 }
 

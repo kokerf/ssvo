@@ -1,3 +1,4 @@
+#include <fstream>
 #include "global.hpp"
 #include "dataset.hpp"
 #include "time_tracing.hpp"
@@ -14,26 +15,30 @@ int main(int argc, char *argv[])
 	//FLAGS_colorlogtostderr = true;
 	//FLAGS_log_prefix = false;
 	google::InitGoogleLogging(argv[0]);
-	LOG_ASSERT(argc == 3) << "\n Usage : ./test_perintegration config_file dataset_path";
+	LOG_ASSERT(argc == 3) << "\n Usage : ./test_perintegration_init config_file dataset_path";
 
 	ssvo::Config::file_name_ = argv[1];
 
 	EuRocDataReader dataset(argv[2]);
 	IMUPara::setMeasCov(2.0000e-3, 1.6968e-04);
 	IMUPara::setBiasCov(3.0000e-3, 1.9393e-05);
-	Vector3d acc_bias(-0.022996, 0.125896, 0.057076);
-	Vector3d gyro_bias(-0.002571, 0.021269, 0.076861);
+	Vector3d acc_bias(0.0, 0.0, 0.0);// -0.022996, 0.125896, 0.057076);
+	Vector3d gyro_bias(0.0, 0.0, 0.0);// (-0.002571, 0.021269, 0.076861);
 	IMUBias imu_bias_zero(gyro_bias, acc_bias);
 	Preintegration init_preint(imu_bias_zero);
 
 	ssvo::Timer<std::micro> timer;
-	const size_t N = dataset.leftImageSize();
-	const double keyframe_duration = 0.30;
-
 
 	std::vector<Frame::Ptr> all_frames;
+	AbstractCamera::Ptr camera = AbstractCamera::Ptr(new AbstractCamera(640, 480, cv::Mat::eye(4,4,CV_64FC1)));
+
+	std::ofstream out_file("imu_bias.txt");
+	out_file << std::fixed << std::setprecision(7);
+	LOG_ASSERT(out_file.is_open()) << "Error in open out file!";
 
 	size_t imu_idx = 0;
+	const size_t N = 100;// dataset.leftImageSize();
+	const double keyframe_duration = 0.30;
 	for (size_t i = 0; i < N; i++)
 	{
 		const EuRocDataReader::Image image_data = dataset.leftImage(i);
@@ -53,7 +58,7 @@ int main(int argc, char *argv[])
 		Vector3d tran_wc(ground_truth.p[0], ground_truth.p[1], ground_truth.p[2]);
 		Sophus::SE3d Twc(quat_wc, tran_wc);
 
-		Frame::Ptr frame_cur = Frame::create(image, image_data.timestamp, nullptr);
+		Frame::Ptr frame_cur = Frame::create(image, image_data.timestamp, camera);
 		frame_cur->setPose(Twc);
 
 		//! set first frame
@@ -95,24 +100,18 @@ int main(int argc, char *argv[])
 		std::cout << "Tij[t, q]: " << Tij.translation().transpose() << ", (" << qij.x() << ", " << qij.y() << ", " << qij.z() << ", " << qij.w() << ")" << std::endl;
 		std::cout << "Preint:\n" << frame_cur->getPreintergration() << std::endl;
 
-		// {//! test correct
-		// 	Preintegration preint_old = frame_cur->getPreintergration();
-		// 	Preintegration preint_new;
-		// 	IMUBias bias_old = preint_old.getBias();
-		// 	IMUBias bias_new(bias_old.gyro_bias_ + Vector3d(0.01, 0.01, 0.1), bias_old.acc_bias_ + Vector3d(0.1, -0.2, 0.3));
-
-		// 	preint_old.correct(bias_new);
-		// 	Preintegration::integrate(preint_new, frame_cur->getIMUData(), bias_new, all_frames.back()->timestamp_, frame_cur->timestamp_);
-		// 	std::cout << std::fixed << std::setprecision(7);
-		// 	std::cout << "Preint by correct :\n" << preint_old << std::endl;
-		// 	std::cout << std::fixed << std::setprecision(7);
-		// 	std::cout << "Preint by repreint:\n" << preint_new << std::endl;
-		// }
-
 		all_frames.push_back(frame_cur);
-		Optimizer::sloveInitialGyroBias(all_frames);
+		
+		Optimizer::initIMU(all_frames);
+
+		IMUBias cur_bias = all_frames.back()->getPreintergrationConst().getBias();
+	
+		out_file << all_frames.back()->timestamp_
+			<< " " << cur_bias.gyro_bias_[0] << " " << cur_bias.gyro_bias_[1] << " " << cur_bias.gyro_bias_[2]
+			<< " " << ground_truth.w[0] << " " << ground_truth.w[1] << " " << ground_truth.w[2] << std::endl;
 	}
 
+	out_file.close();
 
 	return 0;
 }

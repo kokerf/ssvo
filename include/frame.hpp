@@ -57,7 +57,9 @@ public:
 
 	void setPreintergration(const Preintegration &preint) { preint_ = preint; }
 
-	const Preintegration & getPreintergration() const { return preint_; }
+	const Preintegration & getPreintergrationConst() const { return preint_; }
+
+	Preintegration & getPreintergration() { return preint_; }
 
 	//! 
     bool isVisiable(const Vector3d &xyz_w, const int border = 0);
@@ -147,6 +149,7 @@ public:
     static float light_affine_b_;
 
     SE3d optimal_Tcw_;//! for optimization
+	SE3d optimal_Twb_;
 
     double disparity_;//! for depth filter
 

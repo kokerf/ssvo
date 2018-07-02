@@ -58,7 +58,7 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
     std::for_each(mpts.begin(), mpts.end(), [](MapPoint::Ptr mpt){mpt->setPose(mpt->optimal_pose_);});
 
     //! Report
-    reportInfo(problem, summary, report, verbose);
+    reportInfo<2>(problem, summary, report, verbose);
 }
 
 void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size, int min_shared_fts, bool report, bool verbose)
@@ -180,7 +180,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
                          << ", remove " << bad_mpts.size() << " bad mpts."
                          << " (" << (t1-t0)/cv::getTickFrequency() << "ms)";
 
-    reportInfo(problem, summary, report, verbose);
+    reportInfo<2>(problem, summary, report, verbose);
 }
 
 //void Optimizer::localBundleAdjustmentWithInvDepth(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size, bool report, bool verbose)
@@ -333,7 +333,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
 //                         << ", remove " << bad_mpts.size() << " bad mpts."
 //                         << " (" << (t1-t0)/cv::getTickFrequency() << "ms)";
 //
-//    reportInfo(problem, summary, report, verbose);
+//    reportInfo<2>(problem, summary, report, verbose);
 //}
 
 void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_seeds, bool reject, bool report, bool verbose)
@@ -420,7 +420,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_see
         for(size_t i = 0; i < N; ++i)
         {
             Feature::Ptr ft = fts[i];
-            if(reprojectionError(problem, res_ids[i]).squaredNorm() > TH_REPJ * (1 << ft->level_))
+            if(evaluateResidual<2>(problem, res_ids[i]).squaredNorm() > TH_REPJ * (1 << ft->level_))
             {
                 remove_count++;
                 problem.RemoveResidualBlock(res_ids[i]);
@@ -437,7 +437,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_see
     frame->setTcw(frame->optimal_Tcw_);
 
     //! Report
-    reportInfo(problem, summary, report, verbose);
+    reportInfo<2>(problem, summary, report, verbose);
 }
 
 void Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool report, bool verbose)
@@ -475,7 +475,7 @@ void Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool repo
 
     mpt->setPose(mpt->optimal_pose_);
 
-    reportInfo(problem, summary, report, verbose);
+    reportInfo<2>(problem, summary, report, verbose);
 #else
 
     double t0 = (double)cv::getTickCount();
@@ -557,41 +557,127 @@ void Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool repo
 #endif
 }
 
-Vector2d Optimizer::reprojectionError(const ceres::Problem& problem, ceres::ResidualBlockId id)
-{
-    auto cost = problem.GetCostFunctionForResidualBlock(id);
-    std::vector<double*> parameterBlocks;
-    problem.GetParameterBlocksForResidualBlock(id, &parameterBlocks);
-    Vector2d residual;
-    cost->Evaluate(parameterBlocks.data(), residual.data(), nullptr);
-    return residual;
-}
-
-void Optimizer::reportInfo(const ceres::Problem &problem, const ceres::Solver::Summary summary, bool report, bool verbose)
-{
-    if(!report) return;
-
-    if(!verbose)
-    {
-        LOG(INFO) << summary.BriefReport();
-    }
-    else
-    {
-        LOG(INFO) << summary.FullReport();
-        std::vector<ceres::ResidualBlockId> ids;
-        problem.GetResidualBlocks(&ids);
-        for (size_t i = 0; i < ids.size(); ++i)
-        {
-            LOG(INFO) << "BlockId: " << std::setw(5) << i <<" residual(RMSE): " << reprojectionError(problem, ids[i]).norm();
-        }
-    }
-}
-
 
 //! ===============================  for vio  ====================================
-void Optimizer::sloveInitialGyroBias(const std::vector<Frame::Ptr> &frames)
+Vector3d Optimizer::sloveInitialGyroBias(const std::vector<Frame::Ptr> &frames, bool report, bool verbose)
 {
+	const size_t N = frames.size();
+	if (N < 2)
+		return Vector3d(0.0, 0.0, 0.0);
 
+	ceres::Problem problem;
+	Vector3d dbisa_gyro(0.0, 0.0, 0.0);
+
+	std::vector<ceres::ResidualBlockId> res_ids(N - 1);
+	for (size_t i = 0; i < N; i++)
+	{
+		if (0 == i)
+		{
+			Frame::Ptr framei = frames[i];
+			framei->optimal_Twb_ = framei->Twc() * SE3d(framei->cam_->T_CB());
+			ceres::LocalParameterization* local_parameterization_ri = new ceres_slover::SO3Parameterization();
+			problem.AddParameterBlock(frames[0]->optimal_Twb_.data(), SO3d::num_parameters, local_parameterization_ri);
+			problem.SetParameterBlockConstant(frames[0]->optimal_Twb_.data());
+			continue;
+		}
+
+		Frame::Ptr framei = frames[i - 1];
+		Frame::Ptr framej = frames[i];
+
+		framej->optimal_Twb_ = framej->Twc() * SE3d(framej->cam_->T_CB());
+		ceres::LocalParameterization* local_parameterization_rj = new ceres_slover::SO3Parameterization();
+		problem.AddParameterBlock(framej->optimal_Twb_.data(), SO3d::num_parameters, local_parameterization_rj);
+		problem.SetParameterBlockConstant(framej->optimal_Twb_.data());
+
+		ceres::CostFunction* cost_function = ceres_slover::PreintegrationRotationError::Create(framej->getPreintergration());
+		res_ids[i-1] = problem.AddResidualBlock(cost_function, nullptr, framei->optimal_Twb_.data(), framej->optimal_Twb_.data(), dbisa_gyro.data());
+	}
+
+	ceres::Solver::Options options;
+	ceres::Solver::Summary summary;
+	options.linear_solver_type = ceres::DENSE_SCHUR;
+	options.minimizer_progress_to_stdout = report & verbose;
+	options.max_linear_solver_iterations = 20;
+
+	ceres::Solve(options, &problem, &summary);
+
+	reportInfo<3>(problem, summary, report, verbose);
+
+	return dbisa_gyro;
+
+}
+
+Vector4d Optimizer::sloveGravityAndScale(const std::vector<Frame::Ptr> &frames, bool report, bool verbose)
+{
+	const size_t N = frames.size();
+	if (N < 4)
+		return Vector4d(0,0,0,0);
+
+	const size_t M = N - 2;
+
+	MatrixXd A; A.resize(3 * M, 4);
+	VectorXd b; b.resize(3 * M);
+
+	const Matrix4d Tcb = frames.back()->cam_->T_CB();
+	const Matrix3d Rcb = Tcb.topLeftCorner<3, 3>();
+	const Vector3d tcb = Tcb.topRightCorner<3, 1>();
+	const Matrix3d half_I3x3 = 0.5 * Matrix3d::Identity(3, 3);
+	for (size_t i = 0; i < M; i++)
+	{
+		const Frame::Ptr frame1 = frames[i];
+		const Frame::Ptr frame2 = frames[i+1];
+		const Frame::Ptr frame3 = frames[i+2];
+
+		const Preintegration & preint12 = frame2->getPreintergrationConst();
+		const Preintegration & preint23 = frame3->getPreintergrationConst();
+		const Vector3d & dv12 = preint12.deltaVij();
+		const Vector3d & dp12 = preint12.deltaPij();
+		const Vector3d & dp23 = preint23.deltaPij();
+		const double dt12 = preint12.deltaTij();
+		const double dt23 = preint23.deltaTij();
+		const double dt12dt23 = dt12 * dt23;
+
+		const Vector3d pwc1 = frame1->Twc().translation();
+		const Vector3d pwc2 = frame2->Twc().translation();
+		const Vector3d pwc3 = frame3->Twc().translation();
+		const Matrix3d Rwc1 = frame1->Twc().rotationMatrix();
+		const Matrix3d Rwc2 = frame2->Twc().rotationMatrix();
+		const Matrix3d Rwc3 = frame3->Twc().rotationMatrix();
+
+		A.block<3, 1>(3 * i, 0) = (pwc2 - pwc3)*dt12 + (pwc2 - pwc1)*dt23;
+		A.block<3, 3>(3 * i, 1) = dt12dt23 * (dt12 + dt23) * half_I3x3;
+		b.segment<3>(3 * i) = Rwc1 * Rcb * (dp12 * dt23 - dv12 * dt12dt23) - Rwc2 * Rcb * dp23 * dt12 
+			+ (Rwc3 - Rwc2) * tcb * dt12 + (Rwc1 - Rwc2) * tcb * dt23;
+	}
+
+	Vector4d x = A.bdcSvd(ComputeThinU | ComputeThinV).solve(b);
+
+
+	return x;
+
+}
+
+void Optimizer::initIMU(const std::vector<Frame::Ptr> &frames, bool report, bool verbose)
+{
+	const size_t N = frames.size();
+	if (N < 2)
+		return ;
+
+	Vector3d dbias_gyro = Optimizer::sloveInitialGyroBias(frames, report, verbose);
+
+	std::cout << "delta_bias_gyro: " << dbias_gyro.transpose() << std::endl;
+
+	for (size_t i = 1; i < N; i++)
+	{
+		frames[i]->getPreintergration().correctDeltaBiasGyro(dbias_gyro);
+	}
+
+	if (N < 4)
+		return;
+
+	Vector4d gravity_and_scale = Optimizer::sloveGravityAndScale(frames, report, verbose);
+
+	std::cout << "gravity_and_scale: " << gravity_and_scale.transpose() << std::endl;
 }
 
 

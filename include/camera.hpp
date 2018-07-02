@@ -54,13 +54,13 @@ public:
 
     inline const double cy() const { return cy_; };
 
-    inline const Matrix3d K() const { return K_; };
+    inline const Matrix3d & K() const { return K_; };
 
-    inline const VectorXd D() const { return D_; };
+    inline const VectorXd & D() const { return D_; };
 
-	inline const Matrix4d T_BC() const { return T_BC_; };
+	inline const Matrix4d & T_BC() const { return T_BC_; };
 
-	inline const Matrix4d T_CB() const { return T_CB_; };
+	inline const Matrix4d & T_CB() const { return T_CB_; };
 
     inline const Model model() const { return model_; }
 

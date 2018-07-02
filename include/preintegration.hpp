@@ -23,23 +23,27 @@ public:
 
 	void correct(const IMUBias &bias);
 
+	void correctDeltaBiasGyro(const Vector3d &delta_biasgyro);
+
+	void correctDeltaBiasAcc(const Vector3d &delta_biasacc);
+
 	void reset();
 
 	static void integrate(Preintegration &preint, const std::vector<IMUData> &imu_data, const IMUBias &bias_last, double timestampi, double timestamej);
 
-	const double deltaTij() const { return delta_t_; }
-	const Vector3d deltaPij() const { return delta_pos_; }
-	const Vector3d deltaVij() const { return delta_vel_; }
-	const Matrix3d deltaRij() const { return delta_rot_; }
-
-	const Matrix3d jacobdRBiasGyro() const { return jacob_delta_rot_biasgyro_; }
-	const Matrix3d jacobdPBiasAcc() const { return jacob_delta_pos_biasacc_; }
-	const Matrix3d jacobdPBiasGyro() const { return jacob_delta_pos_biasgyro_; }
-	const Matrix3d jacobdVBiasAcc() const { return jacob_delta_vel_biasacc_; }
-	const Matrix3d jacobdVBiasGyro() const { return jacob_delta_vel_biasgyro_; }
-
-	const IMUBias getBias() const { return bias_; };
-	const Matrix9d getMeasCov() const { return imu_meas_cov_; }
+	const inline double deltaTij() const { return delta_t_; }
+	const inline Vector3d & deltaPij() const { return delta_pos_; }
+	const inline Vector3d & deltaVij() const { return delta_vel_; }
+	const inline Matrix3d & deltaRij() const { return delta_rot_; }
+ 
+	const inline Matrix3d & jacobdRBiasGyro() const { return jacob_delta_rot_biasgyro_; }
+	const inline Matrix3d & jacobdPBiasAcc() const { return jacob_delta_pos_biasacc_; }
+	const inline Matrix3d & jacobdPBiasGyro() const { return jacob_delta_pos_biasgyro_; }
+	const inline Matrix3d & jacobdVBiasAcc() const { return jacob_delta_vel_biasacc_; }
+	const inline Matrix3d & jacobdVBiasGyro() const { return jacob_delta_vel_biasgyro_; }
+ 
+	const inline IMUBias & getBias() const { return bias_; };
+	const inline Matrix9d & getMeasCov() const { return imu_meas_cov_; }
 
 private:
 
