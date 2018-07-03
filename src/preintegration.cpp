@@ -10,6 +10,9 @@ Matrix3d IMUPara::gyro_meas_cov_;
 Matrix3d IMUPara::acc_bias_rw_cov_;
 Matrix3d IMUPara::gyro_bias_rw_cov_;
 
+unsigned int IMUPara::init_ = 0;
+double IMUPara::gravity_ = 9.8;
+
 Preintegration::Preintegration()
 {
 	reset();

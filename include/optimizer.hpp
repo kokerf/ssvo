@@ -97,11 +97,13 @@ public:
 	}
 
 	//! for vio
-	static Vector3d sloveInitialGyroBias(const std::vector<Frame::Ptr> &frames, bool report = false, bool verbose = false);
+	static bool sloveInitialGyroBias(const std::vector<KeyFrame::Ptr> &frames, Vector3d &dbias_gyro, bool report = false, bool verbose = false);
 
-	static Vector4d sloveGravityAndScale(const std::vector<Frame::Ptr> &frames, bool report = false, bool verbose = false);
+	static bool sloveScaleAndGravity(const std::vector<KeyFrame::Ptr> &frames, Vector4d &scale_and_gravity, double threshold = 10, bool verbose = false);
 
-	static void initIMU(const std::vector<Frame::Ptr> &frames, bool report = false, bool verbose = false);
+	static bool sloveInitialAccBiasAndRefine(const std::vector<KeyFrame::Ptr> &frames, Vector4d &scale_and_gravity, Vector3d &dbias_acc, double threshold = 1e5, bool verbose = false);
+
+	static bool initIMU(const std::vector<KeyFrame::Ptr> &frames, VectorXd &result, bool report = false, bool verbose = false);
 };
 
 namespace ceres_slover {

@@ -22,14 +22,15 @@ int main(int argc, char *argv[])
 	EuRocDataReader dataset(argv[2]);
 	IMUPara::setMeasCov(2.0000e-3, 1.6968e-04);
 	IMUPara::setBiasCov(3.0000e-3, 1.9393e-05);
-	Vector3d acc_bias(0.0, 0.0, 0.0);// -0.022996, 0.125896, 0.057076);
+	IMUPara::setGravity(47.376, 0.0);
 	Vector3d gyro_bias(0.0, 0.0, 0.0);// (-0.002571, 0.021269, 0.076861);
+	Vector3d acc_bias(0.0, 0.0, 0.0);// -0.022996, 0.125896, 0.057076);
 	IMUBias imu_bias_zero(gyro_bias, acc_bias);
 	Preintegration init_preint(imu_bias_zero);
 
-	ssvo::Timer<std::micro> timer;
+	ssvo::Timer<std::milli> timer;
 
-	std::vector<Frame::Ptr> all_frames;
+	std::vector<KeyFrame::Ptr> all_frames;
 	AbstractCamera::Ptr camera = AbstractCamera::Ptr(new AbstractCamera(640, 480, cv::Mat::eye(4,4,CV_64FC1)));
 
 	std::ofstream out_file("imu_bias.txt");
@@ -38,7 +39,7 @@ int main(int argc, char *argv[])
 
 	size_t imu_idx = 0;
 	const size_t N = 100;// dataset.leftImageSize();
-	const double keyframe_duration = 0.30;
+	const double keyframe_duration = 0.10;
 	for (size_t i = 0; i < N; i++)
 	{
 		const EuRocDataReader::Image image_data = dataset.leftImage(i);
@@ -58,7 +59,7 @@ int main(int argc, char *argv[])
 		Vector3d tran_wc(ground_truth.p[0], ground_truth.p[1], ground_truth.p[2]);
 		Sophus::SE3d Twc(quat_wc, tran_wc);
 
-		Frame::Ptr frame_cur = Frame::create(image, image_data.timestamp, camera);
+		KeyFrame::Ptr frame_cur = KeyFrame::create(Frame::create(image, image_data.timestamp, camera));
 		frame_cur->setPose(Twc);
 
 		//! set first frame
@@ -102,16 +103,27 @@ int main(int argc, char *argv[])
 
 		all_frames.push_back(frame_cur);
 		
-		Optimizer::initIMU(all_frames);
+		timer.start();
+		VectorXd result;
+		bool intialed = Optimizer::initIMU(all_frames, result, true);
+		double dt = timer.stop();
+
+		std::cout << "result: " << result.transpose() << std::endl;
 
 		IMUBias cur_bias = all_frames.back()->getPreintergrationConst().getBias();
 	
+		size_t value = result.size();
+		result.conservativeResize(10);
+		result.tail(10 - value).setZero();
+
 		out_file << all_frames.back()->timestamp_
-			<< " " << cur_bias.gyro_bias_[0] << " " << cur_bias.gyro_bias_[1] << " " << cur_bias.gyro_bias_[2]
-			<< " " << ground_truth.w[0] << " " << ground_truth.w[1] << " " << ground_truth.w[2] << std::endl;
+			<< " " << result .transpose() << " " << dt << " " << (int)intialed << " " << all_frames.size() << std::endl;
 	}
 
 	out_file.close();
+
+	getchar();
+	getchar();
 
 	return 0;
 }

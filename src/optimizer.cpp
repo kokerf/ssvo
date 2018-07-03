@@ -559,14 +559,15 @@ void Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool repo
 
 
 //! ===============================  for vio  ====================================
-Vector3d Optimizer::sloveInitialGyroBias(const std::vector<Frame::Ptr> &frames, bool report, bool verbose)
+bool Optimizer::sloveInitialGyroBias(const std::vector<KeyFrame::Ptr> &frames, Vector3d &dbias_gyro, bool report, bool verbose)
 {
+	dbias_gyro.setZero();
 	const size_t N = frames.size();
 	if (N < 2)
-		return Vector3d(0.0, 0.0, 0.0);
+		return false;
 
 	ceres::Problem problem;
-	Vector3d dbisa_gyro(0.0, 0.0, 0.0);
+	dbias_gyro = Vector3d(0.0, 0.0, 0.0);
 
 	std::vector<ceres::ResidualBlockId> res_ids(N - 1);
 	for (size_t i = 0; i < N; i++)
@@ -590,7 +591,7 @@ Vector3d Optimizer::sloveInitialGyroBias(const std::vector<Frame::Ptr> &frames, 
 		problem.SetParameterBlockConstant(framej->optimal_Twb_.data());
 
 		ceres::CostFunction* cost_function = ceres_slover::PreintegrationRotationError::Create(framej->getPreintergration());
-		res_ids[i-1] = problem.AddResidualBlock(cost_function, nullptr, framei->optimal_Twb_.data(), framej->optimal_Twb_.data(), dbisa_gyro.data());
+		res_ids[i-1] = problem.AddResidualBlock(cost_function, nullptr, framei->optimal_Twb_.data(), framej->optimal_Twb_.data(), dbias_gyro.data());
 	}
 
 	ceres::Solver::Options options;
@@ -603,15 +604,16 @@ Vector3d Optimizer::sloveInitialGyroBias(const std::vector<Frame::Ptr> &frames, 
 
 	reportInfo<3>(problem, summary, report, verbose);
 
-	return dbisa_gyro;
+	return true;
 
 }
 
-Vector4d Optimizer::sloveGravityAndScale(const std::vector<Frame::Ptr> &frames, bool report, bool verbose)
+bool Optimizer::sloveScaleAndGravity(const std::vector<KeyFrame::Ptr> &frames, Vector4d &scale_and_gravity, double threshold, bool verbose)
 {
+	scale_and_gravity.setZero();
 	const size_t N = frames.size();
 	if (N < 4)
-		return Vector4d(0,0,0,0);
+		return false;
 
 	const size_t M = N - 2;
 
@@ -633,6 +635,7 @@ Vector4d Optimizer::sloveGravityAndScale(const std::vector<Frame::Ptr> &frames, 
 		const Vector3d & dv12 = preint12.deltaVij();
 		const Vector3d & dp12 = preint12.deltaPij();
 		const Vector3d & dp23 = preint23.deltaPij();
+
 		const double dt12 = preint12.deltaTij();
 		const double dt23 = preint23.deltaTij();
 		const double dt12dt23 = dt12 * dt23;
@@ -644,40 +647,172 @@ Vector4d Optimizer::sloveGravityAndScale(const std::vector<Frame::Ptr> &frames, 
 		const Matrix3d Rwc2 = frame2->Twc().rotationMatrix();
 		const Matrix3d Rwc3 = frame3->Twc().rotationMatrix();
 
+		//! lambda
 		A.block<3, 1>(3 * i, 0) = (pwc2 - pwc3)*dt12 + (pwc2 - pwc1)*dt23;
+		//! beta
 		A.block<3, 3>(3 * i, 1) = dt12dt23 * (dt12 + dt23) * half_I3x3;
+		//! gamma
 		b.segment<3>(3 * i) = Rwc1 * Rcb * (dp12 * dt23 - dv12 * dt12dt23) - Rwc2 * Rcb * dp23 * dt12 
 			+ (Rwc3 - Rwc2) * tcb * dt12 + (Rwc1 - Rwc2) * tcb * dt23;
 	}
 
-	Vector4d x = A.bdcSvd(ComputeThinU | ComputeThinV).solve(b);
+	BDCSVD<MatrixXd> bdcSvd(A, ComputeThinU | ComputeThinV);
 
+	Vector4d x = bdcSvd.solve(b);
+	scale_and_gravity = x;
 
-	return x;
+	Vector4d sigular_values = bdcSvd.singularValues();
+	const double max_sigular_value = sigular_values.maxCoeff();
+	const double min_sigular_value = sigular_values.minCoeff();
+	const double condition_number = max_sigular_value / min_sigular_value;
+	LOG_IF(INFO, verbose) << " Slove Scale & Graity, x: " << x.transpose() <<", sigular value: " << sigular_values.transpose() << ", cond: " << condition_number;
 
+	if (min_sigular_value < 1e-10 || condition_number > threshold)
+		return false;
+
+	return true;
 }
 
-void Optimizer::initIMU(const std::vector<Frame::Ptr> &frames, bool report, bool verbose)
+bool Optimizer::sloveInitialAccBiasAndRefine(const std::vector<KeyFrame::Ptr> &frames, Vector4d &scale_and_gravity, Vector3d &dbias_acc, double threshold, bool verbose)
 {
+	dbias_acc.setZero();
 	const size_t N = frames.size();
-	if (N < 2)
-		return ;
+	if (N < 4)
+		return false;
 
-	Vector3d dbias_gyro = Optimizer::sloveInitialGyroBias(frames, report, verbose);
+	const Vector3d gravity_estimate = scale_and_gravity.tail<3>();
 
-	std::cout << "delta_bias_gyro: " << dbias_gyro.transpose() << std::endl;
+	//! gI vs gW, in direction
+	const Vector3d gravity_nominal(0.0, 0.0, -1.0);
+	const Vector3d gravity_world = gravity_estimate.normalized();
 
-	for (size_t i = 1; i < N; i++)
+	const Vector3d gI_cross_gW = SO3d::hat(gravity_nominal) * gravity_world;
+	const double gI_dot_gW = gravity_nominal.dot(gravity_world);
+	const double gI_cross_gW_norm = gI_cross_gW.norm();
+	const double theta = std::atan2(gI_cross_gW_norm, gI_dot_gW);
+	SO3d Rwi = SO3d::exp((theta / gI_cross_gW_norm)* gI_cross_gW);
+
+	const Vector3d gW0 = Rwi * gravity_nominal * IMUPara::gravity();
+	const Matrix3d negtive_half_Rwi_hatgI = -0.5 * Rwi.matrix() * SO3d::hat(gravity_nominal) * IMUPara::gravity();
+
+	//! slove
+	const size_t M = N - 2;
+
+	MatrixXd A; A.resize(3 * M, 6);
+	VectorXd b; b.resize(3 * M);
+
+	const Matrix4d Tcb = frames.back()->cam_->T_CB();
+	const Matrix3d Rcb = Tcb.topLeftCorner<3, 3>();
+	const Vector3d tcb = Tcb.topRightCorner<3, 1>();
+	const Matrix3d negtive_half_I3x3 = -0.5 * Matrix3d::Identity(3, 3);
+	for (size_t i = 0; i < M; i++)
 	{
-		frames[i]->getPreintergration().correctDeltaBiasGyro(dbias_gyro);
+		const Frame::Ptr frame1 = frames[i];
+		const Frame::Ptr frame2 = frames[i + 1];
+		const Frame::Ptr frame3 = frames[i + 2];
+
+		const Preintegration & preint12 = frame2->getPreintergrationConst();
+		const Preintegration & preint23 = frame3->getPreintergrationConst();
+		const Vector3d & dv12 = preint12.deltaVij();
+		const Vector3d & dp12 = preint12.deltaPij();
+		const Vector3d & dp23 = preint23.deltaPij();
+		const Matrix3d & Jdpba12 = preint12.jacobdPBiasAcc();
+		const Matrix3d & Jdpba23 = preint23.jacobdPBiasAcc();
+		const Matrix3d & Jdvba12 = preint12.jacobdVBiasAcc();
+
+		const double dt12 = preint12.deltaTij();
+		const double dt23 = preint23.deltaTij();
+		const double dt12dt23 = dt12 * dt23;
+		const double dt12dt23_sum = dt12dt23 * (dt12 + dt23);
+
+		const Vector3d pwc1 = frame1->Twc().translation();
+		const Vector3d pwc2 = frame2->Twc().translation();
+		const Vector3d pwc3 = frame3->Twc().translation();
+		const Matrix3d Rwc1 = frame1->Twc().rotationMatrix();
+		const Matrix3d Rwc2 = frame2->Twc().rotationMatrix();
+		const Matrix3d Rwc3 = frame3->Twc().rotationMatrix();
+
+		//! lambda
+		A.block<3, 1>(3 * i, 0) = (pwc2 - pwc3)*dt12 + (pwc2 - pwc1)*dt23;
+		//! phi
+		A.block<3, 2>(3 * i, 1) = dt12dt23_sum * negtive_half_Rwi_hatgI.block<3, 2>(0, 0);
+		//! zeta
+		A.block<3, 3>(3 * i, 3) = Rwc1 * Rcb * dt23 * (Jdvba12 * dt12 - Jdpba12) + Rwc2 * Rcb * Jdpba23 * dt12;
+		//! psi
+		b.segment<3>(3 * i) = Rwc1 * Rcb * (dp12 * dt23 - dv12 * dt12dt23) - Rwc2 * Rcb * dp23 * dt12
+			+ (Rwc3 - Rwc2) * tcb * dt12 + (Rwc1 - Rwc2) * tcb * dt23
+			- 0.5 * dt12dt23_sum * gW0;
 	}
 
-	if (N < 4)
-		return;
+	BDCSVD<MatrixXd> bdcSvd(A, ComputeThinU | ComputeThinV);
 
-	Vector4d gravity_and_scale = Optimizer::sloveGravityAndScale(frames, report, verbose);
+	VectorXd x = bdcSvd.solve(b);
 
-	std::cout << "gravity_and_scale: " << gravity_and_scale.transpose() << std::endl;
+	LOG_IF(INFO, verbose) << " Slove Acc & Refine, x: " << x.transpose();
+	
+	Vector3d delta_theta(x[1], x[2], 0);
+	scale_and_gravity[0] = x[0];
+	scale_and_gravity.tail<3>() = Rwi * SO3d::exp(delta_theta) * gravity_nominal * IMUPara::gravity();
+	dbias_acc = x.tail<3>();
+
+	static const double min_rot_angle = 3.1415926 / 6;//! for big acc bias, may be larger?
+	const double rot_angle = delta_theta.norm();
+	if (rot_angle > min_rot_angle)
+		return false;
+
+	VectorXd sigular_values = bdcSvd.singularValues();
+	const double max_sigular_value = sigular_values.maxCoeff();
+	const double min_sigular_value = sigular_values.minCoeff();
+	const double condition_number = max_sigular_value / min_sigular_value;
+
+	LOG_IF(INFO, verbose) << " Slove Acc & Refine, sigular value: " << sigular_values.transpose() << ", cond: " << condition_number;
+
+	if (min_sigular_value < 1e-10 || condition_number > threshold)
+		return false;
+
+	return true;
+}
+
+bool Optimizer::initIMU(const std::vector<KeyFrame::Ptr> &frames, VectorXd &result, bool report, bool verbose)
+{
+	result.setZero();
+	const size_t N = frames.size();
+	if (N < 2)
+		return false;
+
+	bool succeed = false;
+
+	//! slove gyro bias
+	Vector3d dbias_gyro;
+	succeed = Optimizer::sloveInitialGyroBias(frames, dbias_gyro, report, verbose);
+	result = dbias_gyro;
+	if (!succeed) return false;
+
+	LOG_IF(INFO, report) << "[Optimizer] [1/3] dbias_gyro: " << dbias_gyro.transpose() << std::endl;
+
+	//! slove scale and gravity
+	Vector4d scale_and_gravity;
+    succeed = Optimizer::sloveScaleAndGravity(frames, scale_and_gravity, 10.0, verbose);
+	result.resize(7);
+	result.head<3>() = dbias_gyro;
+	result.tail<4>() = scale_and_gravity;
+	if (!succeed) return false;
+
+	LOG_IF(INFO, report) << "[Optimizer] [2/3] scale_and_gravity: " << scale_and_gravity.transpose() << std::endl;
+
+	//! slove acc bias and refine
+	Vector4d scale_and_gravity_new = scale_and_gravity;
+	Vector3d dbias_acc;
+	succeed = Optimizer::sloveInitialAccBiasAndRefine(frames, scale_and_gravity_new, dbias_acc, 1e3, verbose);
+	result.resize(10);
+	result.head<3>() = dbias_gyro;
+	result.segment<4>(3) = scale_and_gravity;
+	result.tail<3>() = dbias_acc;
+	if (!succeed) return false;
+
+	LOG_IF(INFO, report) << "[Optimizer] [3/3] scale_and_gravity: " << scale_and_gravity_new.transpose() << ", delta_bias_acc: " << dbias_acc.transpose() << std::endl;
+
+	return true;
 }
 
 

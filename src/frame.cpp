@@ -107,6 +107,18 @@ void Frame::setTcw(const SE3d &Tcw)
 
 }
 
+void Frame::setVwc(const Vector3d & Vwc)
+{
+	std::lock_guard<std::mutex> lock(mutex_pose_);
+	Vw_ = Vwc;
+}
+
+const Vector3d Frame::Vwc()
+{
+	std::lock_guard<std::mutex> lock(mutex_pose_);
+	return Vw_;
+}
+
 bool Frame::isVisiable(const Vector3d &xyz_w, const int border)
 {
     SE3d Tcw;

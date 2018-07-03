@@ -48,6 +48,10 @@ public:
     //! Set Extrinsic Matrix
     void setTcw(const SE3d& Tcw);
 
+	void setVwc(const Vector3d & Vwc);
+
+	const Vector3d Vwc();
+
 	//! IMU Parameters
 	void setIMUData(const std::vector<IMUData> &data) { imu_data_ = data; };
 
@@ -164,6 +168,7 @@ protected:
     SE3d Tcw_;
     SE3d Twc_;
     Vector3d Dw_;
+	Vector3d Vw_;
 
     std::shared_ptr<KeyFrame> ref_keyframe_;
 
