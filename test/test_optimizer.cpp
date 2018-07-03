@@ -21,14 +21,7 @@ int main(int argc, char const *argv[])
     Config::file_name_ = std::string(argv[2]);
     int width = cam->width();
     int height = cam->height();
-    cv::Mat K = cam->K();
 
-    std::cout << "K: \n" << K << std::endl;
-    K.at<double>(0,0) += 0.5;
-    K.at<double>(0,2) -= 0.5;
-    K.at<double>(1,1) += 1.5;
-    K.at<double>(1,2) += 1.0;
-    std::cout << "K with noise: \n" << K << std::endl;
     cv::Mat img = cv::Mat(width, height, CV_8UC1);
 
     KeyFrame::Ptr kf1 = KeyFrame::create(Frame::create(img, 0, cam));
