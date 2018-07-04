@@ -6,47 +6,49 @@
 namespace ssvo{
 
 
-void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame::Ptr &kf2, bool report, bool verbose)
+void Optimizer::globleBundleAdjustment(const Map::Ptr &map, int max_iters, bool report, bool verbose)
 {
-    kf1->optimal_Tcw_ = kf1->Tcw();
-    kf2->optimal_Tcw_ = kf2->Tcw();
+	if (map->KeyFramesInMap() < 2)
+		return;
+
+	std::vector<KeyFrame::Ptr> all_kfs = map->getAllKeyFrames();
+	std::vector<MapPoint::Ptr> all_mpts = map->getAllMapPoints();
+
+	static double focus_length = MIN(all_kfs.back()->cam_->fx(), all_kfs.back()->cam_->fy());
+	static double pixel_usigma = Config::imagePixelSigma() / focus_length;
 
     ceres::Problem problem;
-    ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
-    problem.AddParameterBlock(kf1->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
-    problem.AddParameterBlock(kf2->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
-    problem.SetParameterBlockConstant(kf1->optimal_Tcw_.data());
 
-    std::vector<Feature::Ptr> fts1;
-    kf1->getFeatures(fts1);
-    MapPoints mpts;
+	for (const KeyFrame::Ptr &kf : all_kfs)
+	{
+		kf->optimal_Tcw_ = kf->Tcw();
+		ceres::LocalParameterization* local_parameterization = new ceres_slover::SE3Parameterization();
+		problem.AddParameterBlock(kf->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
+		if(kf->id_ == 0)
+			problem.SetParameterBlockConstant(kf->optimal_Tcw_.data());
+	}
 
-    for(const Feature::Ptr &ft1 : fts1)
-    {
-        MapPoint::Ptr mpt = ft1->mpt_;
-        if(mpt == nullptr)//! should not happen
-            continue;
+	double scale = pixel_usigma * 2;
+	ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
+	for (const MapPoint::Ptr &mpt : all_mpts)
+	{
+		mpt->optimal_pose_ = mpt->pose();
+		const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
 
-        Feature::Ptr ft2 = mpt->findObservation(kf2);
-
-        if(ft2 == nullptr || ft2->mpt_ == nullptr)
-            continue;
-
-        mpt->optimal_pose_ = mpt->pose();
-        mpts.push_back(mpt);
-
-        ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft1->fn_[0]/ft1->fn_[2], ft1->fn_[1]/ft1->fn_[2]);//, 1.0/(1<<ft1->level_));
-        problem.AddResidualBlock(cost_function1, NULL, kf1->optimal_Tcw_.data(), mpt->optimal_pose_.data());
-
-        ceres::CostFunction* cost_function2 = ceres_slover::ReprojectionErrorSE3::Create(ft2->fn_[0]/ft2->fn_[2], ft2->fn_[1]/ft2->fn_[2]);//, 1.0/(1<<ft2->level_));
-        problem.AddResidualBlock(cost_function2, NULL, kf2->optimal_Tcw_.data(), mpt->optimal_pose_.data());
-    }
-
+		for (const auto &item : obs)
+		{
+			const KeyFrame::Ptr &kf = item.first;
+			const Feature::Ptr &ft = item.second;
+			ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0] / ft->fn_[2], ft->fn_[1] / ft->fn_[2]);//, 1.0/(1<<ft->level_));
+			problem.AddResidualBlock(cost_function1, lossfunction, kf->optimal_Tcw_.data(), mpt->optimal_pose_.data());
+		}
+	}
 
     ceres::Solver::Options options;
     ceres::Solver::Summary summary;
     options.linear_solver_type = ceres::DENSE_SCHUR;
     options.minimizer_progress_to_stdout = report & verbose;
+    options.max_num_iterations = max_iters;
 //    options_.gradient_tolerance = 1e-4;
 //    options_.function_tolerance = 1e-4;
     //options_.max_solver_time_in_seconds = 0.2;
@@ -54,14 +56,14 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
     ceres::Solve(options, &problem, &summary);
 
     //! update pose
-    kf2->setTcw(kf2->optimal_Tcw_);
-    std::for_each(mpts.begin(), mpts.end(), [](MapPoint::Ptr mpt){mpt->setPose(mpt->optimal_pose_);});
+	std::for_each(all_kfs.begin(), all_kfs.end(), [](KeyFrame::Ptr kf) {kf->setTcw(kf->optimal_Tcw_); });
+	std::for_each(all_mpts.begin(), all_mpts.end(), [](MapPoint::Ptr mpt){mpt->setPose(mpt->optimal_pose_);});
 
     //! Report
     reportInfo<2>(problem, summary, report, verbose);
 }
 
-void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int size, int min_shared_fts, bool report, bool verbose)
+void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<MapPoint::Ptr> &bad_mpts, int max_iters, int size, int min_shared_fts, bool report, bool verbose)
 {
     static double focus_length = MIN(keyframe->cam_->fx(), keyframe->cam_->fy());
     static double pixel_usigma = Config::imagePixelSigma()/focus_length;
@@ -133,6 +135,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
     ceres::Solver::Summary summary;
     options.linear_solver_type = ceres::DENSE_SCHUR;
     options.minimizer_progress_to_stdout = report & verbose;
+    options.max_num_iterations = max_iters;
 
     ceres::Solve(options, &problem, &summary);
 

@@ -165,38 +165,7 @@ void LocalMapper::run()
         KeyFrame::Ptr keyframe_cur = checkNewKeyFrame();
         if(keyframe_cur)
         {
-            mapTrace->startTimer("total");
-            std::list<MapPoint::Ptr> bad_mpts;
-            int new_seed_features = 0;
-            int new_local_features = 0;
-            if(map_->kfs_.size() > 2)
-            {
-//                new_seed_features = createFeatureFromSeedFeature(keyframe_cur);
-                mapTrace->startTimer("reproj");
-                new_local_features = createFeatureFromLocalMap(keyframe_cur, options_.num_reproject_kfs);
-                mapTrace->stopTimer("reproj");
-                LOG_IF(INFO, report_) << "[Mapper] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
-
-                mapTrace->startTimer("local_ba");
-                Optimizer::localBundleAdjustment(keyframe_cur, bad_mpts, options_.num_local_ba_kfs, options_.min_local_ba_connected_fts, report_, verbose_);
-                mapTrace->stopTimer("local_ba");
-            }
-
-            for(const MapPoint::Ptr &mpt : bad_mpts)
-            {
-                map_->removeMapPoint(mpt);
-            }
-
-            checkCulling(keyframe_cur);
-
-            mapTrace->startTimer("dbow");
-            addToDatabase(keyframe_cur);
-            mapTrace->stopTimer("dbow");
-
-            mapTrace->stopTimer("total");
-            mapTrace->writeToFile();
-
-            keyframe_last_ = keyframe_cur;
+            processNewKeyFrame(keyframe_cur);
         }
     }
 }
@@ -231,37 +200,44 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
     }
     else
     {
-        mapTrace->startTimer("total");
-        std::list<MapPoint::Ptr> bad_mpts;
-        int new_seed_features = 0;
-        int new_local_features = 0;
-        if(map_->kfs_.size() > 2)
-        {
-//            new_seed_features = createFeatureFromSeedFeature(keyframe);
-            mapTrace->startTimer("reproj");
-            new_local_features = createFeatureFromLocalMap(keyframe, options_.num_reproject_kfs);
-            mapTrace->stopTimer("reproj");
-            LOG_IF(INFO, report_) << "[Mapper] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
-
-            mapTrace->startTimer("local_ba");
-            Optimizer::localBundleAdjustment(keyframe, bad_mpts, options_.num_local_ba_kfs, options_.min_local_ba_connected_fts, report_, verbose_);
-            mapTrace->stopTimer("local_ba");
-        }
-
-        for(const MapPoint::Ptr &mpt : bad_mpts)
-        {
-            map_->removeMapPoint(mpt);
-        }
-
-        checkCulling(keyframe);
-
-        addToDatabase(keyframe);
-
-        mapTrace->stopTimer("total");
-        mapTrace->writeToFile();
-
-        keyframe_last_ = keyframe;
+        processNewKeyFrame(keyframe);
     }
+}
+
+void LocalMapper::processNewKeyFrame(KeyFrame::Ptr keyframe)
+{
+    mapTrace->startTimer("total");
+    std::list<MapPoint::Ptr> bad_mpts;
+    int new_seed_features = 0;
+    int new_local_features = 0;
+    if (map_->kfs_.size() > 2)
+    {
+        //  new_seed_features = createFeatureFromSeedFeature(keyframe_cur);
+        mapTrace->startTimer("reproj");
+        new_local_features = createFeatureFromLocalMap(keyframe, options_.num_reproject_kfs);
+        mapTrace->stopTimer("reproj");
+        LOG_IF(INFO, report_) << "[Mapper] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
+
+        mapTrace->startTimer("local_ba");
+        Optimizer::localBundleAdjustment(keyframe, bad_mpts, 20, options_.num_local_ba_kfs, options_.min_local_ba_connected_fts, report_, verbose_);
+        mapTrace->stopTimer("local_ba");
+    }
+
+    for (const MapPoint::Ptr &mpt : bad_mpts)
+    {
+        map_->removeMapPoint(mpt);
+    }
+
+    checkCulling(keyframe);
+
+    mapTrace->startTimer("dbow");
+    addToDatabase(keyframe);
+    mapTrace->stopTimer("dbow");
+
+    mapTrace->stopTimer("total");
+    mapTrace->writeToFile();
+
+    keyframe_last_ = keyframe;
 }
 
 void LocalMapper::finishLastKeyFrame()

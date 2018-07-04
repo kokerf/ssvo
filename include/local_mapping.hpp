@@ -48,6 +48,8 @@ private:
 
     KeyFrame::Ptr checkNewKeyFrame();
 
+	void processNewKeyFrame(KeyFrame::Ptr keyframe);
+
     void finishLastKeyFrame();
 
     int createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe);
@@ -97,7 +99,7 @@ private:
     bool stop_require_;
     std::mutex mutex_stop_;
     std::mutex mutex_keyframe_;
-    std::mutex mutex_optimalize_mpts_;
+	std::mutex mutex_optimalize_mpts_;
     std::condition_variable cond_process_;
 
 };

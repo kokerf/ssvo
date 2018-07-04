@@ -154,7 +154,7 @@ System::Status System::initialize()
 
     LOG_ASSERT(kf0 != nullptr && kf1 != nullptr) << "Can not find intial keyframes in map!";
 
-    Optimizer::twoViewBundleAdjustment(kf0, kf1, true);
+    Optimizer::globleBundleAdjustment(mapper_->map_, 20, true);
 
     LOG(WARNING) << "[System] End of two-view BA";
 
@@ -220,7 +220,7 @@ System::Status System::tracking()
     calcLightAffine();
     sysTrace->stopTimer("light_affine");
 
-    //！ save frame pose
+    //! save frame pose
     frame_timestamp_buffer_.push_back(current_frame_->timestamp_);
     reference_keyframe_buffer_.push_back(current_frame_->getRefKeyFrame());
     frame_pose_buffer_.push_back(current_frame_->pose());//current_frame_->getRefKeyFrame()->Tcw() * current_frame_->pose());

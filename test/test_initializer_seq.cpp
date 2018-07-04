@@ -178,7 +178,7 @@ int main(int argc, char const *argv[])
     LOG(INFO) <<"Pose:\n" << kf0->pose().matrix();
     LOG(INFO) << "Error before BA: " << error;
 
-    Optimizer::twoViewBundleAdjustment(kf0, kf1, true, true);
+    Optimizer::globleBundleAdjustment(mapper->map_, 20, true, true);
 
     LOG(INFO) <<"Pose:\n" << kf1->pose().matrix();
     evalueErrors(kf0, kf1, error);
