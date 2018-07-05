@@ -97,13 +97,15 @@ public:
 	}
 
 	//! for vio
-	static bool sloveInitialGyroBias(const std::vector<KeyFrame::Ptr> &frames, Vector3d &dbias_gyro, bool report = false, bool verbose = false);
+	static bool sloveInitialGyroBias(const std::vector<Frame::Ptr> &frames, Vector3d &dbias_gyro, bool report = false, bool verbose = false);
 
-	static bool sloveScaleAndGravity(const std::vector<KeyFrame::Ptr> &frames, Vector4d &scale_and_gravity, double threshold = 10, bool verbose = false);
+    static bool sloveScaleAndGravity(const std::vector<Frame::Ptr> &frames, double &scale, Vector3d &gravity, bool report = false, bool verbose = false);
 
-	static bool sloveInitialAccBiasAndRefine(const std::vector<KeyFrame::Ptr> &frames, Vector4d &scale_and_gravity, Vector3d &dbias_acc, double threshold = 1e5, bool verbose = false);
+    static bool sloveScaleAndGravity(const std::vector<Frame::Ptr> &frames, Vector4d &scale_and_gravity, double threshold = 1e3, bool verbose = false);
 
-	static bool initIMU(const std::vector<KeyFrame::Ptr> &frames, VectorXd &result, bool report = false, bool verbose = false);
+	static bool sloveInitialAccBiasAndRefine(const std::vector<Frame::Ptr> &frames, Vector4d &scale_and_gravity, Vector3d &dbias_acc, double threshold = 1e5, bool verbose = false);
+
+	static bool initIMU(const std::vector<Frame::Ptr> &frames, VectorXd &result, bool report = false, bool verbose = false);
 };
 
 namespace ceres_slover {
