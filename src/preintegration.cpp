@@ -117,6 +117,7 @@ void Preintegration::integrate(Preintegration &preint, const std::vector<IMUData
 	LOG_ASSERT(!imu_data.empty()) << "Empty IMU data!!!";
 
 	preint = Preintegration(bias_last);
+    preint.start_t_ = timestampi;
 
 	//! get time gap between last frame
 	double timestamp_last = timestampi;

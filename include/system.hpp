@@ -33,7 +33,7 @@ public:
 
     System(std::string config_file, std::string calib_flie);
 
-    void saveTrajectoryTUM(const std::string &file_name);
+    void saveTrajectoryTUM(const std::string &file_name, bool keyframe = false);
 
     ~System();
 

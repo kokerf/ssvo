@@ -31,7 +31,8 @@ public:
 
 	static void integrate(Preintegration &preint, const std::vector<IMUData> &imu_data, const IMUBias &bias_last, double timestampi, double timestamej);
 
-	const inline double deltaTij() const { return delta_t_; }
+    const inline double Ti() const { return start_t_; }
+    const inline double deltaTij() const { return delta_t_; }
 	const inline Vector3d & deltaPij() const { return delta_pos_; }
 	const inline Vector3d & deltaVij() const { return delta_vel_; }
 	const inline Matrix3d & deltaRij() const { return delta_rot_; }
@@ -47,6 +48,7 @@ public:
 
 private:
 
+    double start_t_;
 	double delta_t_;
 
 	//! preintegration value,  VI (33)

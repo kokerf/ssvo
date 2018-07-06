@@ -16,7 +16,8 @@ Seed::Seed(const KeyFrame::Ptr &kf, const Vector2d &px, const Vector3d &fn, cons
     b(5),
     mu(1.0/depth_mean),
     z_range(1.0/depth_min),
-    sigma2(z_range*z_range)
+    sigma2(z_range*z_range),
+    bad(false)
 {
     assert(fn_ref[2] == 1);
 }
@@ -121,6 +122,18 @@ double Seed::getInfoWeight()
 {
     std::lock_guard<std::mutex> lock(mutex_seed_);
     return MIN(convergence_rate * z_range/sigma2, 1.0);
+}
+
+void Seed::setBad()
+{
+    std::lock_guard<std::mutex> lock(mutex_seed_);
+    bad = true;
+}
+
+bool Seed::isBad()
+{
+    std::lock_guard<std::mutex> lock(mutex_seed_);
+    return bad;
 }
 
 }

@@ -495,7 +495,7 @@ void System::finishFrame()
 
 }
 
-void System::saveTrajectoryTUM(const std::string &file_name)
+void System::saveTrajectoryTUM(const std::string &file_name, bool keyframe)
 {
     std::ofstream f;
     f.open(file_name.c_str());
@@ -504,18 +504,41 @@ void System::saveTrajectoryTUM(const std::string &file_name)
     std::list<double>::iterator frame_timestamp_ptr = frame_timestamp_buffer_.begin();
     std::list<Sophus::SE3d>::iterator frame_pose_ptr = frame_pose_buffer_.begin();
     std::list<KeyFrame::Ptr>::iterator reference_keyframe_ptr = reference_keyframe_buffer_.begin();
-    const std::list<double>::iterator frame_timestamp = frame_timestamp_buffer_.end();
-    for(; frame_timestamp_ptr!= frame_timestamp; frame_timestamp_ptr++, frame_pose_ptr++, reference_keyframe_ptr++)
-    {
-        Sophus::SE3d frame_pose = (*frame_pose_ptr);//(*reference_keyframe_ptr)->Twc() * (*frame_pose_ptr);
-        Vector3d t = frame_pose.translation();
-        Quaterniond q = frame_pose.unit_quaternion();
 
-        f << std::setprecision(6) << *frame_timestamp_ptr << " "
-          << std::setprecision(9) << t[0] << " " << t[1] << " " << t[2] << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << std::endl;
+    if (keyframe)
+    {
+        std::vector<KeyFrame::Ptr> all_keyframes = mapper_->map_->getAllKeyFrames();
+        std::sort(all_keyframes.begin(), all_keyframes.end(), [](const KeyFrame::Ptr &kf1, const KeyFrame::Ptr &kf2) {return kf1->timestamp_ < kf2->timestamp_; });
+
+        //std::list<KeyFrame::Ptr> all_keyframes = reference_keyframe_buffer_;
+        //all_keyframes.sort([](const KeyFrame::Ptr &kf1, const KeyFrame::Ptr &kf2) {return kf1->timestamp_ < kf2->timestamp_; });
+        //all_keyframes.unique();
+        for (const KeyFrame::Ptr kf : all_keyframes)
+        {
+            Vector3d t = kf->pose().translation();
+            Quaterniond q = kf->pose().unit_quaternion();
+
+            f << std::setprecision(7) << kf->timestamp_ << " "
+                << std::setprecision(9) << t[0] << " " << t[1] << " " << t[2] << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << std::endl;
+
+        }
     }
+    else
+    {
+        const std::list<double>::iterator frame_timestamp = frame_timestamp_buffer_.end();
+        for (; frame_timestamp_ptr != frame_timestamp; frame_timestamp_ptr++, frame_pose_ptr++, reference_keyframe_ptr++)
+        {
+            Sophus::SE3d frame_pose = (*frame_pose_ptr);//(*reference_keyframe_ptr)->Twc() * (*frame_pose_ptr);
+            Vector3d t = frame_pose.translation();
+            Quaterniond q = frame_pose.unit_quaternion();
+
+            f << std::setprecision(7) << *frame_timestamp_ptr << " "
+                << std::setprecision(9) << t[0] << " " << t[1] << " " << t[2] << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << std::endl;
+        }
+    }
+
     f.close();
-    LOG(INFO) << " Trajectory saved!";
+    LOG(INFO) << " Trajectory saved as: " << file_name;
 }
 
 }

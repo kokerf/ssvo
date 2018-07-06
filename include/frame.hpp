@@ -96,6 +96,8 @@ public:
 
     bool hasSeed(const Seed::Ptr &seed);
 
+    void clearSeed();
+
     bool getSceneDepth(double &depth_mean, double &depth_min);
 
     std::map<std::shared_ptr<KeyFrame>, int> getOverLapKeyFrames();

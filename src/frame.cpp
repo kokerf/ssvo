@@ -249,6 +249,12 @@ bool Frame::hasSeed(const Seed::Ptr &seed)
     return (bool) seed_fts_.count(seed);
 }
 
+void Frame::clearSeed()
+{
+    std::lock_guard<std::mutex> lock(mutex_seed_);
+    seed_fts_.clear();
+}
+
 bool Frame::getSceneDepth(double &depth_mean, double &depth_min)
 {
     SE3d Tcw;

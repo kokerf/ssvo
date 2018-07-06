@@ -36,6 +36,8 @@ public:
     double getInvDepth();
     double getVariance();
     double getInfoWeight();
+    void setBad();
+    bool isBad();
 
     inline static Ptr create(const std::shared_ptr<KeyFrame> &kf, const Vector2d &px, const Vector3d &fn, const int level, double depth_mean, double depth_min)
     {return Ptr(new Seed(kf, px, fn, level, depth_mean, depth_min));}
@@ -47,6 +49,7 @@ private:
     double z_range;                         //!< Max range of the possible depth.
     double sigma2;                          //!< Variance of normal distribution.
     Matrix2d patch_cov;                     //!< Patch covariance in reference image.
+    bool bad;
 
     std::mutex mutex_seed_;
 
