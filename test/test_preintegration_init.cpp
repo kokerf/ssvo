@@ -219,7 +219,10 @@ int main(int argc, char *argv[])
 		out_file << timestamp << " " << result .transpose() << " " << dt << " " << (int)succeed << " " << initialier.frames().size() << std::endl;
 	}
 
-    keyframe_duration = 0.0;
+    keyframe_duration = 1.0;
+    bool align_to_gt = true;
+    bool use_gt = false;
+    Sophus::SE3d T_wofgt_from_wofc;
     Sophus::SE3d Twb_gt_last;
     const size_t M = poses.size();
     for (size_t i = 0; i < M; i++)
@@ -234,10 +237,22 @@ int main(int argc, char *argv[])
         double groundtruth_timestamp = -1;
         bool ok = initialier.getTruthPose(timestamp, groundtruth_timestamp, Twb_gt);
         if (!ok) continue;
-        
+
+        if (align_to_gt && initialier.frames().empty())
+        {
+            align_to_gt = false;
+            Sophus::SO3d R_wofgt_cam = Twb_gt.so3() * Tbc.so3();
+            Sophus::SO3d R_wofgt_from_wofc = R_wofgt_cam * Twc.so3().inverse();
+            T_wofgt_from_wofc.so3() = R_wofgt_from_wofc;
+            T_wofgt_from_wofc.translation().setZero();
+        }
+
         std::cout << "=== Add Frame at " << i << ", time: " << timestamp << " gt: " << groundtruth_timestamp << std::endl;
-        initialier.addNewFrame(image, Twc, timestamp, 0.0, true);
-        //initialier.addNewFrame(image, Twb_gt * Tbc, timestamp, 0.0, true);
+        
+        if(!use_gt)
+            initialier.addNewFrame(image, T_wofgt_from_wofc * Twc, timestamp, 0.0, true);
+        else
+            initialier.addNewFrame(image, Twb_gt * Tbc, timestamp, 0.0, true);
 
         Sophus::SE3d Tij = Twb_gt_last.inverse() * Twb_gt;
         Quaterniond qij = Tij.unit_quaternion();
