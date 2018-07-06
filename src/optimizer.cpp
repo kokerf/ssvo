@@ -798,6 +798,18 @@ bool Optimizer::initIMU(const std::vector<Frame::Ptr> &frames, VectorXd &result,
 
 	bool succeed = false;
 
+    //! check frame order
+    for (size_t i = 1; i < N; i++)
+    {
+        const Frame::Ptr &framei = frames[i - 1];
+        const Frame::Ptr &framej = frames[i];
+
+        LOG_ASSERT(std::abs(framei->timestamp_ - framej->getPreintergrationConst().Ti()) < 1e-4, 
+            << "Error frame data for imu init! Ti: " << framej->getPreintergrationConst().Ti()
+            << ", Fi: " << framei->id_ << "(" << framei->timestamp_ << "),"
+            << ", Fj: " << framej->id_ << "(" << framej->timestamp_ << ")");
+    }
+
 	//! slove gyro bias
 	Vector3d dbias_gyro;
 	succeed = Optimizer::sloveInitialGyroBias(frames, dbias_gyro, report, verbose);
@@ -808,7 +820,7 @@ bool Optimizer::initIMU(const std::vector<Frame::Ptr> &frames, VectorXd &result,
 
 	//! slove scale and gravity
 	Vector4d scale_and_gravity;
-    succeed = Optimizer::sloveScaleAndGravity(frames, scale_and_gravity, 1e3, true);// verbose);
+    succeed = Optimizer::sloveScaleAndGravity(frames, scale_and_gravity, 1e3, verbose);
 	result.resize(7);
 	result.head<3>() = dbias_gyro;
 	result.tail<4>() = scale_and_gravity;
@@ -819,7 +831,7 @@ bool Optimizer::initIMU(const std::vector<Frame::Ptr> &frames, VectorXd &result,
 	//! slove acc bias and refine
 	Vector4d scale_and_gravity_new = scale_and_gravity;
 	Vector3d dbias_acc;
-    succeed = Optimizer::sloveInitialAccBiasAndRefine(frames, scale_and_gravity_new, dbias_acc, 1e3, true);// verbose);
+    succeed = Optimizer::sloveInitialAccBiasAndRefine(frames, scale_and_gravity_new, dbias_acc, 1e3, verbose);
 	result.resize(10);
 	result.head<3>() = dbias_gyro;
 	result.segment<4>(3) = scale_and_gravity_new;
