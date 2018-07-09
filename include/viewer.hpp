@@ -35,7 +35,7 @@ private:
 
     void drawCamera(const Matrix4d &pose, cv::Scalar color);
 
-    void drawKeyFrames(Map::Ptr &map, KeyFrame::Ptr &reference, bool show_connections=false, bool show_current=false);
+    void drawKeyFrames(Map::Ptr &map, KeyFrame::Ptr &reference, bool show_connections=false, bool show_current=false, bool with_gravity = false);
 
     void drawCurrentFrame(const Matrix4d &pose, cv::Scalar color);
 

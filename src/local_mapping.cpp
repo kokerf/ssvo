@@ -31,7 +31,8 @@ TimeTracing::Ptr mapTrace = nullptr;
 //! LocalMapper
 LocalMapper::LocalMapper(bool report, bool verbose) :
     report_(report), verbose_(report&&verbose),
-    mapping_thread_(nullptr), stop_require_(false)
+    mapping_thread_(nullptr), imu_init_thread_(nullptr),
+    stop_require_(false), is_busy_(false)
 {
     map_ = Map::create();
 
@@ -89,6 +90,7 @@ LocalMapper::LocalMapper(bool report, bool verbose) :
 
 #endif
 
+    imu_init_thread_ = std::make_shared<std::thread>(std::bind(&LocalMapper::runInitIMU, this));
 }
 
 void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur)
@@ -158,6 +160,18 @@ bool LocalMapper::isRequiredStop()
     return stop_require_;
 }
 
+void LocalMapper::setBusy(bool busy)
+{
+    std::unique_lock<std::mutex> lock(mutex_busy_);
+    is_busy_ = busy;
+}
+
+bool LocalMapper::isAcceptNewKeyFrame()
+{
+    std::unique_lock<std::mutex> lock(mutex_busy_);
+    return !is_busy_;
+}
+
 void LocalMapper::run()
 {
     while(!isRequiredStop())
@@ -165,7 +179,13 @@ void LocalMapper::run()
         KeyFrame::Ptr keyframe_cur = checkNewKeyFrame();
         if(keyframe_cur)
         {
+            setBusy(true);
             processNewKeyFrame(keyframe_cur);
+        }
+        else
+        {
+            setBusy(false);
+            //std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
     }
 }
@@ -200,7 +220,9 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
     }
     else
     {
-        processNewKeyFrame(keyframe);
+        setBusy(true);
+		processNewKeyFrame(keyframe);
+        setBusy(false);
     }
 }
 
@@ -212,7 +234,7 @@ void LocalMapper::processNewKeyFrame(KeyFrame::Ptr keyframe)
     int new_local_features = 0;
     if (map_->kfs_.size() > 2)
     {
-        //  new_seed_features = createFeatureFromSeedFeature(keyframe_cur);
+        //new_seed_features = createFeatureFromSeedFeature(keyframe);
         mapTrace->startTimer("reproj");
         new_local_features = createFeatureFromLocalMap(keyframe, options_.num_reproject_kfs);
         mapTrace->stopTimer("reproj");
@@ -221,23 +243,36 @@ void LocalMapper::processNewKeyFrame(KeyFrame::Ptr keyframe)
         mapTrace->startTimer("local_ba");
         Optimizer::localBundleAdjustment(keyframe, bad_mpts, 20, options_.num_local_ba_kfs, options_.min_local_ba_connected_fts, report_, verbose_);
         mapTrace->stopTimer("local_ba");
+
+        if (map_->getIMUStatus() == Map::IMUSTATUS::INITIALIZING)
+        {
+            if (nullptr == imu_init_thread_)
+            {
+                initIMU();
+            }
+            else
+            {
+                std::unique_lock<std::mutex> lock(mutex_imu_init_);
+                cond_imu_init_.notify_one();
+            }
+        }
     }
 
-    for (const MapPoint::Ptr &mpt : bad_mpts)
-    {
-        map_->removeMapPoint(mpt);
-    }
+	for (const MapPoint::Ptr &mpt : bad_mpts)
+	{
+		map_->removeMapPoint(mpt);
+	}
 
-    checkCulling(keyframe);
+	checkCulling(keyframe);
 
-    mapTrace->startTimer("dbow");
-    addToDatabase(keyframe);
-    mapTrace->stopTimer("dbow");
+	mapTrace->startTimer("dbow");
+	addToDatabase(keyframe);
+	mapTrace->stopTimer("dbow");
 
-    mapTrace->stopTimer("total");
-    mapTrace->writeToFile();
+	mapTrace->stopTimer("total");
+	mapTrace->writeToFile();
 
-    keyframe_last_ = keyframe;
+	keyframe_last_ = keyframe;
 }
 
 void LocalMapper::finishLastKeyFrame()
@@ -248,6 +283,8 @@ void LocalMapper::finishLastKeyFrame()
 void LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
 {
     //! create new feature
+    if (seed->isBad()) return;
+    seed->setBad();
     MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->getInvDepth()));
     Feature::Ptr ft = Feature::create(seed->px_ref, seed->fn_ref, seed->level_ref, mpt);
     seed->kf->addFeature(ft);
@@ -298,13 +335,19 @@ int LocalMapper::createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe)
     for(const Feature::Ptr & ft_seed : seeds)
     {
         const Seed::Ptr &seed = ft_seed->seed_;
+        if (seed->kf == keyframe) continue;
+
+        keyframe->removeSeed(seed);
+
+        if (seed->isBad()) continue;
+
+        seed->setBad();
         MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->getInvDepth()));
 
         Feature::Ptr ft_ref = Feature::create(seed->px_ref, seed->fn_ref, seed->level_ref, mpt);
         Feature::Ptr ft_cur = Feature::create(ft_seed->px_, keyframe->cam_->lift(ft_seed->px_), ft_seed->level_, mpt);
         seed->kf->addFeature(ft_ref);
         keyframe->addFeature(ft_cur);
-        keyframe->removeSeed(seed);
 
         map_->insertMapPoint(mpt);
         mpt->addObservation(seed->kf, ft_ref);
@@ -890,5 +933,133 @@ KeyFrame::Ptr LocalMapper::relocalizeByDBoW(const Frame::Ptr &frame, const Corne
 
     return reference;
 }
+
+
+//! for imu
+void LocalMapper::runInitIMU()
+{
+    while (map_->getIMUStatus() == Map::IMUSTATUS::INITIALIZING)
+    {
+        {
+            std::unique_lock<std::mutex> lock(mutex_imu_init_);
+            cond_imu_init_.wait(lock);
+        }
+
+        if (map_->KeyFramesInMap() <= 4)
+            continue;
+
+        //Optimizer::globleBundleAdjustment(map_, 10, report_, verbose_);
+
+        bool succeed = initIMU();
+        if (succeed)
+            break;
+    }
+}
+
+bool LocalMapper::initIMU()
+{
+    static std::ofstream out_file("imu_log/imu_bias.txt");
+
+    std::vector<KeyFrame::Ptr> all_kfs = map_->getAllKeyFrames();
+    if (all_kfs.size() < 4) return false;
+    std::sort(all_kfs.begin(), all_kfs.end(), [](const KeyFrame::Ptr &kf1, const KeyFrame::Ptr &kf2) {return kf1->timestamp_ < kf2->timestamp_; });
+    std::vector<Frame::Ptr> all_frames(all_kfs.size());
+    
+    std::ofstream out_file_pose("imu_log/keyframe_trajectory" + std::to_string(all_kfs.size()) + ".txt");
+
+    for (size_t i = 0; i < all_kfs.size(); i++)
+    {
+        all_frames[i] = all_kfs[i];
+
+        Vector3d t = all_kfs[i]->pose().translation();
+        Quaterniond q = all_kfs[i]->pose().unit_quaternion();
+
+        out_file_pose << std::fixed << std::setprecision(7) << all_kfs[i]->timestamp_ << " "
+            << std::setprecision(9) << t[0] << " " << t[1] << " " << t[2] << " " << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << std::endl;
+    }
+
+    out_file_pose.close();
+
+    ssvo::Timer<std::milli> timer;
+    timer.start();
+    VectorXd result;
+    bool succeed = Optimizer::initIMU(all_frames, result, report_, verbose_);
+    const double dt = timer.stop();
+
+    //! log to file
+    size_t value = result.size();
+    result.conservativeResize(10);
+    result.tail(10 - value).setZero();
+
+    out_file << std::fixed << std::setprecision(7);
+    out_file << all_frames.back()->timestamp_ << " " << result.transpose() << " " << dt << " " << (int)succeed << " " << all_frames.size() << std::endl;
+
+    if (!succeed)
+        return false;
+
+    LOG_ASSERT(result.size() == 10) << "Wrong result of imu init! " << result.transpose();
+
+    const Vector3d dbias_gyro = result.head<3>();
+    const Vector3d dbias_acc = result.tail<3>();
+    const Vector3d gw = result.segment<3>(4);
+    const double scale = result[3];
+    LOG_IF(WARNING, report_) << "[Mapper][*] IMU init with scale: " << scale
+        << ", bias_g: " << dbias_gyro.transpose() << ", bias_a" << dbias_acc.transpose() << ", gw: " << gw.transpose();
+
+    //! only update gyro bias because acc bias is not so accuracy
+    for (const KeyFrame::Ptr & kf : all_kfs)
+    {
+        kf->getPreintergration().correctDeltaBiasGyro(dbias_gyro);
+    }
+
+    {
+        //! ready to correct the scale of keyframes and mappoints
+        map_->setScaleAndGravity(scale, gw);
+
+        //! set velocity
+        const Matrix4d Tcb = all_kfs.back()->cam_->T_CB();
+        const Matrix3d Rcb = Tcb.topLeftCorner<3, 3>();
+        const Vector3d tcb = Tcb.topRightCorner<3, 1>();
+
+        const size_t N = all_kfs.size() - 1;
+        for (size_t i = 0; i < N; i++)
+        {
+            const KeyFrame::Ptr kfi = all_kfs[i];
+            const KeyFrame::Ptr kfj = all_kfs[i + 1];
+
+            const Matrix3d Rwci = kfi->Twc().rotationMatrix();
+            const Matrix3d Rwcj = kfj->Twc().rotationMatrix();
+            const Vector3d twci = kfi->Twc().translation();
+            const Vector3d twcj = kfj->Twc().translation();
+
+            const Preintegration & printij = kfj->getPreintergrationConst();
+            const Vector3d dPij = printij.deltaPij() + printij.jacobdPBiasAcc() * dbias_acc;
+            const double dtij = printij.deltaTij();
+
+            const Vector3d Vwbi = 1.0 / dtij * ((twcj - twci) * scale + (Rwcj - Rwci) * tcb - Rwci * Rcb * dPij) - 0.5 * gw * dtij;
+            kfi->setVwc(Vwbi);
+        }
+
+        {
+            const KeyFrame::Ptr kfi = all_kfs[N - 1];
+            const KeyFrame::Ptr kfj = all_kfs[N];
+
+            const Matrix3d Rwci = kfi->Twc().rotationMatrix();
+
+            const Preintegration & printij = kfj->getPreintergrationConst();
+            const Vector3d dVij = printij.deltaVij() + printij.jacobdVBiasAcc() * dbias_acc;
+            const double dtij = printij.deltaTij();
+
+            const Vector3d Vwbi = kfi->Vwc();
+            const Vector3d Vwbj = Rwci * Rcb * dVij + Vwbi + gw * dtij;
+            kfj->setVwc(Vwbj);
+        }
+
+    }
+
+    return true;
+
+}
+
 
 }

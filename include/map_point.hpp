@@ -83,6 +83,8 @@ public:
 
     inline Vector3d pose() { return pose_; }
 
+	void updateScale(double scale);
+
     inline static Ptr create(const Vector3d &p)
     { return Ptr(new MapPoint(p)); }
 

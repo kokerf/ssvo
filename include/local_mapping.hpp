@@ -25,6 +25,8 @@ public:
 
     void stopMainThread();
 
+    bool isAcceptNewKeyFrame();
+
     void addOptimalizeMapPoint(const MapPoint::Ptr &mpt);
 
     int refineMapPoints(const int max_optimalize_num = -1, const double outlier_thr = 2.0/480.0);
@@ -46,6 +48,8 @@ private:
 
     bool isRequiredStop();
 
+    void setBusy(bool busy);
+
     KeyFrame::Ptr checkNewKeyFrame();
 
 	void processNewKeyFrame(KeyFrame::Ptr keyframe);
@@ -59,6 +63,11 @@ private:
     void checkCulling(const KeyFrame::Ptr &keyframe);
 
     void addToDatabase(const KeyFrame::Ptr &keyframe);
+	
+	//! imu
+	bool initIMU();
+
+    void runInitIMU();
 
 public:
 
@@ -93,14 +102,22 @@ private:
     const bool verbose_;
 
     std::shared_ptr<std::thread> mapping_thread_;
+    std::shared_ptr<std::thread> imu_init_thread_;
 
     std::list<MapPoint::Ptr> optimalize_candidate_mpts_;
 
     bool stop_require_;
+
+    bool is_busy_;
+
     std::mutex mutex_stop_;
+    std::mutex mutex_busy_;
     std::mutex mutex_keyframe_;
-	std::mutex mutex_optimalize_mpts_;
+    std::mutex mutex_optimalize_mpts_;
+    std::mutex mutex_imu_init_;
+
     std::condition_variable cond_process_;
+    std::condition_variable cond_imu_init_;
 
 };
 

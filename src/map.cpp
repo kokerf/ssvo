@@ -86,4 +86,51 @@ uint64_t Map::MapPointsInMap()
     return mpts_.size();
 }
 
+void Map::setScaleAndGravity(double scale, const Vector3d& gravity)
+{
+    std::lock_guard<std::mutex> lock(mutex_imu_);
+    imu_status_ = IMUSTATUS::INITIALIZED;
+    scale_ = scale;
+    gravity_ = gravity;
+}
+
+Map::IMUSTATUS Map::getIMUStatus()
+{
+    std::lock_guard<std::mutex> lock(mutex_imu_);
+    return imu_status_;
+}
+
+void Map::applyScaleCorrect()
+{
+	std::lock_guard<std::mutex> lock1(mutex_kf_);
+    std::lock_guard<std::mutex> lock2(mutex_mpt_);
+    std::lock_guard<std::mutex> lock3(mutex_imu_);
+
+	for (const auto &kf : kfs_)
+	{
+		SE3d Twc = kf.second->pose();
+		Twc.translation() *= scale_;
+		kf.second->setPose(Twc);
+	}
+
+	for (const auto &mpt : mpts_)
+	{
+		mpt.second->updateScale(scale_);
+	}
+
+    imu_status_ = IMUSTATUS::NORMAL;
+}
+
+double Map::getScale()
+{
+    std::lock_guard<std::mutex> lock(mutex_imu_);
+    return scale_;
+}
+
+const Vector3d & Map::getGravity()
+{
+    std::lock_guard<std::mutex> lock(mutex_imu_);
+    return gravity_;
+}
+
 }

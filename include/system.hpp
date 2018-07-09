@@ -37,7 +37,7 @@ public:
 
     ~System();
 
-    void process(const cv::Mat& image, const double timestamp);
+    void process(const cv::Mat& image, const double timestamp, const std::vector<IMUData> &imu_data = std::vector<IMUData>());
 
 private:
 
@@ -83,6 +83,7 @@ private:
     Frame::Ptr current_frame_;
     KeyFrame::Ptr reference_keyframe_;
     KeyFrame::Ptr last_keyframe_;
+    std::list<IMUData> imu_since_last_keyframe_;
 
     double time_;
 

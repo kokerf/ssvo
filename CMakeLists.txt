@@ -192,3 +192,6 @@ target_link_libraries(monoVO_euroc ${PROJECT_NAME})
 
 add_executable(monoVO_live demo/monoVO_live.cpp)
 target_link_libraries(monoVO_live ${PROJECT_NAME})
+
+add_executable(monoVIO_euroc demo/monoVIO_euroc.cpp)
+target_link_libraries(monoVIO_euroc ${PROJECT_NAME})

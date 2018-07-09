@@ -60,6 +60,7 @@ void Viewer::run()
     pangolin::Var<bool> menu_show_keyframe("menu.Show KeyFrame", true, true);
     pangolin::Var<bool> menu_show_connections("menu.Connections", true, true);
     pangolin::Var<bool> menu_show_current_connections("menu.Connections_cur", true, true);
+    pangolin::Var<bool> menu_draw_gravity("menu.Draw gravity", true, true);
 
     const int trajectory_duration_max = 10000;
     pangolin::Var<int> settings_trajectory_duration("menu.Traj Duration",1000, 1, trajectory_duration_max,false);
@@ -70,6 +71,7 @@ void Viewer::run()
     bool show_keyframe = true;
     bool show_connections = true;
     bool show_current_connections = true;
+    bool draw_gravity = false;
     int trajectory_duration = -1;
 
     // Define Projection and initial ModelView matrix
@@ -111,6 +113,7 @@ void Viewer::run()
         show_keyframe = menu_show_keyframe.Get();
         show_connections = menu_show_connections.Get();
         show_current_connections = menu_show_current_connections.Get();
+        draw_gravity = menu_draw_gravity.Get();
 
         trajectory_duration = settings_trajectory_duration.Get();
         if(trajectory_duration == trajectory_duration_max) trajectory_duration = -1;
@@ -138,7 +141,7 @@ void Viewer::run()
         if(show_keyframe)
         {
             KeyFrame::Ptr reference = frame ? frame->getRefKeyFrame() : nullptr;
-            drawKeyFrames(map_, reference, show_connections, show_current_connections);
+            drawKeyFrames(map_, reference, show_connections, show_current_connections, draw_gravity);
         }
 
         if(show_trajectory)
@@ -175,7 +178,7 @@ void Viewer::setCurrentFrame(const Frame::Ptr &frame, const cv::Mat image)
         frame_trajectory_.push_back(frame_->pose().translation());
 }
 
-void Viewer::drawKeyFrames(Map::Ptr &map, KeyFrame::Ptr &reference, bool show_connections, bool show_current)
+void Viewer::drawKeyFrames(Map::Ptr &map, KeyFrame::Ptr &reference, bool show_connections, bool show_current, bool with_gravity)
 {
     std::vector<KeyFrame::Ptr> kfs = map->getAllKeyFrames();
 
@@ -189,6 +192,7 @@ void Viewer::drawKeyFrames(Map::Ptr &map, KeyFrame::Ptr &reference, bool show_co
         }
     }
 
+    const Vector3d gravity = map->getGravity() * key_frame_size;
     for(const KeyFrame::Ptr &kf : kfs)
     {
         SE3d pose = kf->pose();
@@ -196,6 +200,13 @@ void Viewer::drawKeyFrames(Map::Ptr &map, KeyFrame::Ptr &reference, bool show_co
             drawCamera(pose.matrix(), cv::Scalar(0.0, 0.5, 1.0));
         else
             drawCamera(pose.matrix(), cv::Scalar(0.0, 1.0, 0.2));
+
+        if (with_gravity && map->getIMUStatus() == Map::IMUSTATUS::NORMAL)
+        {
+            Vector3d Oc = pose.translation();
+            Vector3d g = Oc + gravity;
+            pangolin::glDrawLine(Oc[0], Oc[1], Oc[2], g[0], g[1], g[2]);
+        }
     }
 
     if(!show_connections)

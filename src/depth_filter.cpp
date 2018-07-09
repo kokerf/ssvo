@@ -114,7 +114,7 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback 
     seed_coverged_callback_(callback), fast_detector_(fast_detector),
     report_(report), verbose_(report&&verbose), filter_thread_(nullptr), track_thread_enabled_(true), stop_require_(false)
 {
-    options_.max_kfs = 5;
+    options_.max_kfs = Config::maxSeedsBuffer();
     options_.max_features = Config::minCornersPerKeyFrame();
     options_.max_epl_length = 1000;
     options_.epl_dist2_threshold = 16;
@@ -619,6 +619,14 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
         {
             const Vector3d fn_cur = frame->cam_->lift(ft->px_);
             const Seed::Ptr &seed = ft->seed_;
+
+            if (seed->isBad())
+            {
+                kf->removeSeed(seed);
+                frame->removeSeed(seed);
+                continue;
+            }
+
             double err2 = utils::Fundamental::computeErrorSquared(
                 kf->pose().translation(), seed->fn_ref/seed->getInvDepth(), T_cur_from_ref, fn_cur.head<2>());
 
@@ -676,6 +684,13 @@ int DepthFilter::reprojectSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr 
     for(const Feature::Ptr &ft : seed_fts)
     {
         const Seed::Ptr &seed = ft->seed_;
+
+        if (seed->isBad())
+        {
+            keyframe->removeSeed(seed);
+            continue;
+        }
+
         if(frame->hasSeed(seed))
             continue;
 

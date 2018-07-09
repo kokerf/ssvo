@@ -102,10 +102,13 @@ System::~System()
     viewer_->waitForFinish();
 }
 
-void System::process(const cv::Mat &image, const double timestamp)
+void System::process(const cv::Mat &image, const double timestamp, const std::vector<IMUData> &imu_data)
 {
     sysTrace->startTimer("total");
     sysTrace->startTimer("frame_create");
+
+    //! buffer imu data
+    std::copy(imu_data.begin(), imu_data.end(), std::back_inserter(imu_since_last_keyframe_));
 
     //! get gray image
     double t0 = (double)cv::getTickCount();
@@ -138,6 +141,11 @@ System::Status System::initialize()
 {
     const Initializer::Result result = initializer_->addImage(current_frame_);
 
+    //! erase old imu data
+    const double timestamp_ref = initializer_->getReferenceFrame()->timestamp_;
+    while (!imu_since_last_keyframe_.empty() && imu_since_last_keyframe_.front().timestamp < timestamp_ref)
+        imu_since_last_keyframe_.pop_front();
+
     if(result == Initializer::RESET)
         return STATUS_INITAL_RESET;
     else if(result == Initializer::FAILURE || result == Initializer::READY)
@@ -151,6 +159,9 @@ System::Status System::initialize()
 
     KeyFrame::Ptr kf0 = mapper_->map_->getKeyFrame(0);
     KeyFrame::Ptr kf1 = mapper_->map_->getKeyFrame(1);
+    kf1->setIMUData(std::vector<IMUData>(imu_since_last_keyframe_.begin(), imu_since_last_keyframe_.end()));
+    kf1->computeIMUPreintegrationSinceLastFrame(kf0);
+    imu_since_last_keyframe_.clear();
 
     LOG_ASSERT(kf0 != nullptr && kf1 != nullptr) << "Can not find intial keyframes in map!";
 
@@ -358,11 +369,12 @@ bool System::createNewKeyFrame()
     SE3d T_cur_from_ref = current_frame_->Tcw() * last_keyframe_->pose();
     Vector3d tran = T_cur_from_ref.translation();
     double dist1 = tran.dot(tran);
-    double dist2 = 0.01 * (T_cur_from_ref.rotationMatrix() - Matrix3d::Identity()).norm();
+    double dist2 = 0.05 * T_cur_from_ref.so3().log().norm();
     if(dist1+dist2  < 0.01 * median_depth)
         c1 = false;
 
     //! check disparity
+    float disparity_last_frame = 0.0;
     std::list<float> disparities;
     const int threahold = int (max_overlap * 0.6);
     for(const auto &ovlp_kf : overlap_kfs)
@@ -391,6 +403,9 @@ bool System::createNewKeyFrame()
         std::sort(disparity.begin(), disparity.end());
         float disp = disparity.at(disparity.size()/2);
         disparities.push_back(disp);
+
+        if (ovlp_kf.first == last_keyframe_)
+            disparity_last_frame = disp;
     }
     disparities.sort();
 
@@ -399,13 +414,19 @@ bool System::createNewKeyFrame()
 
     LOG(INFO) << "[System] Max overlap: " << max_overlap << " min disaprity " << disparities.front() << ", median: " << current_frame_->disparity_;
 
-//    int all_features = current_frame_->featureNumber() + current_frame_->seedNumber();
+    double time_gap = 10.0;
+    if (mapper_->map_->getIMUStatus() == Map::IMUSTATUS::INITIALIZING)
+        time_gap = 1.0;
+
     bool c2 = disparities.front() > options_.min_kf_disparity;
     bool c3 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * options_.min_ref_track_rate;
-//    bool c4 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * 0.9;
+    bool c4 = current_frame_->timestamp_ - last_keyframe_->timestamp_ > time_gap;
+    bool c5 = disparity_last_frame > options_.min_kf_disparity;
+
+    bool if_create = (c1 && (c2 || c3)) || (c4 && c5);
 
     //! create new keyFrame
-    if(c1 && (c2 || c3))
+    if(if_create)// && mapper_->isAcceptNewKeyFrame())
     {
         //! create new keyframe
         KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
@@ -422,9 +443,14 @@ bool System::createNewKeyFrame()
 //            mapper_->addOptimalizeMapPoint(ft->mpt_);
         }
         new_keyframe->updateConnections();
+
+        new_keyframe->setIMUData(std::vector<IMUData>(imu_since_last_keyframe_.begin(), imu_since_last_keyframe_.end()));
+        new_keyframe->computeIMUPreintegrationSinceLastFrame(last_keyframe_);
+        imu_since_last_keyframe_.clear();
+
         reference_keyframe_ = new_keyframe;
         last_keyframe_ = new_keyframe;
-//        LOG(ERROR) << "C: (" << c1 << ", " << c2 << ", " << c3 << ") cur_n: " << current_frame_->N() << " ck: " << reference_keyframe_->N();
+        LOG(ERROR) << "C: (" << c1 << ", " << c2 << ", " << c3  << ", " << c4 << ") cur_n: " << new_keyframe->id_;
         return true;
     }
         //! change reference keyframe
@@ -464,6 +490,15 @@ void System::finishFrame()
             stage_ = STAGE_NORMAL_FRAME;
         else
             current_frame_->setPose(last_frame_->pose());
+    }
+
+    //! check imu init status for map scale correct
+    if (mapper_->map_->getIMUStatus() == Map::IMUSTATUS::INITIALIZED)
+    {
+        SE3d Trc = reference_keyframe_->Tcw() * current_frame_->Twc();
+        mapper_->map_->applyScaleCorrect();
+        Trc.translation() *= mapper_->map_->getScale();
+        current_frame_->setPose(reference_keyframe_->Twc() * Trc);
     }
 
     //! update

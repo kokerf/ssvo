@@ -351,4 +351,13 @@ bool MapPoint::getCloseViewObs(const Frame::Ptr &frame, KeyFrame::Ptr &keyframe,
     return true;
 }
 
+void MapPoint::updateScale(double scale)
+{
+	std::lock_guard<std::mutex> lock(mutex_pose_);
+	pose_ *= scale;
+	max_distance_ *= scale;
+	min_distance_ *= scale;
+}
+
+
 }
