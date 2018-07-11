@@ -593,7 +593,7 @@ bool Optimizer::sloveInitialGyroBias(const std::vector<Frame::Ptr> &frames, Vect
 		problem.AddParameterBlock(framej->optimal_Twb_.data(), SO3d::num_parameters, local_parameterization_rj);
 		problem.SetParameterBlockConstant(framej->optimal_Twb_.data());
 
-		ceres::CostFunction* cost_function = ceres_slover::PreintegrationRotationError::Create(framej->getPreintergration());
+		ceres::CostFunction* cost_function = ceres_slover::PreintegrationRotationError::Create(&framej->getPreintergrationConst());
 		res_ids[i-1] = problem.AddResidualBlock(cost_function, nullptr, framei->optimal_Twb_.data(), framej->optimal_Twb_.data(), dbias_gyro.data());
 	}
 
