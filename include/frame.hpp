@@ -54,9 +54,9 @@ public:
 
     std::unordered_map<MapPoint::Ptr, Feature::Ptr> features();
 
-    void getFeatures(std::vector<Feature::Ptr> &fts);
+    std::vector<Feature::Ptr> getFeatures();
 
-    void getMapPoints(std::list<MapPoint::Ptr> &mpts);
+    std::vector<MapPoint::Ptr> getMapPoints();
 
     bool addFeature(const Feature::Ptr &ft);
 
@@ -69,7 +69,7 @@ public:
     //! Feature created by Seed
     int seedNumber();
 
-    void getSeeds(std::vector<Feature::Ptr> &fts);
+    std::vector<Feature::Ptr> getSeeds();
 
     bool addSeed(const Feature::Ptr &ft);
 
@@ -87,30 +87,6 @@ public:
 
     inline static Ptr create(const cv::Mat& img, const double timestamp, AbstractCamera::Ptr cam)
     { return Ptr(new Frame(img, timestamp, cam)); }
-
-    inline static void jacobian_xyz2uv(
-        const Vector3d& xyz_in_f,
-        Matrix<double,2,6,RowMajor>& J)
-    {
-        const double x = xyz_in_f[0];
-        const double y = xyz_in_f[1];
-        const double z_inv = 1./xyz_in_f[2];
-        const double z_inv_2 = z_inv*z_inv;
-
-        J(0,0) = -z_inv;              // -1/z
-        J(0,1) = 0.0;                 // 0
-        J(0,2) = x*z_inv_2;           // x/z^2
-        J(0,3) = y*J(0,2);            // x*y/z^2
-        J(0,4) = -(1.0 + x*J(0,2));   // -(1.0 + x^2/z^2)
-        J(0,5) = y*z_inv;             // y/z
-
-        J(1,0) = 0.0;                 // 0
-        J(1,1) = -z_inv;              // -1/z
-        J(1,2) = y*z_inv_2;           // y/z^2
-        J(1,3) = 1.0 + y*J(1,2);      // 1.0 + y^2/z^2
-        J(1,4) = -J(0,3);             // -x*y/z^2
-        J(1,5) = -x*z_inv;            // x/z
-    }
 
 protected:
 

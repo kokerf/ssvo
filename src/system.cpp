@@ -258,8 +258,7 @@ System::Status System::relocalize()
 
 void System::calcLightAffine()
 {
-    std::vector<Feature::Ptr> fts_last;
-    last_frame_->getFeatures(fts_last);
+    std::vector<Feature::Ptr> fts_last = last_frame_->getFeatures();
 
     const cv::Mat img_last = last_frame_->getImage(0);
     const cv::Mat img_curr = current_frame_->getImage(0).clone() * 1.3;
@@ -308,8 +307,7 @@ bool System::createNewKeyFrame()
 {
     std::map<KeyFrame::Ptr, int> overlap_kfs = current_frame_->getOverLapKeyFrames();
 
-    std::vector<Feature::Ptr> fts;
-    current_frame_->getFeatures(fts);
+    std::vector<Feature::Ptr> fts = current_frame_->getFeatures();
     std::map<MapPoint::Ptr, Feature::Ptr> mpt_ft;
     for(const Feature::Ptr &ft : fts)
     {
@@ -364,8 +362,7 @@ bool System::createNewKeyFrame()
 
         std::vector<float> disparity;
         disparity.reserve(ovlp_kf.second);
-        MapPoints mpts;
-        ovlp_kf.first->getMapPoints(mpts);
+        std::vector<MapPoint::Ptr> mpts = ovlp_kf.first->getMapPoints();
         for(const MapPoint::Ptr &mpt : mpts)
         {
             Feature::Ptr ft_ref = mpt->findObservation(ovlp_kf.first);

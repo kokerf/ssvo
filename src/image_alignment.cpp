@@ -66,8 +66,7 @@ int AlignSE3::run(Frame::Ptr reference_frame,
     ref_frame_ = reference_frame;
     cur_frame_ = current_frame;
 
-    std::vector<Feature::Ptr> fts;
-    ref_frame_->getFeatures(fts);
+    std::vector<Feature::Ptr> fts = ref_frame_->getFeatures();
     const size_t N = fts.size();
     LOG_ASSERT(N != 0) << " AlignSE3: Frame(" << reference_frame->id_ << ") " << " no features to track!";
     const int max_level = (int)cur_frame_->images().size() - 1;
@@ -155,7 +154,26 @@ int AlignSE3::computeReferencePatches(int level, std::vector<Feature::Ptr> &fts)
 
         //! compute jacbian(with -)
         Matrix<double, 2, 6, RowMajor> J;
-        Frame::jacobian_xyz2uv(ref_xyz, J);
+        {
+            const double x = ref_xyz[0];
+            const double y = ref_xyz[1];
+            const double z_inv = 1./ref_xyz[2];
+            const double z_inv_2 = z_inv*z_inv;
+
+            J(0,0) = -z_inv;              // -1/z
+            J(0,1) = 0.0;                 // 0
+            J(0,2) = x*z_inv_2;           // x/z^2
+            J(0,3) = y*J(0,2);            // x*y/z^2
+            J(0,4) = -(1.0 + x*J(0,2));   // -(1.0 + x^2/z^2)
+            J(0,5) = y*z_inv;             // y/z
+
+            J(1,0) = 0.0;                 // 0
+            J(1,1) = -z_inv;              // -1/z
+            J(1,2) = y*z_inv_2;           // y/z^2
+            J(1,3) = 1.0 + y*J(1,2);      // 1.0 + y^2/z^2
+            J(1,4) = -J(0,3);             // -x*y/z^2
+            J(1,5) = -x*z_inv;            // x/z
+        }
 
         Matrix<double, PatchArea, 1> img, dx, dy;
         utils::interpolateMat<uchar, double, PatchSize>(ref_img, img, dx, dy, ref_px[0], ref_px[1]);

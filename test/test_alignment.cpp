@@ -185,8 +185,7 @@ void align_by_ceres(Frame::Ptr reference_frame, Frame::Ptr current_frame, int le
     const int border = 4+1;
     Vector3d ref_pose = reference_frame->pose().translation();
 
-    std::vector<Feature::Ptr> fts;
-    reference_frame->getFeatures(fts);
+    std::vector<Feature::Ptr> fts = reference_frame->getFeatures();
     for(Feature::Ptr ft : fts)
     {
         Vector2d ref_px = ft->px_*scale;

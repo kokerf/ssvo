@@ -17,8 +17,7 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
     problem.AddParameterBlock(kf2->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
     problem.SetParameterBlockConstant(kf1->optimal_Tcw_.data());
 
-    std::vector<Feature::Ptr> fts1;
-    kf1->getFeatures(fts1);
+    std::vector<Feature::Ptr> fts1 = kf1->getFeatures();
     MapPoints mpts;
 
     for(const Feature::Ptr &ft1 : fts1)
@@ -75,8 +74,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
 
     for(const KeyFrame::Ptr &kf : actived_keyframes)
     {
-        MapPoints mpts;
-        kf->getMapPoints(mpts);
+        std::vector<MapPoint::Ptr> mpts = kf->getMapPoints();
         for(const MapPoint::Ptr &mpt : mpts)
         {
             local_mappoints.insert(mpt);
@@ -352,8 +350,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_see
     static const double scale = pixel_usigma * std::sqrt(3.81);
     ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
 
-    std::vector<Feature::Ptr> fts;
-    frame->getFeatures(fts);
+    std::vector<Feature::Ptr> fts = frame->getFeatures();
     const size_t N = fts.size();
     std::vector<ceres::ResidualBlockId> res_ids(N);
     for(size_t i = 0; i < N; ++i)
@@ -371,8 +368,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_see
 
     if(N < OPTIMAL_MPTS)
     {
-        std::vector<Feature::Ptr> ft_seeds;
-        frame->getSeeds(ft_seeds);
+        std::vector<Feature::Ptr> ft_seeds = frame->getSeeds();
         const size_t needed = OPTIMAL_MPTS - N;
         if(ft_seeds.size() > needed)
         {

@@ -41,8 +41,7 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     if(frame_last)
     {
         matches_from_frame = matchMapPointsFromLastFrame(frame, frame_last);
-        std::list<MapPoint::Ptr> last_mpts_list;
-        frame_last->getMapPoints(last_mpts_list);
+        std::vector<MapPoint::Ptr> last_mpts_list = frame_last->getMapPoints();
         for(const MapPoint::Ptr &mpt : last_mpts_list)
             last_mpts_set.insert(mpt);
     }
@@ -64,8 +63,7 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     std::unordered_set<MapPoint::Ptr> local_mpts;
     for(const KeyFrame::Ptr &kf : local_keyframes)
     {
-        MapPoints mpts;
-        kf->getMapPoints(mpts);
+        std::vector<MapPoint::Ptr> mpts = kf->getMapPoints();
         for(const MapPoint::Ptr &mpt : mpts)
         {
             if(local_mpts.count(mpt) || last_mpts_set.count(mpt))
@@ -162,8 +160,7 @@ int FeatureTracker::matchMapPointsFromLastFrame(const Frame::Ptr &frame_cur, con
     if(frame_last == nullptr || frame_cur == nullptr)
         return 0;
 
-    std::list<MapPoint::Ptr> mpts;
-    frame_last->getMapPoints(mpts);
+    std::vector<MapPoint::Ptr> mpts = frame_last->getMapPoints();
 
     int matches_count = 0;
     for(const MapPoint::Ptr &mpt : mpts)

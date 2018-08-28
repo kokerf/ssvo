@@ -100,9 +100,8 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
     KeyFrame::Ptr keyframe_cur = KeyFrame::create(frame_cur);
 
     //! before import, make sure the features are stored in the same order!
-    std::vector<Feature::Ptr> fts_ref, fts_cur;
-    keyframe_ref->getFeatures(fts_ref);
-    keyframe_cur->getFeatures(fts_cur);
+    std::vector<Feature::Ptr> fts_ref = keyframe_ref->getFeatures();
+    std::vector<Feature::Ptr> fts_cur = keyframe_cur->getFeatures();
 
     const size_t N = fts_ref.size();
     LOG_ASSERT(N == fts_cur.size()) << "Error in create inital map! Two frames' features is not matched!";
@@ -316,8 +315,7 @@ void LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
 
 int LocalMapper::createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe)
 {
-    std::vector<Feature::Ptr> seeds;
-    keyframe->getSeeds(seeds);
+    std::vector<Feature::Ptr> seeds = keyframe->getSeeds();
 
     for(const Feature::Ptr & ft_seed : seeds)
     {
@@ -346,8 +344,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe, const 
     std::set<KeyFrame::Ptr> local_keyframes = keyframe->getConnectedKeyFrames(num);
 
     std::unordered_set<MapPoint::Ptr> local_mpts;
-    MapPoints mpts_cur;
-    keyframe->getMapPoints(mpts_cur);
+    std::vector<MapPoint::Ptr> mpts_cur = keyframe->getMapPoints();
     for(const MapPoint::Ptr &mpt : mpts_cur)
     {
         local_mpts.insert(mpt);
@@ -356,8 +353,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe, const 
     std::unordered_set<MapPoint::Ptr> candidate_mpts;
     for(const KeyFrame::Ptr &kf : local_keyframes)
     {
-        MapPoints mpts;
-        kf->getMapPoints(mpts);
+        std::vector<MapPoint::Ptr> mpts = kf->getMapPoints();
         for(const MapPoint::Ptr &mpt : mpts)
         {
             if(local_mpts.count(mpt) || candidate_mpts.count(mpt))
@@ -414,8 +410,7 @@ int LocalMapper::createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe, const 
     const int cols = keyframe->cam_->width();
     const int rows = keyframe->cam_->height();
     cv::Mat mask(rows, cols, CV_16SC1, -1);
-    std::vector<Feature::Ptr> old_fts;
-    keyframe->getFeatures(old_fts);
+    std::vector<Feature::Ptr> old_fts = keyframe->getFeatures();
     const int old_fts_size = (int) old_fts.size();
     for(int i = 0; i < old_fts_size; ++i)
     {
@@ -780,8 +775,7 @@ void LocalMapper::checkCulling(const KeyFrame::Ptr &keyframe)
 
         const int observations_threshold = 3;
         int redundant_observations = 0;
-        MapPoints mpts;
-        kf->getMapPoints(mpts);
+        std::vector<MapPoint::Ptr> mpts = kf->getMapPoints();
         //std::cout << "mpt obs: [";
         for(const MapPoint::Ptr &mpt : mpts)
         {

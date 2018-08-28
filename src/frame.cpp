@@ -128,23 +128,26 @@ int Frame::featureNumber()
     return (int)mpt_fts_.size();
 }
 
-void Frame::getFeatures(std::vector<Feature::Ptr>& fts)
+std::vector<Feature::Ptr> Frame::getFeatures()
 {
-    if(!fts.empty()) fts.clear();
-
     std::lock_guard<std::mutex> lock(mutex_feature_);
+    std::vector<Feature::Ptr> fts;
     fts.reserve(mpt_fts_.size());
     for(const auto &it : mpt_fts_)
         fts.push_back(it.second);
+
+    return fts;
 }
 
-void Frame::getMapPoints(std::list<MapPoint::Ptr> &mpts)
+std::vector<MapPoint::Ptr> Frame::getMapPoints()
 {
-    if(!mpts.empty()) mpts.clear();
-
     std::lock_guard<std::mutex> lock(mutex_feature_);
+    std::vector<MapPoint::Ptr> mpts;
+    mpts.reserve(mpt_fts_.size());
     for(const auto &it : mpt_fts_)
         mpts.push_back(it.first);
+
+    return mpts;
 }
 
 bool Frame::addFeature(const Feature::Ptr &ft)
@@ -191,14 +194,15 @@ int Frame::seedNumber()
     return (int)seed_fts_.size();
 }
 
-void Frame::getSeeds(std::vector<Feature::Ptr> &fts)
+std::vector<Feature::Ptr> Frame::getSeeds()
 {
-    if(!fts.empty()) fts.clear();
-    fts.reserve(seed_fts_.size());
-
     std::lock_guard<std::mutex> lock(mutex_seed_);
+    std::vector<Feature::Ptr> fts;
+    fts.reserve(seed_fts_.size());
     for(const auto &it : seed_fts_)
         fts.push_back(it.second);
+
+    return fts;
 }
 
 bool Frame::addSeed(const Feature::Ptr &ft)
@@ -268,8 +272,7 @@ bool Frame::getSceneDepth(double &depth_mean, double &depth_min)
 
 std::map<KeyFrame::Ptr, int> Frame::getOverLapKeyFrames()
 {
-    std::list<MapPoint::Ptr> mpts;
-    getMapPoints(mpts);
+    std::vector<MapPoint::Ptr> mpts = getMapPoints();
 
     std::map<KeyFrame::Ptr, int> overlap_kfs;
 

@@ -395,11 +395,9 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &fr
 
     LOG_ASSERT(frame == nullptr || keyframe->frame_id_ == frame->id_) << "The keyframe " << keyframe->id_  << "(" << keyframe->frame_id_ << ") is not created from frame " << frame->id_;
 
-    std::vector<Feature::Ptr> fts;
-    keyframe->getFeatures(fts);
+    std::vector<Feature::Ptr> fts = keyframe->getFeatures();
 
-    std::vector<Feature::Ptr> seeds;
-    keyframe->getSeeds(seeds);
+    std::vector<Feature::Ptr> seeds = keyframe->getSeeds();
 
     Corners old_corners;
     old_corners.reserve(fts.size()+seeds.size());
@@ -415,8 +413,7 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &fr
     // TODO 如果对应的seed收敛，在跟踪过的关键帧增加观测？
     if(frame != nullptr)
     {
-        std::vector<Feature::Ptr> seed_fts;
-        frame->getSeeds(seed_fts);
+        std::vector<Feature::Ptr> seed_fts = frame->getSeeds();
         for(const Feature::Ptr &ft : seed_fts)
         {
             const Vector2d &px = ft->px_;
@@ -507,8 +504,7 @@ int DepthFilter::trackSeeds(const Frame::Ptr &frame_last, const Frame::Ptr &fram
     dfltTrace->startTimer("klt_track");
 
     //! track seeds by klt
-    std::vector<Feature::Ptr> seed_fts;
-    frame_last->getSeeds(seed_fts);
+    std::vector<Feature::Ptr> seed_fts = frame_last->getSeeds();
     const int N = seed_fts.size();
     std::vector<cv::Point2f> pts_to_track;
     pts_to_track.reserve(N);
@@ -547,8 +543,7 @@ int DepthFilter::trackSeeds(const Frame::Ptr &frame_last, const Frame::Ptr &fram
 int DepthFilter::updateSeeds(const Frame::Ptr &frame)
 {
     //! remove error tracked seeds and update
-    std::vector<Feature::Ptr> seed_fts;
-    frame->getSeeds(seed_fts);
+    std::vector<Feature::Ptr> seed_fts = frame->getSeeds();
     std::map<KeyFrame::Ptr, std::deque<Feature::Ptr> > seeds_map;
     for(const Feature::Ptr &ft : seed_fts)
     {
@@ -624,8 +619,7 @@ int DepthFilter::updateSeeds(const Frame::Ptr &frame)
 
 int DepthFilter::reprojectSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame, double epl_threshold, double pixel_error, bool created)
 {
-    std::vector<Feature::Ptr> seed_fts;
-    keyframe->getSeeds(seed_fts);
+    std::vector<Feature::Ptr> seed_fts = keyframe->getSeeds();
 
     SE3d T_cur_from_ref = frame->Tcw() * keyframe->pose();
 
@@ -702,8 +696,7 @@ int DepthFilter::reprojectAllSeeds(const Frame::Ptr &frame)
     std::set<KeyFrame::Ptr> candidate_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_kfs);
     candidate_keyframes.insert(frame->getRefKeyFrame());
 
-    std::vector<Feature::Ptr> seed_fts;
-    frame->getSeeds(seed_fts);
+    std::vector<Feature::Ptr> seed_fts = frame->getSeeds();
 
     int matched_count = 0;
     for(const KeyFrame::Ptr &kf : candidate_keyframes)

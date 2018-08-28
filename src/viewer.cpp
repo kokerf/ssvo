@@ -308,8 +308,7 @@ void Viewer::drawTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
 {
     //! draw features
     const cv::Mat src = frame->getImage(0);
-    std::vector<Feature::Ptr> fts;
-    frame->getFeatures(fts);
+    std::vector<Feature::Ptr> fts = frame->getFeatures();
     cv::cvtColor(src, dst, CV_GRAY2RGB);
     int font_face = 1;
     double font_scale = 0.5;
@@ -325,8 +324,7 @@ void Viewer::drawTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
     }
 
     //! draw seeds
-    std::vector<Feature::Ptr> seed_fts;
-    frame->getSeeds(seed_fts);
+    std::vector<Feature::Ptr> seed_fts = frame->getSeeds();
     for(const Feature::Ptr &ft : seed_fts)
     {
         Seed::Ptr seed = ft->seed_;
