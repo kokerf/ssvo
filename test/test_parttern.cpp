@@ -1,4 +1,3 @@
-#include <direct.h> 
 #include <opencv2/opencv.hpp>
 #include "feature_alignment.hpp"
 #include "utils.hpp"
