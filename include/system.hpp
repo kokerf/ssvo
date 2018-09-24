@@ -9,7 +9,7 @@
 #include "feature_detector.hpp"
 #include "feature_tracker.hpp"
 #include "local_mapping.hpp"
-#include "depth_filter.hpp"
+//#include "depth_filter.hpp"
 #include "viewer.hpp"
 
 namespace ssvo {
@@ -72,7 +72,7 @@ private:
     FastDetector::Ptr fast_detector_;
     FeatureTracker::Ptr feature_tracker_;
     Initializer::Ptr initializer_;
-    DepthFilter::Ptr depth_filter_;
+    //DepthFilter::Ptr depth_filter_;
     LocalMapper::Ptr mapper_;
 
     Viewer::Ptr viewer_;

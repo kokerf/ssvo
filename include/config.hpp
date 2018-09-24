@@ -15,7 +15,9 @@ class Config
 {
 public:
 
-    static int imageNLevel(){return getInstance().image_nlevel_;}
+    static int imageNLevels(){return getInstance().image_nlevels_;}
+
+    static double imageScaleFactor(){ return getInstance().image_scale_factor_;}
 
     static double imagePixelSigma(){return getInstance().image_sigma_;}
 
@@ -51,7 +53,7 @@ public:
 
     static int minLocalBAConnectedFts(){return getInstance().mapping_min_local_ba_connected_fts_;}
 
-    static int alignTopLevel(){return getInstance().align_top_level_;}
+    static double alignScaleFactor(){return getInstance().align_scale_factor_;}
 
     static int alignBottomLevel(){return getInstance().align_bottom_level_;}
 
@@ -84,7 +86,8 @@ private:
         LOG_ASSERT(fs.isOpened()) << "Failed to open settings file at: " << file_name;
 
         //! Image
-        image_nlevel_ = (int)fs["Image.nlevels"];
+        image_nlevels_ = (int)fs["Image.nlevels"];
+        image_scale_factor_ = (double)fs["Image.scale_factor"];
         image_sigma_ = (double)fs["Image.sigma"];
         image_sigma2_ = image_sigma_*image_sigma_;
 
@@ -111,8 +114,7 @@ private:
         mapping_min_local_ba_connected_fts_ = (int)fs["Mapping.min_local_ba_connected_fts"];
 
         //! Align
-        align_top_level_ = (int)fs["Align.top_level"];
-        align_top_level_ = MIN(align_top_level_, image_nlevel_-1);
+        align_scale_factor_ = (int)fs["Align.scale_factor"];
         align_bottom_level_ = (int)fs["Align.bottom_level"];
         align_bottom_level_ = MAX(align_bottom_level_, 0);
         align_patch_size_ = (int)fs["Align.patch_size"];
@@ -161,7 +163,8 @@ public:
 
 private:
 
-    int image_nlevel_;
+    int image_nlevels_;
+    double image_scale_factor_;
     double image_sigma_;
     double image_sigma2_;
     double image_unsigma_;
@@ -190,7 +193,7 @@ private:
     int mapping_min_local_ba_connected_fts_;
 
     //! Align
-    int align_top_level_;
+    double align_scale_factor_;
     int align_bottom_level_;
     int align_patch_size_;
 

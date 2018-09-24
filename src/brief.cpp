@@ -288,9 +288,23 @@ BRIEF::BRIEF()
         umax_[v] = v0;
         ++v0;
     }
+
+//    border_tl_.resize(nlevels);
+//    border_br_.resize(nlevels);
+//
+//    float cur_scale = 1.0;
+//    for(int i = 0; i < nlevels; i++)
+//    {
+//        border_tl_[i].x = BRIEF::EDGE_THRESHOLD;
+//        border_tl_[i].y = BRIEF::EDGE_THRESHOLD;
+//        border_br_[i].x = cols/cur_scale - BRIEF::EDGE_THRESHOLD;
+//        border_br_[i].y = rows/cur_scale - BRIEF::EDGE_THRESHOLD;
+//        cur_scale *= scale;
+//    }
+
 }
 
-float BRIEF::IC_Angle(const cv::Mat& image, cv::Point2f pt,  const std::vector<int> & u_max)
+float BRIEF::IC_Angle(const cv::Mat& image, cv::Point2f pt,  const std::vector<int> & u_max) const
 {
     int m_01 = 0, m_10 = 0;
 
@@ -320,7 +334,7 @@ float BRIEF::IC_Angle(const cv::Mat& image, cv::Point2f pt,  const std::vector<i
 }
 
 
-void BRIEF::compute(const cv::KeyPoint& kpt, const cv::Mat& img, const cv::Point* pattern, uchar* desc)
+void BRIEF::compute(const cv::KeyPoint& kpt, const cv::Mat& img, const cv::Point* pattern, uchar* desc) const
 {
     static const float factorPI = (float)(CV_PI/180.f);
     float angle = (float)kpt.angle*factorPI;
@@ -361,7 +375,7 @@ void BRIEF::compute(const cv::KeyPoint& kpt, const cv::Mat& img, const cv::Point
 }
 
 
-void BRIEF::compute(const std::vector<cv::Mat> &images, const std::vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors)
+void BRIEF::compute(const std::vector<cv::Mat> &images, const std::vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors) const
 {
     const size_t nlevels = images.size();
     std::vector<cv::Mat> image_pyramid_border(nlevels);

@@ -3,24 +3,13 @@
 
 #include "fast/fast.h"
 #include "global.hpp"
+#include "feature.hpp"
 #include "grid.hpp"
 
 //! (u,v) is in the n-level image of pyramid
 //! (x,y) is in the 0-level image of pyramid
 namespace ssvo
 {
-
-struct Corner{
-    float x;        //!< x-coordinate of corner in the image.
-    float y;        //!< y-coordinate of corner in the image.
-    int level;      //!< pyramid level of the corner.
-    float score;    //!< shi-tomasi score of the corner.
-    //float angle;  //!< for gradient-features: dominant gradient angle.
-    Corner() : x(-1), y(-1), level(-1), score(-1) {}
-    Corner(int x, int y, float score, int level) : x(x), y(y), level(level), score(score) {}
-
-    Corner(const Corner& other): x(other.x), y(other.y), level(other.level), score(other.score) {}
-};
 
 class FastGrid{
 public:
@@ -58,8 +47,6 @@ private:
     std::vector<int> fast_threshold_;
 };
 
-typedef std::vector<Corner> Corners;
-
 class FastDetector: public noncopyable
 {
 public:
@@ -70,18 +57,32 @@ public:
 
     void drawGrid(const cv::Mat &img, cv::Mat &img_grid);
 
+    int getNLevels() const;
+
+    double getScaleFactor() const;
+
+    double getLogScaleFactor() const;
+
+    std::vector<double> getScaleFactors() const;
+
+    std::vector<double> getInvScaleFactors() const;
+
+    std::vector<double> getLevelSigma2() const;
+
+    std::vector<double> getInvLevelSigma2() const;
+
     static float shiTomasiScore(const cv::Mat &img, int u, int v);
 
     static size_t detectInLevel(const cv::Mat &img, FastGrid &fast_grid, Corners &corners, const double eigen_threshold=30, const int border=4);
 
     static void fastDetect(const cv::Mat &img, Corners &corners, int threshold, double eigen_threshold = 30);
 
-    inline static FastDetector::Ptr create(int width, int height, int border, int nlevels, int grid_size, int grid_min_size, int max_threshold = 20, int min_threshold = 7)
-    {return FastDetector::Ptr(new FastDetector(width, height, border, nlevels, grid_size, grid_min_size, max_threshold, min_threshold));}
+    inline static FastDetector::Ptr create(int width, int height, int border, int nlevels, double scale, int grid_size, int grid_min_size, int max_threshold = 20, int min_threshold = 7)
+    {return FastDetector::Ptr(new FastDetector(width, height, border, nlevels, scale, grid_size, grid_min_size, max_threshold, min_threshold));}
 
 private:
 
-    FastDetector(int width, int height, int border, int nlevels, int grid_size, int grid_min_size, int max_threshold, int min_threshold);
+    FastDetector(int width, int height, int border, int nlevels, double scale, int grid_size, int grid_min_size, int max_threshold, int min_threshold);
 
     static void setGridMask(Grid<Corner> &grid, const Corners &corners);
 
@@ -93,6 +94,13 @@ private:
     const int height_;
     const int border_;
     const int nlevels_;
+    const double scale_factor_;
+    const double log_scale_factor_;
+    std::vector<double> scale_factors_;
+    std::vector<double> inv_scale_factors_;
+    std::vector<double> level_sigma2_;
+    std::vector<double> inv_level_sigma2_;
+
     int N_;
 
     const int grid_min_size_;

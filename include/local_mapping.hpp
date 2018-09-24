@@ -3,11 +3,9 @@
 
 #include <future>
 #include "global.hpp"
+#include "feature_detector.hpp"
+#include "brief.hpp"
 #include "map.hpp"
-
-#ifdef SSVO_DBOW_ENABLE
-#include <DBoW3/DBoW3.h>
-#endif
 
 namespace ssvo{
 
@@ -29,16 +27,16 @@ public:
 
     int refineMapPoints(const int max_optimalize_num = -1, const double outlier_thr = 2.0/480.0);
 
-    void createFeatureFromSeed(const Seed::Ptr &seed);
-
     KeyFrame::Ptr relocalizeByDBoW(const Frame::Ptr &frame, const Corners &corners);
 
-    static LocalMapper::Ptr create(bool report = false, bool verbose = false)
-    { return LocalMapper::Ptr(new LocalMapper(report, verbose));}
+    static void showMatches(const KeyFrame::Ptr &keyframe1, const KeyFrame::Ptr &keyframe2);
+
+    static LocalMapper::Ptr create(const FastDetector::Ptr fast, bool report = false, bool verbose = false)
+    { return LocalMapper::Ptr(new LocalMapper(fast, report, verbose));}
 
 private:
 
-    LocalMapper(bool report, bool verbose);
+    LocalMapper(const FastDetector::Ptr fast, bool report, bool verbose);
 
     void run();
 
@@ -50,9 +48,9 @@ private:
 
     void finishLastKeyFrame();
 
-    int createFeatureFromSeedFeature(const KeyFrame::Ptr &keyframe);
+    int createNewMapPoints(const KeyFrame::Ptr &keyframe);
 
-    int createFeatureFromLocalMap(const KeyFrame::Ptr &keyframe, const int num = 5);
+    int searchInLocalMap(const KeyFrame::Ptr &keyframe);
 
     void checkCulling(const KeyFrame::Ptr &keyframe);
 
@@ -77,15 +75,18 @@ private:
         double min_found_ratio_;
     } options_;
 
+    FastDetector::Ptr fast_detector_;
+
+    BRIEF::Ptr brief_;
+
     std::deque<KeyFrame::Ptr> keyframes_buffer_;
     KeyFrame::Ptr keyframe_last_;
 
-#ifdef SSVO_DBOW_ENABLE
+//#ifdef SSVO_DBOW_ENABLE
     DBoW3::Vocabulary vocabulary_;
     DBoW3::Database database_;
-    std::vector<cv::Point2i> border_tl_;
-    std::vector<cv::Point2i> border_br_;
-#endif
+
+//#endif
 
     const bool report_;
     const bool verbose_;

@@ -38,7 +38,8 @@ System::System(std::string config_file, std::string calib_flie) :
     double fps = camera_->fps();
     if(fps < 1.0) fps = 1.0;
     //! image
-    const int nlevel = Config::imageNLevel();
+    const int nlevels = Config::imageNLevels();
+    const double scale_factor = Config::imageScaleFactor();
     const int width = camera_->width();
     const int height = camera_->height();
     const int image_border = AlignPatch::Size;
@@ -48,16 +49,18 @@ System::System(std::string config_file, std::string calib_flie) :
     const int fast_max_threshold = Config::fastMaxThreshold();
     const int fast_min_threshold = Config::fastMinThreshold();
 
-    fast_detector_ = FastDetector::create(width, height, image_border, nlevel, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
+    fast_detector_ = FastDetector::create(width, height, image_border, nlevels, scale_factor, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
     feature_tracker_ = FeatureTracker::create(width, height, 20, image_border, true);
     initializer_ = Initializer::create(fast_detector_, true);
-    mapper_ = LocalMapper::create(true, false);
-    DepthFilter::Callback depth_fliter_callback = std::bind(&LocalMapper::createFeatureFromSeed, mapper_, std::placeholders::_1);
-    depth_filter_ = DepthFilter::create(fast_detector_, depth_fliter_callback, true);
+    mapper_ = LocalMapper::create(fast_detector_, true, false);
+    //DepthFilter::Callback depth_fliter_callback = std::bind(&LocalMapper::createFeatureFromSeed, mapper_, std::placeholders::_1);
+    //depth_filter_ = DepthFilter::create(fast_detector_, depth_fliter_callback, true);
     viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));
 
-    mapper_->startMainThread();
-    depth_filter_->startMainThread();
+    Frame::initScaleParameters(fast_detector_);
+
+    //mapper_->startMainThread();
+    //depth_filter_->startMainThread();
 
     time_ = 1000.0/fps;
 
@@ -90,7 +93,7 @@ System::~System()
     sysTrace.reset();
 
     viewer_->setStop();
-    depth_filter_->stopMainThread();
+    //depth_filter_->stopMainThread();
     mapper_->stopMainThread();
 
     viewer_->waitForFinish();
@@ -160,7 +163,7 @@ System::Status System::initialize()
     reference_keyframe_ = kf1;
     last_keyframe_ = kf1;
 
-    depth_filter_->insertFrame(current_frame_, kf1);
+    //depth_filter_->insertFrame(current_frame_, kf1);
 
     initializer_->reset();
 
@@ -172,14 +175,14 @@ System::Status System::tracking()
     current_frame_->setRefKeyFrame(reference_keyframe_);
 
     //! track seeds
-    depth_filter_->trackFrame(last_frame_, current_frame_);
+    //depth_filter_->trackFrame(last_frame_, current_frame_);
 
     // TODO 先验信息怎么设置？
     current_frame_->setPose(last_frame_->pose());
     //! alignment by SE3
     AlignSE3 align;
     sysTrace->startTimer("img_align");
-    align.run(last_frame_, current_frame_, Config::alignTopLevel(), Config::alignBottomLevel(), 30, 1e-8);
+    align.run(last_frame_, current_frame_, Config::imageNLevels()-1, Config::alignBottomLevel(), Config::alignScaleFactor(), 30, 1e-8);
     sysTrace->stopTimer("img_align");
 
     //! track local map
@@ -201,12 +204,12 @@ System::Status System::tracking()
     sysTrace->startTimer("per_depth_filter");
     if(createNewKeyFrame())
     {
-        depth_filter_->insertFrame(current_frame_, reference_keyframe_);
+        //depth_filter_->insertFrame(current_frame_, reference_keyframe_);
         mapper_->insertKeyFrame(reference_keyframe_);
     }
     else
     {
-        depth_filter_->insertFrame(current_frame_, nullptr);
+        //depth_filter_->insertFrame(current_frame_, nullptr);
     }
     sysTrace->stopTimer("per_depth_filter");
 
@@ -237,7 +240,7 @@ System::Status System::relocalize()
 
     //! alignment by SE3
     AlignSE3 align;
-    int matches = align.run(reference_keyframe_, current_frame_, Config::alignTopLevel(), Config::alignBottomLevel(), 30, 1e-8);
+    int matches = align.run(reference_keyframe_, current_frame_, Config::imageNLevels()-1, Config::alignBottomLevel(), Config::alignScaleFactor(), 30, 1e-8);
 
     if(matches < 30)
         return STATUS_TRACKING_BAD;
@@ -250,7 +253,7 @@ System::Status System::relocalize()
 
     Optimizer::motionOnlyBundleAdjustment(current_frame_, false, true, true);
 
-    if(current_frame_->featureNumber() < 30)
+    if(current_frame_->getMapPointMatchSize() < 30)
         return STATUS_TRACKING_BAD;
 
     return STATUS_TRACKING_GOOD;
@@ -258,22 +261,29 @@ System::Status System::relocalize()
 
 void System::calcLightAffine()
 {
-    std::vector<Feature::Ptr> fts_last = last_frame_->getFeatures();
+    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts_last = last_frame_->getMapPointFeatureMatches();
+    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts_curr = current_frame_->getMapPointFeatureMatches();
 
     const cv::Mat img_last = last_frame_->getImage(0);
-    const cv::Mat img_curr = current_frame_->getImage(0).clone() * 1.3;
+    const cv::Mat img_curr = current_frame_->getImage(0);
 
     const int size = 4;
     const int patch_area = size*size;
-    const int N = (int)fts_last.size();
+    const int N = (int)mpt_fts_last.size();
     cv::Mat patch_buffer_last = cv::Mat::zeros(N, patch_area, CV_32FC1);
     cv::Mat patch_buffer_curr = cv::Mat::zeros(N, patch_area, CV_32FC1);
 
     int count = 0;
-    for(int i = 0; i < N; ++i)
+    for(const auto &mpt_ft : mpt_fts_last)
     {
-        const Feature::Ptr ft_last = fts_last[i];
-        const Feature::Ptr ft_curr = current_frame_->getFeatureByMapPoint(ft_last->mpt_);
+        const MapPoint::Ptr mpt = mpt_ft.first;
+        const Feature::Ptr ft_last = mpt_ft.second;
+
+        const auto itr = mpt_fts_curr.find(mpt);
+        if(itr == mpt_fts_curr.end())
+            continue;
+
+        const Feature::Ptr ft_curr = itr->second;
 
         if(ft_curr == nullptr)
             continue;
@@ -307,12 +317,7 @@ bool System::createNewKeyFrame()
 {
     std::map<KeyFrame::Ptr, int> overlap_kfs = current_frame_->getOverLapKeyFrames();
 
-    std::vector<Feature::Ptr> fts = current_frame_->getFeatures();
-    std::map<MapPoint::Ptr, Feature::Ptr> mpt_ft;
-    for(const Feature::Ptr &ft : fts)
-    {
-        mpt_ft.emplace(ft->mpt_, ft);
-    }
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts = current_frame_->getMapPointFeatureMatches();
 
     KeyFrame::Ptr max_overlap_keyframe;
     int max_overlap = 0;
@@ -362,14 +367,15 @@ bool System::createNewKeyFrame()
 
         std::vector<float> disparity;
         disparity.reserve(ovlp_kf.second);
-        std::vector<MapPoint::Ptr> mpts = ovlp_kf.first->getMapPoints();
-        for(const MapPoint::Ptr &mpt : mpts)
+        std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts_kf = ovlp_kf.first->getMapPointFeatureMatches();
+        for(const auto &item : mpt_fts_kf)
         {
-            Feature::Ptr ft_ref = mpt->findObservation(ovlp_kf.first);
-            if(ft_ref == nullptr) continue;
+            const MapPoint::Ptr &mpt = item.first;
 
-            if(!mpt_ft.count(mpt)) continue;
-            Feature::Ptr ft_cur = mpt_ft.find(mpt)->second;
+            if(!mpt_fts.count(mpt)) continue;
+
+            Feature::Ptr ft_cur = mpt_fts.find(mpt)->second;
+            Feature::Ptr ft_ref = item.second;
 
             const Vector2d px(ft_ref->px_ - ft_cur->px_);
             disparity.push_back(px.norm());
@@ -381,14 +387,11 @@ bool System::createNewKeyFrame()
     }
     disparities.sort();
 
-    if(!disparities.empty())
-        current_frame_->disparity_ = *std::next(disparities.begin(), disparities.size()/2);
-
-    LOG(INFO) << "[System] Max overlap: " << max_overlap << " min disaprity " << disparities.front() << ", median: " << current_frame_->disparity_;
+    LOG(INFO) << "[System] Max overlap: " << max_overlap << " min disaprity " << disparities.front();
 
 //    int all_features = current_frame_->featureNumber() + current_frame_->seedNumber();
     bool c2 = disparities.front() > options_.min_kf_disparity;
-    bool c3 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * options_.min_ref_track_rate;
+    bool c3 = current_frame_->getMapPointMatchSize() < reference_keyframe_->getMapPointMatchSize() * options_.min_ref_track_rate;
 //    bool c4 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * 0.9;
 
     //! create new keyFrame
@@ -396,18 +399,17 @@ bool System::createNewKeyFrame()
     {
         //! create new keyframe
         KeyFrame::Ptr new_keyframe = KeyFrame::create(current_frame_);
-        for(const Feature::Ptr &ft : fts)
+        const std::vector<MapPoint::Ptr> mpts = new_keyframe->getMapPoints();
+        const std::vector<size_t> matches = new_keyframe->getMapPointMatchIndices();
+        for(const size_t &idx : matches)
         {
-            if(ft->mpt_->isBad())
-            {
-                current_frame_->removeFeature(ft);
-                continue;
-            }
+            const MapPoint::Ptr &mpt = mpts[idx];
 
-            ft->mpt_->addObservation(new_keyframe, ft);
-            ft->mpt_->updateViewAndDepth();
+            mpt->addObservation(new_keyframe, idx);
+            mpt->updateViewAndDepth();
 //            mapper_->addOptimalizeMapPoint(ft->mpt_);
         }
+
         new_keyframe->updateConnections();
         reference_keyframe_ = new_keyframe;
         last_keyframe_ = new_keyframe;

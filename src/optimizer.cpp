@@ -17,19 +17,23 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
     problem.AddParameterBlock(kf2->optimal_Tcw_.data(), SE3d::num_parameters, local_parameterization);
     problem.SetParameterBlockConstant(kf1->optimal_Tcw_.data());
 
-    std::vector<Feature::Ptr> fts1 = kf1->getFeatures();
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts1 = kf1->getMapPointFeatureMatches();
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts2 = kf2->getMapPointFeatureMatches();
     MapPoints mpts;
 
-    for(const Feature::Ptr &ft1 : fts1)
+    for(const auto &mpt_ft1 : mpt_fts1)
     {
-        MapPoint::Ptr mpt = ft1->mpt_;
+        MapPoint::Ptr mpt = mpt_ft1.first;
         if(mpt == nullptr)//! should not happen
             continue;
 
-        Feature::Ptr ft2 = mpt->findObservation(kf2);
+        Feature::Ptr ft1 = mpt_ft1.second;
 
-        if(ft2 == nullptr || ft2->mpt_ == nullptr)
+        auto iter = mpt_fts2.find(mpt);
+        if(iter == mpt_fts2.end())
             continue;
+
+        Feature::Ptr ft2 = iter->second;
 
         mpt->optimal_pose_ = mpt->pose();
         mpts.push_back(mpt);
@@ -77,13 +81,13 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
         std::vector<MapPoint::Ptr> mpts = kf->getMapPoints();
         for(const MapPoint::Ptr &mpt : mpts)
         {
-            local_mappoints.insert(mpt);
+            if(mpt) local_mappoints.insert(mpt);
         }
     }
 
     for(const MapPoint::Ptr &mpt : local_mappoints)
     {
-        const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+        const std::map<KeyFrame::Ptr, size_t> obs = mpt->getObservations();
         for(const auto &item : obs)
         {
             if(actived_keyframes.count(item.first))
@@ -116,12 +120,13 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
     for(const MapPoint::Ptr &mpt : local_mappoints)
     {
         mpt->optimal_pose_ = mpt->pose();
-        const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+        const std::map<KeyFrame::Ptr, size_t> obs = mpt->getObservations();
 
         for(const auto &item : obs)
         {
             const KeyFrame::Ptr &kf = item.first;
-            const Feature::Ptr &ft = item.second;
+            const size_t &idx = item.second;
+            const Feature::Ptr ft = kf->getFeatureByIndex(idx);
             ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);//, 1.0/(1<<ft->level_));
             problem.AddResidualBlock(cost_function1, lossfunction, kf->optimal_Tcw_.data(), mpt->optimal_pose_.data());
         }
@@ -145,15 +150,18 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
     static const double max_residual = pixel_usigma * pixel_usigma * std::sqrt(3.81);
     for(const MapPoint::Ptr &mpt : local_mappoints)
     {
-        const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+        const std::map<KeyFrame::Ptr, size_t> obs = mpt->getObservations();
         for(const auto &item : obs)
         {
-            double residual = utils::reprojectError(item.second->fn_.head<2>(), item.first->Tcw(), mpt->optimal_pose_);
+            const KeyFrame::Ptr &kf = item.first;
+            const size_t &idx = item.second;
+            const Feature::Ptr &ft = kf->getFeatureByIndex(idx);
+            double residual = utils::reprojectError(ft->fn_.head<2>(), kf->Tcw(), mpt->optimal_pose_);
             if(residual < max_residual)
                 continue;
 
-            mpt->removeObservation(item.first);
-            changed_keyframes.insert(item.first);
+            mpt->removeObservation(kf);
+            changed_keyframes.insert(kf);
 //            std::cout << " rm outlier: " << mpt->id_ << " " << item.first->id_ << " " << obs.size() << std::endl;
 
             if(mpt->type() == MapPoint::BAD)
@@ -350,55 +358,21 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_see
     static const double scale = pixel_usigma * std::sqrt(3.81);
     ceres::LossFunction* lossfunction = new ceres::HuberLoss(scale);
 
+    std::vector<MapPoint::Ptr> mpts = frame->getMapPoints();
     std::vector<Feature::Ptr> fts = frame->getFeatures();
-    const size_t N = fts.size();
+    std::vector<size_t> matches = frame->getMapPointMatchIndices();
+    const size_t N = matches.size();
     std::vector<ceres::ResidualBlockId> res_ids(N);
-    for(size_t i = 0; i < N; ++i)
+    for(size_t i = 0; i < N; i++)
     {
         Feature::Ptr ft = fts[i];
-        MapPoint::Ptr mpt = ft->mpt_;
-        if(mpt == nullptr)
-            continue;
+        MapPoint::Ptr mpt = mpts[i];// TODO mpt is good?
 
         mpt->optimal_pose_ = mpt->pose();
         ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2]);//, 1.0/(1<<ft->level_));
         res_ids[i] = problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), mpt->optimal_pose_.data());
         problem.SetParameterBlockConstant(mpt->optimal_pose_.data());
     }
-
-    if(N < OPTIMAL_MPTS)
-    {
-        std::vector<Feature::Ptr> ft_seeds = frame->getSeeds();
-        const size_t needed = OPTIMAL_MPTS - N;
-        if(ft_seeds.size() > needed)
-        {
-            std::nth_element(ft_seeds.begin(), ft_seeds.begin()+needed, ft_seeds.end(),
-                             [](const Feature::Ptr &a, const Feature::Ptr &b)
-                             {
-                               return a->seed_->getInfoWeight() > b->seed_->getInfoWeight();
-                             });
-
-            ft_seeds.resize(needed);
-        }
-
-        const size_t M = ft_seeds.size();
-        res_ids.resize(N+M);
-        for(int i = 0; i < M; ++i)
-        {
-            Feature::Ptr ft = ft_seeds[i];
-            Seed::Ptr seed = ft->seed_;
-            if(seed == nullptr)
-                continue;
-
-            seed->optimal_pose_.noalias() = seed->kf->Twc() * (seed->fn_ref / seed->getInvDepth());
-
-            ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(seed->fn_ref[0]/seed->fn_ref[2], seed->fn_ref[1]/seed->fn_ref[2], seed->getInfoWeight());
-            res_ids[i] = problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), seed->optimal_pose_.data());
-            problem.SetParameterBlockConstant(seed->optimal_pose_.data());
-
-        }
-    }
-
 
     ceres::Solver::Options options;
     ceres::Solver::Summary summary;
@@ -413,14 +387,15 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_see
         int remove_count = 0;
 
         static const double TH_REPJ = 3.81 * pixel_usigma * pixel_usigma;
-        for(size_t i = 0; i < N; ++i)
+        for(size_t i = 0; i < N; i++)
         {
             Feature::Ptr ft = fts[i];
-            if(reprojectionError(problem, res_ids[i]).squaredNorm() > TH_REPJ * (1 << ft->level_))
+            const ceres::ResidualBlockId &res_id = res_ids[i];
+            if(reprojectionError(problem, res_id).squaredNorm() > TH_REPJ * (1 << ft->corner_.level))
             {
                 remove_count++;
-                problem.RemoveResidualBlock(res_ids[i]);
-                frame->removeFeature(ft);
+                problem.RemoveResidualBlock(res_id);
+                frame->removeMapPointMatchByIndex(matches[i]);
             }
         }
 
@@ -477,7 +452,7 @@ void Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool repo
     double t0 = (double)cv::getTickCount();
     mpt->optimal_pose_ = mpt->pose();
     Vector3d pose_last = mpt->optimal_pose_;
-    const std::map<KeyFrame::Ptr, Feature::Ptr> obs = mpt->getObservations();
+    const std::map<KeyFrame::Ptr, size_t> obs = mpt->getObservations();
     const size_t n_obs = obs.size();
 
     Matrix3d A;
@@ -498,8 +473,12 @@ void Optimizer::refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool repo
         //! compute res
         for(const auto &obs_item : obs)
         {
-            const SE3d Tcw = obs_item.first->Tcw();
-            const Vector2d fn = obs_item.second->fn_.head<2>();
+            const KeyFrame::Ptr &kf = obs_item.first;
+            const size_t &idx = obs_item.second;
+
+            const SE3d Tcw = kf->Tcw();
+            const Feature::Ptr ft = kf->getFeatureByIndex(idx);
+            const Vector2d fn = ft->fn_.head<2>() / ft->fn_[3];
 
             const Vector3d point(Tcw * mpt->optimal_pose_);
             const Vector2d resduial(point.head<2>()/point[2] - fn);

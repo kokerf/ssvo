@@ -1,7 +1,8 @@
 %YAML:1.0
 
 # Image
-Image.nlevels: 4
+Image.nlevels: 10
+Image.scale_factor: 1.2
 Image.sigma: 1.0
 
 # Fast detector
@@ -27,7 +28,7 @@ Mapping.max_local_ba_kfs: 10
 Mapping.min_local_ba_connected_fts: 20
 
 # Align
-Align.top_level: 3   # not bigger than Image.pyramid_levels
+Align.scale_factor: 2.0 # should not big than 2
 Align.bottom_level: 0   # not smaller than 0
 Align.patch_size: 4
 
@@ -52,4 +53,4 @@ Glog.log_dir: "" # If specified, logfiles are written into this directory instea
 Trace.log_dir: "/tmp"
 
 # DBoW
-DBoW.voc_dir: ""
+DBoW.voc_dir: "/home/neu/library/DBow3/orbvoc.dbow3"

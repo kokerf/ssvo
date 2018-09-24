@@ -112,7 +112,7 @@ TimeTracing::Ptr dfltTrace = nullptr;
 //! DepthFilter
 DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback &callback, bool report, bool verbose) :
     seed_coverged_callback_(callback), fast_detector_(fast_detector),
-    report_(report), verbose_(report&&verbose), filter_thread_(nullptr), track_thread_enabled_(true), stop_require_(false)
+    report_(report), verbose_(report&&verbose), filter_thread_(nullptr), stop_require_(false)
 {
     options_.max_kfs = 5;
     options_.max_features = Config::minCornersPerKeyFrame();
@@ -141,16 +141,6 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback 
 
     string trace_dir = Config::timeTracingDirectory();
     dfltTrace.reset(new TimeTracing("ssvo_trace_filter", trace_dir, time_names, log_names));
-}
-
-void DepthFilter::enableTrackThread()
-{
-    track_thread_enabled_ = true;
-}
-
-void DepthFilter::disableTrackThread()
-{
-    track_thread_enabled_ = false;
 }
 
 void DepthFilter::startMainThread()
@@ -195,18 +185,11 @@ void DepthFilter::run()
 
             int updated_count = 0;
             int project_count = 0;
-            if(checkDisparity(frame))
-            {
-                dfltTrace->startTimer("update_seeds");
-                updated_count = updateSeeds(frame);
-                dfltTrace->stopTimer("update_seeds");
-                dfltTrace->log("num_updated", updated_count);
 
-                dfltTrace->startTimer("epl_search");
-                project_count = reprojectAllSeeds(frame);
-                dfltTrace->stopTimer("epl_search");
-                dfltTrace->log("num_repoj", project_count);
-            }
+            dfltTrace->startTimer("epl_search");
+            project_count = reprojectAllSeeds(frame);
+            dfltTrace->stopTimer("epl_search");
+            dfltTrace->log("num_repoj", project_count);
 
             dfltTrace->startTimer("create_seeds");
             if(keyframe)
@@ -276,72 +259,20 @@ bool DepthFilter::checkNewFrame(Frame::Ptr &frame, KeyFrame::Ptr &keyframe)
     return frame != nullptr;
 }
 
-bool DepthFilter::checkDisparity(const Frame::Ptr &frame)
-{
-    static Frame::Ptr frame_ref;
-
-    if(frame == nullptr)
-        return false;
-
-    if(frame_ref != nullptr && frame_ref->getRefKeyFrame()->id_ == frame->getRefKeyFrame()->id_)
-    {
-        const double disparity = frame->disparity_ - frame_ref->disparity_;
-        if(std::abs(disparity) < options_.min_frame_disparity)
-        {
-            LOG(ERROR) << "Too less disparity:" << disparity << " in frame " << frame->id_;
-            return false;
-        }
-    }
-
-    frame_ref = frame;
-
-    return true;
-}
-
-void DepthFilter::trackFrame(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur)
-{
-    dfltTrace->log("frame_id", frame_cur->id_);
-    if(track_thread_enabled_)
-    {
-        seeds_track_future_ = std::async(std::launch::async, &DepthFilter::trackSeeds, this, frame_last, frame_cur);
-    }
-    else
-    {
-        int tracked_count = trackSeeds(frame_last, frame_cur);
-        dfltTrace->log("num_tracked", tracked_count);
-        LOG_IF(WARNING, report_) << "[Filter][1] Frame: " << frame_cur->id_ << ", Tracking seeds: " << tracked_count;
-    }
-}
-
 void DepthFilter::insertFrame(const Frame::Ptr &frame, const KeyFrame::Ptr keyframe)
 {
     LOG_ASSERT(frame != nullptr) << "[Filter] Error input! Frame should not be null!";
-
-    if(track_thread_enabled_ && seeds_track_future_.valid())
-    {
-        seeds_track_future_.wait();
-        int tracked_count = seeds_track_future_.get();
-        dfltTrace->log("num_tracked", tracked_count);
-        LOG_IF(WARNING, report_) << "[Filter][1] Frame: " << frame->id_ << ", Tracking seeds: " << tracked_count;
-    }
 
     if(filter_thread_ == nullptr)
     {
         dfltTrace->startTimer("total_without_klt");
         int updated_count = 0;
         int project_count = 0;
-        if(checkDisparity(frame))
-        {
-            dfltTrace->startTimer("update_seeds");
-            updated_count = updateSeeds(frame);
-            dfltTrace->stopTimer("update_seeds");
-            dfltTrace->log("num_updated", updated_count);
 
-            dfltTrace->startTimer("epl_search");
-            project_count = reprojectAllSeeds(frame);
-            dfltTrace->stopTimer("epl_search");
-            dfltTrace->log("num_repoj", project_count);
-        }
+        dfltTrace->startTimer("epl_search");
+        project_count = reprojectAllSeeds(frame);
+        dfltTrace->stopTimer("epl_search");
+        dfltTrace->log("num_repoj", project_count);
 
         dfltTrace->startTimer("create_seeds");
         if(keyframe)
@@ -538,83 +469,6 @@ int DepthFilter::trackSeeds(const Frame::Ptr &frame_last, const Frame::Ptr &fram
     dfltTrace->stopTimer("klt_track");
 
     return tracked_count;
-}
-
-int DepthFilter::updateSeeds(const Frame::Ptr &frame)
-{
-    //! remove error tracked seeds and update
-    std::vector<Feature::Ptr> seed_fts = frame->getSeeds();
-    std::map<KeyFrame::Ptr, std::deque<Feature::Ptr> > seeds_map;
-    for(const Feature::Ptr &ft : seed_fts)
-    {
-        const auto seeds_map_itr = seeds_map.lower_bound(ft->seed_->kf);
-        if(seeds_map_itr == seeds_map.end())
-        {
-            std::deque<Feature::Ptr> new_deque;
-            new_deque.push_back(ft);
-            seeds_map.emplace(ft->seed_->kf, new_deque);
-        }
-        else
-        {
-            seeds_map_itr->second.push_back(ft);
-        }
-    }
-
-//    static double px_error_angle = atan(0.5*Config::pixelUnSigma())*2.0;
-    const double focus_length = MIN(frame->cam_->fx(), frame->cam_->fy());
-    const double pixel_usigma = Config::imagePixelSigma()/focus_length;
-    const double epl_threshold = options_.epl_dist2_threshold*pixel_usigma*pixel_usigma;
-    const double px_threshold = options_.pixel_error_threshold*pixel_usigma;
-    int updated_count = 0;
-    for(const auto &seed_map : seeds_map)
-    {
-        KeyFrame::Ptr kf = seed_map.first;
-        const std::deque<Feature::Ptr> &seeds_deque = seed_map.second;
-        const SE3d T_cur_from_ref = frame->Tcw() * kf->pose();
-//        const SE3d T_ref_from_cur = T_cur_from_ref.inverse();
-        for(const Feature::Ptr &ft : seeds_deque)
-        {
-            const Vector3d fn_cur = frame->cam_->lift(ft->px_);
-            const Seed::Ptr &seed = ft->seed_;
-            double err2 = utils::Fundamental::computeErrorSquared(
-                kf->pose().translation(), seed->fn_ref/seed->getInvDepth(), T_cur_from_ref, fn_cur.head<2>());
-
-            if(err2 > epl_threshold)
-            {
-                frame->removeSeed(seed);
-                continue;
-            }
-
-            double pixel_disparity = (seed->px_ref - ft->px_).norm() / (1 << ft->level_);// seed->level_ref);
-            if(pixel_disparity < options_.min_pixel_disparity)
-            {
-                continue;
-            }
-
-            //! update
-            double depth = -1;
-            if(utils::triangulate(T_cur_from_ref.rotationMatrix(), T_cur_from_ref.translation(), seed->fn_ref, fn_cur, depth))
-            {
-//                double tau = seed->computeTau(T_ref_from_cur, seed->fn_ref, depth, px_error_angle);
-                double tau = seed->computeVar(T_cur_from_ref, depth, options_.klt_epslion*px_threshold);
-//                tau = tau + Config::pixelUnSigma();
-                seed->update(1.0/depth, tau*tau);
-
-                //! check converge
-                if(seed->checkConvergence())
-                {
-                    seed_coverged_callback_(seed);
-                    kf->removeSeed(seed);
-                    frame->removeSeed(seed);
-                    continue;
-                }
-            }
-
-            updated_count++;
-        }
-    }
-
-    return updated_count;
 }
 
 int DepthFilter::reprojectSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame, double epl_threshold, double pixel_error, bool created)

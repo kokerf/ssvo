@@ -18,17 +18,11 @@ public:
 
     typedef std::function<void (const Seed::Ptr&)> Callback;
 
-    void trackFrame(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur);
-
     void insertFrame(const Frame::Ptr &frame, const KeyFrame::Ptr keyframe = nullptr);
 
 //    int getSeedsForMapping(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame);
 
     int updateByConnectedKeyFrames(const KeyFrame::Ptr &keyframe, int num = 2);
-
-    void enableTrackThread();
-
-    void disableTrackThread();
 
     void startMainThread();
 
@@ -53,13 +47,7 @@ private:
 
     bool checkNewFrame(Frame::Ptr &frame, KeyFrame::Ptr &keyframe);
 
-    bool checkDisparity(const Frame::Ptr &frame);
-
     int createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame = nullptr);
-
-    int trackSeeds(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur) const;
-
-    int updateSeeds(const Frame::Ptr &frame);
 
     int reprojectAllSeeds(const Frame::Ptr &frame);
 
@@ -94,7 +82,6 @@ private:
     //! main thread
     std::shared_ptr<std::thread> filter_thread_;
 
-    bool track_thread_enabled_;
     bool stop_require_;
     std::mutex mutex_stop_;
     std::mutex mutex_frame_;

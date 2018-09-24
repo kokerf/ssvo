@@ -243,7 +243,7 @@ void Viewer::drawMapPoints(Map::Ptr &map, Frame::Ptr &frame)
 {
     std::unordered_map<MapPoint::Ptr, Feature::Ptr> obs_mpts;
     if(frame)
-        obs_mpts = frame->features();
+        obs_mpts = frame->getMapPointFeatureMatches();
 
     std::vector<MapPoint::Ptr> mpts = map->getAllMapPoints();
 
@@ -308,35 +308,37 @@ void Viewer::drawTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
 {
     //! draw features
     const cv::Mat src = frame->getImage(0);
-    std::vector<Feature::Ptr> fts = frame->getFeatures();
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts = frame->getMapPointFeatureMatches();
     cv::cvtColor(src, dst, CV_GRAY2RGB);
     int font_face = 1;
     double font_scale = 0.5;
-    for(const Feature::Ptr &ft : fts)
+    for(const auto &mpt_ft : mpt_fts)
     {
+        const MapPoint::Ptr &mpt = mpt_ft.first;
+        const Feature::Ptr &ft = mpt_ft.second;
         Vector2d ft_px = ft->px_;
         cv::Point2f px(ft_px[0], ft_px[1]);
         cv::Scalar color(0, 255, 0);
         cv::circle(dst, px, 2, color, -1);
 
-        string id_str = std::to_string((frame->Tcw()*ft->mpt_->pose()).norm());//ft->mpt_->getFoundRatio());//
+        string id_str = std::to_string((frame->Tcw()*mpt->pose()).norm());//ft->mpt_->getFoundRatio());//
         cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
     }
 
-    //! draw seeds
-    std::vector<Feature::Ptr> seed_fts = frame->getSeeds();
-    for(const Feature::Ptr &ft : seed_fts)
-    {
-        Seed::Ptr seed = ft->seed_;
-        cv::Point2f px(ft->px_[0], ft->px_[1]);
-        double convergence = 0;
-        double scale = MIN(convergence, 256.0) / 256.0;
-        cv::Scalar color(255*scale, 0, 255*(1-scale));
-        cv::circle(dst, px, 2, color, -1);
-
-//        string id_str = std::to_string();
-//        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
-    }
+//    //! draw seeds
+//    std::vector<Feature::Ptr> seed_fts = frame->getSeeds();
+//    for(const Feature::Ptr &ft : seed_fts)
+//    {
+//        Seed::Ptr seed = ft->seed_;
+//        cv::Point2f px(ft->px_[0], ft->px_[1]);
+//        double convergence = 0;
+//        double scale = MIN(convergence, 256.0) / 256.0;
+//        cv::Scalar color(255*scale, 0, 255*(1-scale));
+//        cv::circle(dst, px, 2, color, -1);
+//
+////        string id_str = std::to_string();
+////        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
+//    }
 
 }
 

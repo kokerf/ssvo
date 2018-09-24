@@ -55,18 +55,27 @@ AlignSE3::AlignSE3(bool verbose, bool visible) :
 {}
 
 int AlignSE3::run(Frame::Ptr reference_frame,
-                   Frame::Ptr current_frame,
-                   int top_level,
-                   int bottom_level,
-                   int max_iterations,
-                   double epslion)
+                  Frame::Ptr current_frame,
+                  int top_level,
+                  int bottom_level,
+                  double scale_factor,
+                  int max_iterations,
+                  double epslion)
 {
     logs_.clear();
     double epslion_squared = epslion * epslion;
     ref_frame_ = reference_frame;
     cur_frame_ = current_frame;
 
-    std::vector<Feature::Ptr> fts = ref_frame_->getFeatures();
+    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts = ref_frame_->getMapPointFeatureMatches();
+    std::vector<Feature::Ptr> fts; fts.reserve(mpt_fts.size());
+    std::vector<MapPoint::Ptr> mpts; mpts.reserve(mpt_fts.size());
+    for(const auto &it : mpt_fts)
+    {
+        mpts.push_back(it.first);
+        fts.push_back(it.second);
+    }
+
     const size_t N = fts.size();
     LOG_ASSERT(N != 0) << " AlignSE3: Frame(" << reference_frame->id_ << ") " << " no features to track!";
     const int max_level = (int)cur_frame_->images().size() - 1;
@@ -79,9 +88,9 @@ int AlignSE3::run(Frame::Ptr reference_frame,
     T_cur_from_ref_ = cur_frame_->Tcw() * ref_frame_->pose();
     LOG_IF(INFO, verbose_) << "T_cur_from_ref_ " << T_cur_from_ref_.log().transpose();
 
-    for(int l = top_level; l >= bottom_level; l--)
+    for(int l = top_level; l >= bottom_level; )
     {
-        const int n = computeReferencePatches(l, fts);
+        const int n = computeReferencePatches(l, fts, mpts);
 
         double res_old = std::numeric_limits<double>::max();
         SE3d T_cur_from_ref_old = T_cur_from_ref_;
@@ -110,6 +119,10 @@ int AlignSE3::run(Frame::Ptr reference_frame,
             if(se3.dot(se3) < epslion_squared)
                 break;
         }
+
+        int l_next = l-1;
+        while(l_next > bottom_level && Frame::scale_factors_.at(l) <= Frame::scale_factors_.at(l_next) * scale_factor) l_next--;
+        l = l_next;
     }
 
     cur_frame_->setTcw(T_cur_from_ref_ * ref_frame_->Tcw());
@@ -124,8 +137,9 @@ int AlignSE3::run(Frame::Ptr reference_frame,
     return count_;
 }
 
-int AlignSE3::computeReferencePatches(int level, std::vector<Feature::Ptr> &fts)
+int AlignSE3::computeReferencePatches(int level, const std::vector<Feature::Ptr> &fts, const std::vector<MapPoint::Ptr> &mpts)
 {
+    LOG_ASSERT(fts.size() == mpts.size()) << " Wrong input size!";
     const size_t N = fts.size();
 
     Vector3d ref_pose = ref_frame_->pose().translation();
@@ -134,19 +148,22 @@ int AlignSE3::computeReferencePatches(int level, std::vector<Feature::Ptr> &fts)
     const int rows = ref_img.rows;
     const int border = HalfPatchSize + 1;
 
-    const double scale = 1.0f / (1 << level);
-    const double fx = ref_frame_->cam_->fx() * scale;
-    const double fy = ref_frame_->cam_->fy() * scale;
+    const double inv_scale = Frame::inv_scale_factors_.at(level);
+    const double fx = ref_frame_->cam_->fx() * inv_scale;
+    const double fy = ref_frame_->cam_->fy() * inv_scale;
 
     int feature_counter = 0;
     for(size_t n = 0; n < N; ++n)
     {
-        Vector2d ref_px = fts[n]->px_ * scale;
-        if(fts[n]->mpt_ == nullptr ||
-            ref_px[0] < border || ref_px[1] < border || ref_px[0] + border > cols - 1 || ref_px[1] + border > rows - 1)
+        const MapPoint::Ptr &mpt = mpts[n];
+        if(mpt == nullptr)
             continue;
 
-        double depth = (fts[n]->mpt_->pose() - ref_pose).norm();
+        Vector2d ref_px = fts[n]->px_ * inv_scale;
+        if(ref_px[0] < border || ref_px[1] < border || ref_px[0] + border > cols - 1 || ref_px[1] + border > rows - 1)
+            continue;
+
+        double depth = (mpt->pose() - ref_pose).norm();
         Vector3d ref_xyz = fts[n]->fn_;
         ref_xyz *= depth;
 
@@ -192,7 +209,7 @@ int AlignSE3::computeReferencePatches(int level, std::vector<Feature::Ptr> &fts)
 double AlignSE3::computeResidual(int level, int N)
 {
     const cv::Mat cur_img = cur_frame_->getImage(level);
-    const double scale = 1.0f / (1 << level);
+    const double inv_scale = Frame::inv_scale_factors_.at(level);
     const int cols = cur_img.cols;
     const int rows = cur_img.rows;
     const int border = HalfPatchSize + 1;
@@ -204,7 +221,7 @@ double AlignSE3::computeResidual(int level, int N)
     for(int n = 0; n < N; ++n)
     {
         const Vector3d cur_xyz = T_cur_from_ref_ * ref_feature_cache_.col(n);
-        const Vector2d cur_px = cur_frame_->cam_->project(cur_xyz) * scale;
+        const Vector2d cur_px = cur_frame_->cam_->project(cur_xyz) * inv_scale;
         if(cur_px[0] < border || cur_px[1] < border || cur_px[0] + border > cols - 1 || cur_px[1] + border > rows - 1)
             continue;
 
@@ -243,15 +260,16 @@ double AlignSE3::computeResidual(int level, int N)
 
 namespace utils{
 
-int getBestSearchLevel(const Matrix2d& A_cur_ref, const int max_level)
+int getBestSearchLevel(const Matrix2d& A_cur_ref, const int max_level, const float scale_factor)
 {
     // Compute patch level in other image
     int search_level = 0;
     double D = A_cur_ref.determinant();
+    double scale = 1.0 / (scale_factor*scale_factor);
     while(D > 3.0 && search_level < max_level)
     {
         search_level += 1;
-        D *= 0.25;
+        D *= scale;
     }
     return search_level;
 }
@@ -268,7 +286,7 @@ void getWarpMatrixAffine(const AbstractCamera::Ptr &cam_ref,
 {
     const double half_patch_size = static_cast<double>(patch_size+2)/2;
     const Vector3d xyz_ref(depth_ref * f_ref);
-    const double length = half_patch_size * (1 << level_ref);
+    const double length = half_patch_size * Frame::scale_factors_.at(level_ref);
     Vector3d xyz_ref_du(cam_ref->lift(px_ref + Vector2d(length, 0)));
     Vector3d xyz_ref_dv(cam_ref->lift(px_ref + Vector2d(0, length)));
     xyz_ref_du *= xyz_ref[2]/xyz_ref_du[2];

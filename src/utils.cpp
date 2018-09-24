@@ -344,17 +344,17 @@ void Fundamental::Normalize(const std::vector<cv::Point2d>& fts, std::vector<cv:
     T <<  scale_x, 0, -mean.x*scale_x, 0, scale_y, -mean.y*scale_y, 0,0,1;
 }
 
-inline void Fundamental::computeErrors(const cv::Point2d& p1, const cv::Point2d& p2, Matrix3d& F, double& err1, double& err2)
+inline void Fundamental::computeErrors(const cv::Point2d& p1, const cv::Point2d& p2, const Matrix3d& F21, double& err1, double& err2)
 {
-    const double &F0 = F(0,0);
-    const double &F1 = F(0,1);
-    const double &F2 = F(0,2);
-    const double &F3 = F(1,0);
-    const double &F4 = F(1,1);
-    const double &F5 = F(1,2);
-    const double &F6 = F(2,0);
-    const double &F7 = F(2,1);
-    const double &F8 = F(2,2);
+    const double &F0 = F21(0,0);
+    const double &F1 = F21(0,1);
+    const double &F2 = F21(0,2);
+    const double &F3 = F21(1,0);
+    const double &F4 = F21(1,1);
+    const double &F5 = F21(1,2);
+    const double &F6 = F21(2,0);
+    const double &F7 = F21(2,1);
+    const double &F8 = F21(2,2);
 
     //! point X1 = (u1, v1, 1)^T in first image
     //! poInt X2 = (u2, v2, 1)^T in second image
@@ -363,11 +363,12 @@ inline void Fundamental::computeErrors(const cv::Point2d& p1, const cv::Point2d&
     const double u2 = p2.x;
     const double v2 = p2.y;
 
-    //! epipolar line in the second image L2 = (a2, b2, c2)^T = F   * X1
+    //! x2^T * F21 *  x1 = 0
+    //! epipolar line in the second image L2 = (a2, b2, c2)^T = F21   * X1
     const double a2 = F0*u1 + F1*v1 + F2;
     const double b2 = F3*u1 + F4*v1 + F5;
     const double c2 = F6*u1 + F7*v1 + F8;
-    //! epipolar line in the first image  L1 = (a1, b1, c1)^T = F^T * X2
+    //! epipolar line in the first image  L1 = (a1, b1, c1)^T = F21^T * X2
     const double a1 = F0*u2 + F3*v2 + F6;
     const double b1 = F1*u2 + F4*v2 + F7;
     const double c1 = F2*u2 + F5*v2 + F8;
@@ -375,10 +376,10 @@ inline void Fundamental::computeErrors(const cv::Point2d& p1, const cv::Point2d&
     //! distance from point to line: d^2 = |ax+by+c|^2/(a^2+b^2)
     //! X2 to L2 in second image
     const double dist2 = a2*u2 + b2*v2 + c2;
-    const double square_dist2 = dist2*dist2/(a2*a2 + b2*b2);
+    const double square_dist2 = dist2*dist2/(a2*a2 + b2*b2 + std::numeric_limits<double>::min());
     //! X1 to L1 in first image
     const double dist1 = a1*u1 + b1*v1 + c1;
-    const double square_dist1 = dist1*dist1/(a1*a1 + b1*b1);
+    const double square_dist1 = dist1*dist1/(a1*a1 + b1*b1 + std::numeric_limits<double>::min());
 
     err1 = square_dist1;
     err2 = square_dist2;
@@ -417,6 +418,35 @@ void Fundamental::decomposeEssentialMat(const Matrix3d& E, Matrix3d& R1, Matrix3
 
     t = U.col(2);
     t = t / t.norm();
+}
+
+//! x1 in cam1, x2 in cam2
+//! x1T * E12 * x2 = 0
+//! epipolar in image1 - l1: E12 * x2
+//! epipolar in image2 - l2: x1T * E12
+Matrix3d Fundamental::computeE12(const SE3d &Tc1w, const SE3d &Tc2w)
+{
+    const Matrix3d Rc1w = Tc1w.so3().matrix();
+    const Matrix3d Rc2w = Tc2w.so3().matrix();
+    const Vector3d &tc1w = Tc1w.translation();
+    const Vector3d &tc2w = Tc2w.translation();
+
+    //! T_1_from_2 = T_1_from_w * T_2_from_w'
+    //! = [ R1 t1] * [ R2 t2]'
+    //!   [    1 ]   [    1 ]
+    //! = [ R1 t1] * [ R2' -R2'*t2]'
+    //!   [    1 ]   [       1    ]
+    //! = [ R1*R2'  -R1*R2'*t2 + t1]
+    //! = [                 1      ]
+    const Matrix3d R12 = Rc1w * Rc2w.transpose();
+    const Vector3d t12 = - R12 * tc2w + tc1w;
+
+    const Matrix3d t12x = Sophus::SO3d::hat(t12);
+
+    //! E12 = [t12]x R12
+    //! F12 = K1^-T * E12 * K2^-1
+    //! F21 = K2^-T * E21 * K1^-1
+    return t12x * R12;
 }
 
 }

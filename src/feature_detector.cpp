@@ -83,17 +83,69 @@ bool FastGrid::inBoundary(int id) const
 }
 
 //! FastDetector
-FastDetector::FastDetector(int width, int height, int border, int nlevels,
+FastDetector::FastDetector(int width, int height, int border, int nlevels, double scale,
                            int grid_size, int grid_min_size, int max_threshold, int min_threshold):
-    width_(width), height_(height), border_(border), nlevels_(nlevels), grid_min_size_(grid_min_size),
+    width_(width), height_(height), border_(border), nlevels_(nlevels),
+    scale_factor_(scale), log_scale_factor_(log(scale)), grid_min_size_(grid_min_size),
     size_adjust_(grid_size!=grid_min_size), max_threshold_(max_threshold), min_threshold_(min_threshold),
     threshold_(max_threshold_), grid_filter_(width, height, grid_size)
 {
+    scale_factors_.resize(nlevels_, 1.0);
+    inv_scale_factors_.resize(nlevels_, 1.0);
+    for(int i = 1; i < nlevels_; i++)
+    {
+        scale_factors_[i] = scale_factors_[i-1] * scale_factor_;
+        inv_scale_factors_[i] = 1.0f / scale_factors_[i];
+    }
+
+    level_sigma2_.resize(nlevels_, 1.0);
+    inv_level_sigma2_.resize(nlevels_, 1.0);
+    for(int i = 1; i < nlevels_; i++)
+    {
+        level_sigma2_[i] = scale_factors_[i] * scale_factors_[i];
+        inv_level_sigma2_[i] = 1.0f / level_sigma2_[i];
+    }
+
     corners_in_levels_.resize(nlevels_);
     for(int i = 0; i < nlevels_; ++i)
     {
-       detect_grids_.push_back(FastGrid(width_>>i, height_>>i, grid_size, max_threshold_, min_threshold_));
+        detect_grids_.push_back(FastGrid(std::round(width_*inv_scale_factors_[i]), std::round(height_*inv_scale_factors_[i]), grid_size, max_threshold_, min_threshold_));
     }
+}
+
+int FastDetector::getNLevels() const
+{
+    return nlevels_;
+}
+
+double FastDetector::getScaleFactor() const
+{
+    return scale_factor_;
+}
+
+double FastDetector::getLogScaleFactor() const
+{
+    return log_scale_factor_;
+}
+
+std::vector<double> FastDetector::getScaleFactors() const
+{
+    return scale_factors_;
+}
+
+std::vector<double> FastDetector::getInvScaleFactors() const
+{
+    return inv_scale_factors_;
+}
+
+std::vector<double> FastDetector::getLevelSigma2() const
+{
+    return level_sigma2_;
+}
+
+std::vector<double> FastDetector::getInvLevelSigma2() const
+{
+    return inv_level_sigma2_;
 }
 
 size_t FastDetector::detect(const ImgPyr &img_pyr, Corners &new_corners, const Corners &exist_corners,
@@ -110,7 +162,7 @@ size_t FastDetector::detect(const ImgPyr &img_pyr, Corners &new_corners, const C
     {
         new_coners += detectInLevel(img_pyr[level], detect_grids_[level], corners_in_levels_[level], eigen_threshold, border_);
 
-        const int scale = 1 << level;
+        const double scale = scale_factors_.at(level);
         for(Corner &corner : corners_in_levels_[level])
         {
             corner.level = level;

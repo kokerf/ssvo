@@ -5,10 +5,10 @@ project(ssvo)
 ## User's option
 ## -----------------------
 option(SSVO_TEST_ENABLE "If build the test files." ON)
-option(SSVO_DBOW_ENABLE "If use the DBoW library." OFF)
+#option(SSVO_DBOW_ENABLE "If use the DBoW library." OFF)
 option(SSVO_TRACE_ENABLE "If use the time tracing." ON)
 message(STATUS "Test Enable    : "   ${SSVO_TEST_ENABLE})
-message(STATUS "DBoW Enable    : "   ${SSVO_DBOW_ENABLE})
+#message(STATUS "DBoW Enable    : "   ${SSVO_DBOW_ENABLE})
 message(STATUS "Trace Enable   : "   ${SSVO_TRACE_ENABLE})
 
 # Definitions
@@ -16,9 +16,9 @@ if(SSVO_TRACE_ENABLE)
     add_definitions(-DSSVO_USE_TRACE)
 endif()
 
-if(SSVO_DBOW_ENABLE)
-    add_definitions(-DSSVO_DBOW_ENABLE)
-endif()
+#if(SSVO_DBOW_ENABLE)
+#    add_definitions(-DSSVO_DBOW_ENABLE)
+#endif()
 
 ## -----------------------
 ## Build setting
@@ -31,34 +31,34 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
 if(NOT MSVC)
-	# Check C++11 or C++0x support
-	include(CheckCXXCompilerFlag)
-	CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
-	CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
-	if(COMPILER_SUPPORTS_CXX11)
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
-		add_definitions(-DCOMPILEDWITHC11)
-		message(STATUS "Using flag -std=c++11.")
-	elseif(COMPILER_SUPPORTS_CXX0X)
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
-		add_definitions(-DCOMPILEDWITHC0X)
-		message(STATUS "Using flag -std=c++0x.")
-	else()
-		message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
-	endif()
+    # Check C++11 or C++0x support
+    include(CheckCXXCompilerFlag)
+    CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+    CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
+    if(COMPILER_SUPPORTS_CXX11)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+        add_definitions(-DCOMPILEDWITHC11)
+        message(STATUS "Using flag -std=c++11.")
+    elseif(COMPILER_SUPPORTS_CXX0X)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
+        add_definitions(-DCOMPILEDWITHC0X)
+        message(STATUS "Using flag -std=c++0x.")
+    else()
+        message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
+    endif()
 
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O0 -march=native")
-	set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -mmmx -msse -msse -msse2 -msse3 -mssse3")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -O0 -march=native")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} -O3 -mmmx -msse -msse -msse2 -msse3 -mssse3")
 
 else()
-	add_definitions(-D_USE_MATH_DEFINES)
-	add_definitions(-D__SSE2__)
+    add_definitions(-D_USE_MATH_DEFINES)
+    add_definitions(-D__SSE2__)
 
-	set(SSVO_EXTRA_FLAGS		"/Gy /bigobj /Oi /arch:SSE /arch:SSE2 /arch:SSE3 /std:c++11")
-	set(CMAKE_CXX_FLAGS			"${CMAKE_CXX_FLAGS} ${SSVO_EXTRA_FLAGS}")
+    set(SSVO_EXTRA_FLAGS		"/Gy /bigobj /Oi /arch:SSE /arch:SSE2 /arch:SSE3 /std:c++11")
+    set(CMAKE_CXX_FLAGS			"${CMAKE_CXX_FLAGS} ${SSVO_EXTRA_FLAGS}")
     set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} ${SSVO_EXTRA_FLAGS}")
 
-	#string(REPLACE "/DNDEBUG" "/DEBUG" CMAKE_CXX_FLAGS_RELEASE ${CMAKE_CXX_FLAGS_RELEASE})
+    #string(REPLACE "/DNDEBUG" "/DEBUG" CMAKE_CXX_FLAGS_RELEASE ${CMAKE_CXX_FLAGS_RELEASE})
     #et(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /Zi /OPT:REF /OPT:ICF /INCREMENTAL:NO")
 endif()
 
@@ -106,10 +106,10 @@ find_package(Pangolin REQUIRED)
 include_directories(${Pangolin_INCLUDE_DIRS})
 
 # DBoW3
-if(SSVO_DBOW_ENABLE)
+#if(SSVO_DBOW_ENABLE)
 find_package(DBoW3 REQUIRED)
 include_directories(${DBoW3_INCLUDE_DIRS})
-endif()
+#endif()
 
 include_directories(
     ${PROJECT_SOURCE_DIR}
@@ -145,7 +145,7 @@ list(APPEND SOURCEFILES
     src/image_alignment.cpp
     src/initializer.cpp
     src/optimizer.cpp
-    src/depth_filter.cpp
+    #src/depth_filter.cpp
     src/local_mapping.cpp
     src/system.cpp
     src/viewer.cpp
@@ -191,10 +191,13 @@ target_link_libraries(test_camera_model ${LINK_LIBS})
 
 add_executable(test_timer test/test_timer.cpp)
 
-if(SSVO_DBOW_ENABLE)
+#if(SSVO_DBOW_ENABLE)
 add_executable(test_dbow3 test/test_dbow3.cpp)
 target_link_libraries(test_dbow3 ${PROJECT_NAME})
-endif()
+
+add_executable(test_feature_matching test/test_feature_matching.cpp)
+target_link_libraries(test_feature_matching ${PROJECT_NAME})
+#endif()
 endif(SSVO_TEST_ENABLE)
 
 ## -----------------------

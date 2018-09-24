@@ -40,11 +40,11 @@ public:
     AlignSE3(bool verbose=false, bool visible=false);
 
     int run(Frame::Ptr reference_frame, Frame::Ptr current_frame,
-             int top_level, int bottom_level, int max_iterations = 30, double epslion = 1E-5f);
+            int top_level, int bottom_level, double scale_factor, int max_iterations = 30, double epslion = 1E-5f);
 
 private:
 
-    int computeReferencePatches(int level, std::vector<Feature::Ptr> &fts);
+    int computeReferencePatches(int level, const std::vector<Feature::Ptr> &fts, const std::vector<MapPoint::Ptr> &mpts);
 
     double computeResidual(int level, int N);
 
@@ -67,7 +67,7 @@ private:
 //! ========================== Utils =========================================
 namespace utils{
 
-int getBestSearchLevel(const Matrix2d& A_cur_ref, const int max_level);
+int getBestSearchLevel(const Matrix2d& A_cur_ref, const int max_level, const float scale_factor);
 
 void getWarpMatrixAffine(const AbstractCamera::Ptr &cam_ref,
                          const AbstractCamera::Ptr &cam_cur,
@@ -96,9 +96,9 @@ void warpAffine(const cv::Mat &img_ref,
         return;
     }
 
-    const Vector2f px_ref_pyr = px_ref.cast<float>() / (1 << level_ref);
+    const Vector2f px_ref_pyr = px_ref.cast<float>() / Frame::scale_factors_.at(level_ref);
     const float half_patch_size = size * 0.5;
-    const int px_pyr_scale = 1 << level_cur;
+    const float px_pyr_scale = Frame::scale_factors_.at(level_cur);
     for(int y = 0; y < size; ++y)
     {
         for(int x = 0; x < size; ++x)

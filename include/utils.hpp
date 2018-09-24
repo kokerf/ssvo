@@ -316,7 +316,7 @@ void kltTrack(const ImgPyr& imgs_ref, const ImgPyr& imgs_cur, const cv::Size win
               const std::vector<cv::Point2f>& pts_ref, std::vector<cv::Point2f>& pts_cur,
               std::vector<bool> &status, cv::TermCriteria termcrit, bool track_forward = false, bool verbose = false);
 
-bool triangulate(const Matrix3d &R_cr,  const Vector3d &t_cr, const Vector3d &fn_r, const Vector3d &fn_c, double &d_ref);
+bool triangulate(const Matrix3d &R_cr, const Vector3d &t_cr, const Vector3d &fn_r, const Vector3d &fn_c, double &d_ref);
 
 namespace Fundamental
 {
@@ -325,7 +325,7 @@ bool findFundamentalMat(const std::vector<cv::Point2d> &pts_prev, const std::vec
                        Matrix3d &F, std::vector<bool> &inliers,
                        const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
 
-void computeErrors(const cv::Point2d &p1, const cv::Point2d &p2, Matrix3d &F, double &err1, double &err2);
+void computeErrors(const cv::Point2d &p1, const cv::Point2d &p2, const Matrix3d &F21, double &err1, double &err2);
 
 double computeErrorSquared(const Vector3d &p1, const Vector3d &p2, const SE3d &T, const Vector2d &p);
 
@@ -339,6 +339,8 @@ bool runRANSAC(const std::vector<cv::Point2d>& pts_prev, const std::vector<cv::P
                 const double sigma2 = 1, const int max_iterations = 1000, const bool bE = false);
 
 void decomposeEssentialMat(const Matrix3d& E, Matrix3d& R1, Matrix3d& R2, Vector3d& t);
+
+Matrix3d computeE12(const SE3d &Tc1w, const SE3d &Tc2w);
 
 }//! namespace Fundamental
 

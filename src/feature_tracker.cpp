@@ -1,14 +1,16 @@
 #include "feature_tracker.hpp"
 #include "feature_alignment.hpp"
 #include "image_alignment.hpp"
+#include "utils.hpp"
+#include <opencv2/core/eigen.hpp>
 #include <numeric>
 
 namespace ssvo{
 
 template <>
-inline size_t Grid<Feature::Ptr>::getIndex(const Feature::Ptr &element)
+inline size_t Grid<std::pair<MapPoint::Ptr, Vector2d> >::getIndex(const std::pair<MapPoint::Ptr, Vector2d> &element)
 {
-    const Vector2d &px = element->px_;
+    const Vector2d &px = element.second;
     return static_cast<size_t>(px[1]/grid_size_)*grid_n_cols_
         + static_cast<size_t>(px[0]/grid_size_);
 }
@@ -63,19 +65,22 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
     std::unordered_set<MapPoint::Ptr> local_mpts;
     for(const KeyFrame::Ptr &kf : local_keyframes)
     {
-        std::vector<MapPoint::Ptr> mpts = kf->getMapPoints();
-        for(const MapPoint::Ptr &mpt : mpts)
+        const std::vector<size_t> matches = kf->getMapPointMatchIndices();
+        const std::vector<MapPoint::Ptr> mpts = kf->getMapPoints();
+        for(const size_t &idx : matches)
         {
+            const MapPoint::Ptr mpt = mpts[idx];
+
+            if(mpt->isBad()) //! should not happen
+            {
+                kf->removeMapPointMatchByIndex(idx);// TODO
+                continue;
+            }
+
             if(local_mpts.count(mpt) || last_mpts_set.count(mpt))
                 continue;
 
             local_mpts.insert(mpt);
-
-            if(mpt->isBad()) //! should not happen
-            {
-                kf->removeMapPoint(mpt);
-                continue;
-            }
 
             reprojectMapPointToCell(frame, mpt);
         }
@@ -101,10 +106,10 @@ int FeatureTracker::reprojectLoaclMap(const Frame::Ptr &frame)
 
     double t3 = (double)cv::getTickCount();
     LOG_IF(WARNING, report_) << "[ Match][*] Time: "
-                           << (t1-t0)/cv::getTickFrequency() << " "
-                           << (t2-t1)/cv::getTickFrequency() << " "
-                           << (t3-t2)/cv::getTickFrequency() << " "
-                           << ", match points " << matches_from_frame << "+" << matches_from_cell << "(" << total_project_ << ", " << local_mpts.size() << ")";
+                             << (t1-t0)/cv::getTickFrequency() << " "
+                             << (t2-t1)/cv::getTickFrequency() << " "
+                             << (t3-t2)/cv::getTickFrequency() << " "
+                             << ", match points " << matches_from_frame << "+" << matches_from_cell << "(" << total_project_ << ", " << local_mpts.size() << ")";
 
     //! update last frame
     frame_last = frame;
@@ -122,31 +127,33 @@ bool FeatureTracker::reprojectMapPointToCell(const Frame::Ptr &frame, const MapP
     if(!frame->cam_->isInFrame(px.cast<int>(), options_.border))
         return false;
 
-    Feature::Ptr ft = Feature::create(px, point);
-
-    grid_.insert(ft);
+    grid_.insert(std::make_pair(point, px));
 
     return true;
 }
 
-bool FeatureTracker::matchMapPointsFromCell(const Frame::Ptr &frame, Grid<Feature::Ptr>::Cell &cell)
+bool FeatureTracker::matchMapPointsFromCell(const Frame::Ptr &frame, Grid<std::pair<MapPoint::Ptr, Vector2d>>::Cell &cell)
 {
     // TODO sort? 选择质量较好的点优先投影
-    cell.sort([](Feature::Ptr &ft1, Feature::Ptr &ft2){return ft1->mpt_->getFoundRatio() > ft2->mpt_->getFoundRatio();});
+    cell.sort([](std::pair<MapPoint::Ptr, Vector2d> &ft1, std::pair<MapPoint::Ptr, Vector2d> &ft2){
+      return ft1.first->getFoundRatio() > ft2.first->getFoundRatio();});
 
-    for(const Feature::Ptr &ft : cell)
+    for(const std::pair<MapPoint::Ptr, Vector2d> &it : cell)
     {
         total_project_++;
-        const MapPoint::Ptr &mpt = ft->mpt_;
-        int result = reprojectMapPoint(frame, mpt, ft->px_, ft->level_, options_.num_align_iter, options_.max_align_epsilon, options_.max_align_error2, verbose_);
+        const MapPoint::Ptr &mpt = it.first;
+        Vector2d px = it.second;
+        int level = 0;
+        int result = reprojectMapPoint(frame, mpt, px, level, options_.num_align_iter, options_.max_align_epsilon, options_.max_align_error2, verbose_);
 
         mpt->increaseVisible(result+1);
 
         if(result != 1)
             continue;
 
-        ft->fn_ = frame->cam_->lift(ft->px_);
-        frame->addFeature(ft);
+        Feature::Ptr new_ft = Feature::create(Corner(px[0], px[1], -1, level));
+        new_ft->fn_ = frame->cam_->lift(new_ft->px_);
+        frame->addMapPointFeatureMatch(mpt, new_ft);
         mpt->increaseFound(2);
 
         return true;
@@ -165,6 +172,9 @@ int FeatureTracker::matchMapPointsFromLastFrame(const Frame::Ptr &frame_cur, con
     int matches_count = 0;
     for(const MapPoint::Ptr &mpt : mpts)
     {
+        if(!mpt || mpt->isBad())
+            continue;
+
         const Vector3d mpt_cur = frame_cur->Tcw() * mpt->pose();
         if(mpt_cur[2] < 0.0f)
             continue;
@@ -183,12 +193,12 @@ int FeatureTracker::matchMapPointsFromLastFrame(const Frame::Ptr &frame_cur, con
         if(result != 1)
             continue;
 
-        Vector3d ft_cur = frame_cur->cam_->lift(px_cur);
-        Feature::Ptr new_feature = Feature::create(px_cur, ft_cur, level_cur, mpt);
-        frame_cur->addFeature(new_feature);
+        Feature::Ptr new_ft = Feature::create(px_cur, level_cur);
+        new_ft->fn_ = frame_cur->cam_->lift(px_cur);
+        frame_cur->addMapPointFeatureMatch(mpt, new_ft);
         mpt->increaseFound(2);
 
-        const size_t id = grid_.getIndex(new_feature);
+        const size_t id = grid_.getIndex(std::make_pair(mpt, px_cur));
         grid_.setMask(id);
 
         matches_count++;
@@ -214,7 +224,8 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
     if(!mpt->getCloseViewObs(frame, kf_ref, level_cur))
         return -1;
 
-    const Feature::Ptr ft_ref = mpt->findObservation(kf_ref);
+    const size_t idx = mpt->getFeatureIndex(kf_ref);
+    const Feature::Ptr ft_ref = kf_ref->getFeatureByIndex(idx);
     if(!ft_ref)
         return -1;
 
@@ -222,18 +233,18 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
     const SE3d T_cur_from_ref = frame->Tcw() * kf_ref->pose();
 
     Matrix2d A_cur_from_ref;
-    utils::getWarpMatrixAffine(kf_ref->cam_, frame->cam_, ft_ref->px_, ft_ref->fn_, ft_ref->level_,
+    utils::getWarpMatrixAffine(kf_ref->cam_, frame->cam_, ft_ref->px_, ft_ref->fn_, ft_ref->corner_.level,
                                obs_ref_dir.norm(), T_cur_from_ref, patch_size, A_cur_from_ref);
 
     // TODO 如果Affine很小的话，则不用warp
-    const cv::Mat image_ref = kf_ref->getImage(ft_ref->level_);
+    const cv::Mat image_ref = kf_ref->getImage(ft_ref->corner_.level);
     Matrix<float, patch_border_size, patch_border_size, RowMajor> patch_with_border;
     utils::warpAffine<float, patch_border_size>(image_ref, patch_with_border, A_cur_from_ref,
-                                                ft_ref->px_, ft_ref->level_, level_cur);
+                                                ft_ref->px_, ft_ref->corner_.level, level_cur);
 
     const cv::Mat image_cur = frame->getImage(level_cur);
 
-    const double factor = static_cast<double>(1 << level_cur);
+    const double factor = Frame::scale_factors_.at(level_cur);
     Vector3d estimate(0,0,0); estimate.head<2>() = px_cur / factor;
 
     static bool show = false;
@@ -242,7 +253,7 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
         cv::Mat show_ref, show_cur;
         cv::cvtColor(image_ref, show_ref, CV_GRAY2RGB);
         cv::cvtColor(image_cur, show_cur, CV_GRAY2RGB);
-        cv::circle(show_ref, cv::Point2i((int)ft_ref->px_[0], (int)ft_ref->px_[1])/(1 << ft_ref->level_), 3, cv::Scalar(255,0,0));
+        cv::circle(show_ref, cv::Point2i((int)ft_ref->px_[0], (int)ft_ref->px_[1])/(1 << ft_ref->corner_.level), 3, cv::Scalar(255,0,0));
         cv::circle(show_cur, cv::Point2i((int)estimate[0], (int)estimate[1]), 3, cv::Scalar(255,0,0));
         cv::imshow("ref track", show_ref);
         cv::imshow("cur track", show_cur);
@@ -268,6 +279,7 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
 bool FeatureTracker::trackFeature(const Frame::Ptr &frame_ref,
                                   const Frame::Ptr &frame_cur,
                                   const Feature::Ptr &ft_ref,
+                                  const MapPoint::Ptr &mpt,
                                   Vector2d &px_cur,
                                   int &level_cur,
                                   const int max_iterations,
@@ -279,24 +291,24 @@ bool FeatureTracker::trackFeature(const Frame::Ptr &frame_ref,
     static const int patch_border_size = AlignPatch::SizeWithBorder;
     const int TH_SSD = AlignPatch::Area * threshold;
 
-    const Vector3d obs_ref_dir(frame_ref->pose().translation() - ft_ref->mpt_->pose());
+    const Vector3d obs_ref_dir(frame_ref->pose().translation() - mpt->pose());
     const SE3d T_cur_from_ref = frame_cur->Tcw() * frame_ref->pose();
 
     Matrix2d A_cur_from_ref;
-    utils::getWarpMatrixAffine(frame_ref->cam_, frame_cur->cam_, ft_ref->px_, ft_ref->fn_, ft_ref->level_,
+    utils::getWarpMatrixAffine(frame_ref->cam_, frame_cur->cam_, ft_ref->px_, ft_ref->fn_, ft_ref->corner_.level,
                                obs_ref_dir.norm(), T_cur_from_ref, patch_size, A_cur_from_ref);
 
-    level_cur = utils::getBestSearchLevel(A_cur_from_ref, frame_cur->max_level_);
+    level_cur = utils::getBestSearchLevel(A_cur_from_ref, frame_cur->nlevels_-1, Frame::scale_factor_);
 //    std::cout << "A:\n" << A_cur_from_ref << std::endl;
 
-    const cv::Mat image_ref = frame_ref->getImage(ft_ref->level_);
+    const cv::Mat image_ref = frame_ref->getImage(ft_ref->corner_.level);
     Matrix<float, patch_border_size, patch_border_size, RowMajor> patch_with_border;
     utils::warpAffine<float, patch_border_size>(image_ref, patch_with_border, A_cur_from_ref,
-                                                ft_ref->px_, ft_ref->level_, level_cur);
+                                                ft_ref->px_, ft_ref->corner_.level, level_cur);
 
     const cv::Mat image_cur = frame_cur->getImage(level_cur);
 
-    const double factor = static_cast<double>(1 << level_cur);
+    const double factor = Frame::scale_factors_.at(level_cur);
     Vector3d estimate(0,0,0); estimate.head<2>() = px_cur / factor;
 
     bool matched = AlignPatch::align2DI(image_cur, patch_with_border, estimate, max_iterations, epslion, verbose);
@@ -313,6 +325,335 @@ bool FeatureTracker::trackFeature(const Frame::Ptr &frame_ref,
     px_cur = estimate.head<2>() * factor;
 
     return true;
+}
+
+int FeatureTracker::searchBoWForTriangulation(const KeyFrame::Ptr &keyframe1,
+                                              const KeyFrame::Ptr &keyframe2,
+                                              std::map<size_t, size_t> &matches,
+                                              int max_dist, double max_epl_err)
+{
+    const DBoW3::FeatureVector &feat_vec1 = keyframe1->feat_vec_;
+    const DBoW3::FeatureVector &feat_vec2 = keyframe2->feat_vec_;
+
+    DBoW3::FeatureVector::const_iterator ft1_itr = feat_vec1.begin();
+    DBoW3::FeatureVector::const_iterator ft2_itr = feat_vec2.begin();
+    DBoW3::FeatureVector::const_iterator ft1_end = feat_vec1.end();
+    DBoW3::FeatureVector::const_iterator ft2_end = feat_vec2.end();
+
+    Matrix3d K1, K2;
+    cv::cv2eigen(keyframe1->cam_->K(), K1);
+    cv::cv2eigen(keyframe2->cam_->K(), K2);
+    const Matrix3d E12 = utils::Fundamental::computeE12(keyframe1->Tcw(), keyframe2->Tcw());
+    const Matrix3d F12 = K1.transpose().inverse() * E12 * K2.inverse();
+//
+//    const SE3d  T12 = keyframe1->Tcw() * keyframe2->Twc();
+//    const Matrix3d E12_temp = Sophus::SO3d::hat(T12.translation()) * T12.so3().matrix();
+//
+//    std::cout << "E: " << E12 << "\n " << E12_temp << std::endl;
+
+    //showMatches(keyframe1, keyframe2);
+
+
+//    {
+//        std::vector<size_t> mptmatches = keyframe1->getMapPointMatchesVec();
+//        std::vector<MapPoint::Ptr> mpts = keyframe1->getMapPoints();
+//
+//        for(const size_t &idx : mptmatches)
+//        {
+//            MapPoint::Ptr mpt = mpts[idx];
+//            const size_t idx2 = mpt->getFeatureIndex(keyframe2);
+//            if(idx2 < 0)
+//                continue;
+//
+//            cv::Mat desp1 = keyframe1->descriptors_[idx];
+//            cv::Mat desp2 = keyframe2->descriptors_[idx2];
+//
+//            int dist = DBoW3::DescManip::distance_8uc1(desp1, desp2);
+//
+//            const Feature::Ptr ft1 = keyframe1->getFeatureByIndex(idx);
+////            const cv::Point2d px1(ft1->fn_[0]/ft1->fn_[2], ft1->fn_[0]/ft1->fn_[2]);
+//            const cv::Point2d px1(ft1->px_[0], ft1->px_[1]);
+//
+//            const Feature::Ptr ft2 = keyframe2->getFeatureByIndex(idx2);
+////            const cv::Point2d px2(ft2->fn_[0]/ft2->fn_[2], ft2->fn_[0]/ft2->fn_[2]);
+//            const cv::Point2d px2(ft2->px_[0], ft2->px_[1]);
+//
+//            showEplMatch(keyframe1->getImage(0), keyframe2->getImage(0), F12, ft1->px_, ft2->px_);
+//
+//            double err1, err2;
+//            utils::Fundamental::computeErrors(px2, px1, F12, err2, err1);
+//
+//            double err = utils::Fundamental::computeErrorSquared(keyframe1->pose().translation(), ft1->fn_, T12.inverse(), ft2->fn_.head<2>()/ft2->fn_[2]);
+//
+//            std::cout << "dist: " << dist << ", " << err1 << ", " << err2  <<", " << err<< std::endl;
+//        }
+//    }
+
+
+    const Matrix3d E21 = E12.transpose();
+
+    std::vector<size_t> matched_idx(keyframe2->getFeatures().size(), -1);
+    std::vector<int> matched_dist(keyframe2->getFeatures().size(), 256);
+
+
+    while(ft1_itr != ft1_end && ft2_itr != ft2_end)
+    {
+        if(ft1_itr->first == ft2_itr->first)
+        {
+            for(const size_t &idx1 : ft1_itr->second)
+            {
+                MapPoint::Ptr mpt1 = keyframe1->getMapPointByIndex(idx1);
+                if(mpt1) continue;
+
+                //! ft1
+                const Feature::Ptr ft1 = keyframe1->getFeatureByIndex(idx1);
+                const cv::Point2d px1(ft1->fn_[0]/ft1->fn_[2], ft1->fn_[1]/ft1->fn_[2]);
+                const cv::Mat &descriptor1 = keyframe1->descriptors_[idx1];
+
+                const double sigma1 = Frame::level_sigma2_.at(ft1->corner_.level);
+
+                int best_dist = max_dist;
+                int best_idx2 = -1;
+                for(const size_t &idx2 : ft2_itr->second)
+                {
+                    MapPoint::Ptr mpt2 = keyframe2->getMapPointByIndex(idx2);
+                    if(mpt2) continue;
+
+                    //! ft2
+                    const Feature::Ptr ft2 = keyframe2->getFeatureByIndex(idx2);
+                    const cv::Mat &descriptor2 = keyframe2->descriptors_[idx2];
+
+                    const int dist = DBoW3::DescManip::distance_8uc1(descriptor1, descriptor2);
+                    if(dist > best_dist)
+                        continue;
+
+                    // TODO  MORE CHECK
+
+                    const cv::Point2d px2(ft2->fn_[0]/ft2->fn_[2], ft2->fn_[1]/ft2->fn_[2]);
+                    const double sigma2 = Frame::level_sigma2_.at(ft2->corner_.level);
+
+                    double err1, err2;
+                    utils::Fundamental::computeErrors(px1, px2, E21, err1, err2);
+
+                    if(err1 > max_epl_err*sigma1 || err2 > max_epl_err*sigma2)
+                        continue;
+
+                    if(dist < best_dist)
+                    {
+                        best_dist = dist;
+                        best_idx2 = idx2;
+                    }
+                }
+
+
+                if(best_idx2 > 0)
+                {
+//                    const Feature::Ptr ft2 = keyframe2->getFeatureByIndex(best_idx2);
+//                    showEplMatch(keyframe1->getImage(0), keyframe2->getImage(0), F12, ft1->px_, ft2->px_);
+                    if(matched_idx[best_idx2] != -1 && matched_dist[best_idx2] < best_dist)
+                        continue;
+
+                    matches.emplace(idx1, best_idx2);
+
+                    matched_idx[best_idx2] = idx1;
+                    matched_dist[best_idx2] = best_dist;
+                }
+            }
+
+            ft1_itr++;
+            ft2_itr++;
+        }
+        else if(ft1_itr->first < ft2_itr->first)
+        {
+            ft1_itr = feat_vec1.lower_bound(ft2_itr->first);
+        }
+        else
+        {
+            ft2_itr = feat_vec2.lower_bound(ft1_itr->first);
+        }
+    }
+
+    return matches.size();
+}
+
+
+void FeatureTracker::showMatches(const Frame::Ptr frame1, const Frame::Ptr frame2)
+{
+    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts1 = frame1->getMapPointFeatureMatches();
+    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts2 = frame2->getMapPointFeatureMatches();
+
+    const cv::Mat &image1 = frame1->getImage(0);
+    const cv::Mat &image2 = frame2->getImage(0);
+
+    const int cols = image1.cols;
+    const int rows = image1.rows;
+    cv::Mat show(rows, cols*2, CV_8UC1);
+    image1.copyTo(show.colRange(0, cols));
+    image2.copyTo(show.colRange(cols, cols*2));
+    cv::cvtColor(show, show, CV_GRAY2RGB);
+
+    cv::RNG rng(12345);
+    for(const auto item1 : mpt_fts1)
+    {
+        const MapPoint::Ptr &mpt = item1.first;
+        const auto iter = mpt_fts2.find(mpt);
+        if(iter == mpt_fts2.end())
+            continue;
+
+        const Feature::Ptr &ft1 = item1.second;
+        const Feature::Ptr &ft2 = iter->second;
+
+        cv::Point2i px1(ft1->corner_.x, ft1->corner_.y);
+        cv::Point2i px2(ft2->corner_.x+cols, ft2->corner_.y);
+
+        cv::Scalar color(rng.uniform(0,255), rng.uniform(0, 255), rng.uniform(0, 255));
+        cv::circle(show, px1, 3, color);
+        cv::circle(show, px2, 3, color);
+        cv::line(show, px1, px2, color);
+    }
+
+    cv::imwrite("KeyFrame Matches.png", show);
+}
+
+void FeatureTracker::showMatches(const Frame::Ptr frame1,
+                                 const Frame::Ptr frame2,
+                                 const std::vector<std::pair<size_t, size_t>> &matches)
+{
+    const cv::Mat &image1 = frame1->getImage(0);
+    const cv::Mat &image2 = frame2->getImage(0);
+    const std::vector<Feature::Ptr> fts1 = frame1->getFeatures();
+    const std::vector<Feature::Ptr> fts2 = frame2->getFeatures();
+    std::vector<bool> mask1(fts1.size());
+    std::vector<bool> mask2(fts2.size());
+
+    const int cols = image1.cols;
+    const int rows = image1.rows;
+    cv::Mat show(rows, cols*2, CV_8UC1);
+    image1.copyTo(show.colRange(0, cols));
+    image2.copyTo(show.colRange(cols, cols*2));
+    cv::cvtColor(show, show, CV_GRAY2RGB);
+
+    cv::RNG rng(12345);
+    for(const auto item : matches)
+    {
+        const size_t &idx1 = item.first;
+        const size_t &idx2 = item.second;
+
+        mask1[idx1] = true;
+        mask2[idx2] = true;
+
+        const Feature::Ptr &ft1 = fts1[idx1];
+        const Feature::Ptr &ft2 = fts2[idx2];
+
+        cv::Point2i px1(ft1->corner_.x, ft1->corner_.y);
+        cv::Point2i px2(ft2->corner_.x+cols, ft2->corner_.y);
+
+        cv::Scalar color(rng.uniform(0,255), rng.uniform(0, 255), rng.uniform(0, 255));
+        cv::circle(show, px1, 3, color);
+        cv::circle(show, px2, 3, color);
+        cv::line(show, px1, px2, color);
+    }
+
+    for(size_t i = 0; i < mask1.size(); i++)
+    {
+        if(mask1[i]) continue;
+
+        const Feature::Ptr &ft1 = fts1[i];
+        cv::Point2i px1(ft1->corner_.x, ft1->corner_.y);
+        cv::Scalar color(rng.uniform(0,255), rng.uniform(0, 255), rng.uniform(0, 255));
+        cv::circle(show, px1, 3, color);
+    }
+
+    for(size_t i = 0; i < mask2.size(); i++)
+    {
+        if(mask2[i]) continue;
+
+        const Feature::Ptr &ft2 = fts2[i];
+        cv::Point2i px2(ft2->corner_.x+cols, ft2->corner_.y);
+        cv::Scalar color(rng.uniform(0,255), rng.uniform(0, 255), rng.uniform(0, 255));
+        cv::circle(show, px2, 3, color);
+    }
+
+    cv::imwrite("KeyFrame Matches.png", show);
+}
+
+void FeatureTracker::showEplMatch(const cv::Mat &image1,
+                                  const cv::Mat &image2,
+                                  const Matrix3d &F12,
+                                  const Vector2d &px1,
+                                  const Vector2d &px2)
+{
+    cv::Mat show1 = image1.clone();
+    cv::Mat show2 = image2.clone();
+    if(show1.channels() == 1)
+        cv::cvtColor(show1, show1, CV_GRAY2RGB);
+    if(show2.channels() == 1)
+        cv::cvtColor(show2, show2, CV_GRAY2RGB);
+
+    const double u1 = px1[0];
+    const double v1 = px1[1];
+    const double u2 = px2[0];
+    const double v2 = px2[1];
+
+    //! X1^T * F12 * X2
+    //! epipolar line in the second image L1 = (a1, b1, c1)^T = F12  * X2
+    const double a1 = F12(0,0) * u2 + F12(0,1) * v2 + F12(0,2);
+    const double b1 = F12(1,0) * u2 + F12(1,1) * v2 + F12(1,2);
+    const double c1 = F12(2,0) * u2 + F12(2,1) * v2 + F12(2,2);
+    //! epipolar line in the first image  L2 = (a2, b2, c2)^T = X1^T * F12
+    const double a2 = u1 * F12(0,0) + v1 * F12(1,0) + F12(2,0);
+    const double b2 = u1 * F12(0,1) + v1 * F12(1,1) + F12(2,1);
+    const double c2 = u1 * F12(0,2) + v1 * F12(1,2) + F12(2,2);
+
+    const int rows = image1.rows;
+    const int cols = image1.cols;
+
+    cv::Point2i pt11, pt12;
+    if(std::abs(a1) > std::abs(b1))
+    {
+        pt11.y = 0;
+        pt11.x = -c1/a1;
+
+        pt12.y = rows;
+        pt12.x = -(b1*rows+c1)/a1;
+    }
+    else
+    {
+        pt11.x = 0;
+        pt11.y = -c1/b1;
+
+        pt12.x = cols;
+        pt12.y = - (a1*cols+c1)/b1;
+    }
+
+    cv::Point2i pt21, pt22;
+    if(std::abs(a2) > std::abs(b2))
+    {
+        pt21.y = 0;
+        pt21.x = -c2/a2;
+
+        pt22.y = rows;
+        pt22.x = -(b2*rows+c2)/a2;
+    }
+    else
+    {
+        pt21.x = 0;
+        pt21.y = -c2/b2;
+
+        pt22.x = cols;
+        pt22.y = - (a2*cols+c2)/b2;
+    }
+
+    cv::Scalar color1(0, 255, 0);
+    cv::Scalar color2(0, 0, 255);
+    cv::circle(show1, cv::Point(u1,v1), 3, color1);
+    cv::circle(show2, cv::Point(u2,v2), 3, color1);
+
+    cv::line(show1, pt11, pt12, color2);
+    cv::line(show2, pt21, pt22, color2);
+
+    cv::imwrite("imag1.png", show1);
+    cv::imwrite("imag2.png", show2);
 }
 
 }

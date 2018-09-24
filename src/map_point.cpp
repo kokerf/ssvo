@@ -5,7 +5,6 @@ namespace ssvo
 {
 
 uint64_t MapPoint::next_id_ = 0;
-const double MapPoint::log_level_factor_ = log(2.0f);
 
 MapPoint::MapPoint(const Vector3d &p) :
         id_(next_id_++), last_structure_optimal_(0), pose_(p), type_(SEED),
@@ -27,7 +26,7 @@ void MapPoint::resetType(MapPoint::Type type)
 
 void MapPoint::setBad()
 {
-    std::unordered_map<KeyFramePtr, Feature::Ptr> obs;
+    std::unordered_map<KeyFrame::Ptr, size_t > obs;
     {
         std::lock_guard<std::mutex> lock(mutex_obs_);
         type_ = BAD;
@@ -35,7 +34,7 @@ void MapPoint::setBad()
     }
 
     for(const auto &it : obs)
-        it.first->removeFeature(it.second);
+        it.first->removeMapPointMatchByIndex(it.second);
 
     for(const auto &it : obs)
         it.first->updateConnections();
@@ -58,16 +57,16 @@ KeyFrame::Ptr MapPoint::getReferenceKeyFrame()
     return refKF_;
 }
 
-void MapPoint::addObservation(const KeyFrame::Ptr &kf, const Feature::Ptr &ft)
+void MapPoint::addObservation(const KeyFrame::Ptr &kf, const size_t &idx)
 {
-    LOG_ASSERT(kf && kf) << " Error input kf: " << kf << ", or ft: " << ft;
+    LOG_ASSERT(kf) << " Error input kf: " << kf;
 
     std::lock_guard<std::mutex> lock(mutex_obs_);
     LOG_ASSERT(type_ != BAD) << " Error to use a BAD MapPoint!";
 
     if(refKF_ == nullptr)
         refKF_ = kf;
-    obs_.emplace(kf, ft);
+    obs_.emplace(kf, idx);
 }
 
 //! it do not change the connections of keyframe
@@ -105,7 +104,7 @@ int MapPoint::observations()
 }
 
 //! should update connections for keyframe
-bool MapPoint::removeObservation(const KeyFramePtr &kf)
+bool MapPoint::removeObservation(const KeyFrame::Ptr &kf)
 {
     {
         std::lock_guard<std::mutex> lock(mutex_obs_);
@@ -115,8 +114,8 @@ bool MapPoint::removeObservation(const KeyFramePtr &kf)
 
 //        LOG(INFO) << " Remove obs, mpt: " << id_ << " kf: " << kf->id_ << " size: " << obs_.size();
 
-        const Feature::Ptr &ft = it->second;
-        kf->removeFeature(ft);
+        const size_t &idx = it->second;
+        kf->removeMapPointMatchByIndex(idx);
         obs_.erase(kf);
         if(obs_.empty())
         {
@@ -162,20 +161,21 @@ void MapPoint::updateRefKF()
     }
 }
 
-std::map<KeyFrame::Ptr, Feature::Ptr> MapPoint::getObservations()
+std::map<KeyFrame::Ptr, size_t> MapPoint::getObservations()
 {
     std::lock_guard<std::mutex> lock(mutex_obs_);
-    return std::map<KeyFrame::Ptr, Feature::Ptr>(obs_.begin(), obs_.end());
+    return std::map<KeyFrame::Ptr, size_t >(obs_.begin(), obs_.end());
 }
 
-Feature::Ptr MapPoint::findObservation(const KeyFrame::Ptr kf)
+
+size_t MapPoint::getFeatureIndex(const KeyFrame::Ptr &kf)
 {
     std::lock_guard<std::mutex> lock(mutex_obs_);
     const auto it = obs_.find(kf);
     if(it != obs_.end())
         return it->second;
     else
-        return nullptr;
+        return -1;
 }
 
 void MapPoint::updateViewAndDepth()
@@ -203,9 +203,10 @@ void MapPoint::updateViewAndDepth()
         Vector3d ref_obs_dir = refKF_->pose().translation() - pose_;
 
         const double dist = ref_obs_dir.norm();
-        Feature::Ptr ft = findObservation(refKF_);
-        const int level_scale = 1 << ft->level_;
-        const int max_scale = 1 << refKF_->max_level_;
+        const size_t idx = getFeatureIndex(refKF_);
+        const Feature::Ptr ft = refKF_->getFeatureByIndex(idx);
+        const double level_scale = Frame::scale_factors_.at(ft->corner_.level);
+        const double max_scale = Frame::scale_factors_.back();
 
         max_distance_ = dist * level_scale; //! regard it is top level, we may obsevere the point if we go closer
         min_distance_ = max_distance_ / max_scale;
@@ -232,7 +233,7 @@ int MapPoint::predictScale(const double dist, const int max_level)
         ratio = max_distance_ / dist;
     }
 
-    int scale = round(log(ratio) / log_level_factor_);
+    int scale = round(log(ratio) / Frame::log_scale_factor_);
     if(scale < 0)
         scale = 0;
     else if(scale > max_level)
@@ -243,9 +244,9 @@ int MapPoint::predictScale(const double dist, const int max_level)
 
 int MapPoint::predictScale(const double dist_ref, const double dist_cur, const int level_ref, const int max_level)
 {
-    double ratio = dist_ref * (1 << level_ref) / dist_cur;
+    double ratio = dist_ref * Frame::scale_factors_.at(level_ref) / dist_cur;
 
-    int scale = round(log(ratio) / log_level_factor_);
+    int scale = round(log(ratio) / Frame::log_scale_factor_);
     if(scale < 0)
         scale = 0;
     else if(scale > max_level)
@@ -286,7 +287,7 @@ double MapPoint::getFoundRatio()
 
 bool MapPoint::getCloseViewObs(const Frame::Ptr &frame, KeyFrame::Ptr &keyframe, int &level)
 {
-    std::unordered_map<KeyFramePtr, Feature::Ptr> obs;
+    std::unordered_map<KeyFrame::Ptr, size_t> obs;
     Vector3d obs_dir;
     {
         std::lock_guard<std::mutex> lock(mutex_obs_);
@@ -317,7 +318,7 @@ bool MapPoint::getCloseViewObs(const Frame::Ptr &frame, KeyFrame::Ptr &keyframe,
     Vector3d frame_dir(frame->ray().normalized());
 
     double max_cos_angle = 0.0;
-    for(std::pair<KeyFrame::Ptr, Feature::Ptr> item : obs)
+    for(const auto &item : obs)
     {
         Vector3d kf_dir(item.first->ray().normalized());
         double view_cos_angle = kf_dir.dot(frame_dir);
@@ -333,7 +334,7 @@ bool MapPoint::getCloseViewObs(const Frame::Ptr &frame, KeyFrame::Ptr &keyframe,
     if(max_cos_angle < 0.5f)
         return false;
 
-    level = predictScale(dist, frame->max_level_);
+    level = predictScale(dist, frame->nlevels_-1);
 
     return true;
 }

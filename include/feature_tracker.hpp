@@ -37,8 +37,16 @@ public:
     static int reprojectMapPoint(const Frame::Ptr &frame, const MapPoint::Ptr& mpt, Vector2d &px_cur, int &level_cur,
                                   const int max_iterations = 30, const double epslion = 0.01, const double threshold = 4.0, bool verbose = false);
 
-    static bool trackFeature(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, const Feature::Ptr &ft_ref,
+    static bool trackFeature(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, const Feature::Ptr &ft_ref, const MapPoint::Ptr &mpt,
                              Vector2d &px_cur, int &level_cur, const int max_iterations = 30, const double epslion = 0.01, const double threshold = 4.0, bool verbose = false);
+
+    static int searchBoWForTriangulation(const KeyFrame::Ptr &keyframe1, const KeyFrame::Ptr &keyframe2, std::map<size_t, size_t> &matches, int max_dist, double max_epl_err);
+
+    static void showMatches(const Frame::Ptr frame1, const Frame::Ptr frame2);
+
+    static void showMatches(const Frame::Ptr frame1, const Frame::Ptr frame2, const std::vector<std::pair<size_t, size_t>> &matches);
+
+    static void showEplMatch(const cv::Mat &image1, const cv::Mat &image2, const Matrix3d &F12, const Vector2d &px1, const Vector2d &px2);
 
     inline static FeatureTracker::Ptr create(int width, int height, int grid_size, int border, bool report = false, bool verbose = false)
     {return FeatureTracker::Ptr(new FeatureTracker(width, height, grid_size, border, report, verbose));}
@@ -49,7 +57,7 @@ private:
 
     bool reprojectMapPointToCell(const Frame::Ptr &frame, const MapPoint::Ptr &point);
 
-    bool matchMapPointsFromCell(const Frame::Ptr &frame, Grid<Feature::Ptr>::Cell &cell);
+    bool matchMapPointsFromCell(const Frame::Ptr &frame, Grid<std::pair<MapPoint::Ptr, Vector2d>>::Cell &cell);
 
     int matchMapPointsFromLastFrame(const Frame::Ptr &frame_cur, const Frame::Ptr &frame_last);
 
@@ -64,7 +72,7 @@ private:
         double max_align_error2;
     } options_;
 
-    Grid<Feature::Ptr> grid_;
+    Grid<std::pair<MapPoint::Ptr, Vector2d>> grid_;
     std::vector<size_t> grid_order_;
 
     bool report_;

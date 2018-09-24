@@ -1,5 +1,5 @@
 #include "config.hpp"
-#include "map.hpp"
+#include "brief.hpp"
 #include "keyframe.hpp"
 
 namespace ssvo{
@@ -9,35 +9,199 @@ uint64_t KeyFrame::next_id_ = 0;
 KeyFrame::KeyFrame(const Frame::Ptr frame):
     Frame(frame->images(), next_id_++, frame->timestamp_, frame->cam_), frame_id_(frame->id_), isBad_(false)
 {
-    mpt_fts_ = frame->features();
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts = frame->getMapPointFeatureMatches();
+    std::unordered_map<Seed::Ptr, Feature::Ptr> seed_fts = frame->getSeedFeatureMatches();
+    N_ = mpt_fts.size() + seed_fts.size();
+    mpts_.reserve(N_);
+    seeds_.reserve(N_);
+    fts_.reserve(N_);
+    for(const auto &mpt_ft : mpt_fts)
+    {
+        mpt_matches_.insert(fts_.size());
+        mpts_.push_back(mpt_ft.first);
+        seeds_.push_back(nullptr);
+        fts_.push_back(mpt_ft.second);
+    }
+
+    for(const auto &seed_ft : seed_fts)
+    {
+        seed_matches_.insert(fts_.size());
+        mpts_.push_back(nullptr);
+        seeds_.push_back(seed_ft.first);
+        fts_.push_back(seed_ft.second);
+    }
+
     setRefKeyFrame(frame->getRefKeyFrame());
     setPose(frame->pose());
+
+    grid_col_inv_ = static_cast<float>(GRID_COLS) / getImage(0).cols;
+    grid_row_inv_ = static_cast<float>(GRID_ROWS) / getImage(0).rows;
 }
+
+
+size_t KeyFrame::N()
+{
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+
+    return N_;
+}
+
+bool KeyFrame::addMapPoint(const MapPoint::Ptr &mpt, const size_t &idx)
+{
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+    if(idx < 0 || idx >= N_) return false;
+    mpts_[idx] = mpt;
+    return mpt_matches_.insert(idx).second;
+}
+
+const Feature::Ptr& KeyFrame::getFeatureByIndex(const size_t &idx)
+{
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+    return fts_.at(idx);
+}
+
+const MapPoint::Ptr& KeyFrame::getMapPointByIndex(const size_t &idx)
+{
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+    return mpts_.at(idx);
+}
+
+//bool KeyFrame::removeMapPointMatchByMapPoint(const MapPoint::Ptr &mpt)
+//{
+//    size_t idx = mpt->getFeatureIndex(shared_from_this());
+//    if(idx < 0) return false;
+//
+//    return removeMapPointMatchByIndex(idx);
+//}
+
+void KeyFrame::extractORB(const FastDetector::Ptr fast, const BRIEF::Ptr brief)
+{
+    const std::vector<Feature::Ptr> fts = getFeatures();
+
+    Corners old_corners;
+    old_corners.reserve(fts.size());
+    for(const auto &ft : fts)
+    {
+        old_corners.emplace_back(ft->corner_);
+    }
+
+    Corners new_corners;
+    fast->detect(images(), new_corners, old_corners, 1000);
+
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+    {
+        N_ = new_corners.size() + old_corners.size();
+
+        fts_.reserve(N_);
+        mpts_.resize(N_, nullptr);
+
+        //! Add new features
+        for(const Corner &corner : new_corners)
+        {
+            fts_.emplace_back(Feature::create(corner));
+            fts_.back()->fn_ = cam_->lift(fts_.back()->px_);
+        }
+    }
+
+    std::vector<cv::KeyPoint> kps; kps.reserve(N_);
+    for(const Feature::Ptr & ft : fts_)
+    {
+        kps.emplace_back(cv::KeyPoint(ft->corner_.x, ft->corner_.y, 31, -1, 0, ft->corner_.level));
+    }
+
+    cv::Mat _descriptors;
+    brief->compute(images(), kps, _descriptors);
+
+    descriptors_.reserve(_descriptors.rows);
+    for(int i = 0; i < _descriptors.rows; i++)
+        descriptors_.push_back(_descriptors.row(i));
+
+    assignFeaturesToGrid();
+}
+
+void KeyFrame::computeBoW(const DBoW3::Vocabulary& vocabulary)
+{
+    if(bow_vec_.empty())
+        vocabulary.transform(descriptors_, bow_vec_, feat_vec_, 4);
+}
+
+std::vector<size_t> KeyFrame::getFeaturesInArea(const float x,
+                                                const float y,
+                                                const float r,
+                                                const int min_level,
+                                                const int max_level)
+{
+    std::vector<size_t> indices;
+
+    const int min_cell_x = std::max((int)std::floor((x-r)*grid_col_inv_), 0);
+    if(min_cell_x >= GRID_COLS)
+        return indices;
+
+    const int max_cell_x = std::min((int)std::ceil(((x+r)*grid_col_inv_)), (int)GRID_COLS-1);
+    if(max_cell_x < 0)
+        return indices;
+
+    const int min_cell_y = std::max((int)std::floor((y-r)*grid_row_inv_), 0);
+    if(min_cell_y >= GRID_ROWS)
+        return indices;
+
+    const int max_cell_y = std::min((int)std::ceil(((x+r)*grid_row_inv_)), (int)GRID_ROWS-1);
+    if(max_cell_y < 0)
+        return indices;
+
+    indices.reserve(N_);
+
+    const float r2 = r*r;
+    const bool check_level = (min_level >= 0) && (max_level >= 0);
+    for(int iy = min_cell_y; iy <= max_cell_y; iy++)
+        for(int ix = min_cell_x; ix <= max_cell_x; ix++)
+        {
+            const std::vector<size_t> cell_indices = grid_[iy][ix];
+            if(cell_indices.empty()) continue;
+
+            for(const size_t & idx : cell_indices)
+            {
+                const Feature::Ptr &ft = getFeatureByIndex(idx);
+                const Corner &cr = ft->corner_;
+
+                if(check_level && (cr.level < min_level || cr.level > max_level))
+                    continue;
+
+                const float dx = cr.x - x;
+                const float dy = cr.y - y;
+                const float dist2 = dx*dx + dy*dy;
+
+                if(dist2 > r2)
+                    continue;
+
+                indices.push_back(idx);
+            }
+        }
+
+    return indices;
+}
+
 void KeyFrame::updateConnections()
 {
     if(isBad())
         return;
 
-    Features fts;
-    {
-        std::lock_guard<std::mutex> lock(mutex_feature_);
-        for(const auto &it : mpt_fts_)
-            fts.push_back(it.second);
-    }
+    const std::vector<size_t> indices = getMapPointMatchIndices();
+    const std::vector<MapPoint::Ptr> mpts = getMapPoints();
 
     std::map<KeyFrame::Ptr, int> connection_counter;
 
-    for(const Feature::Ptr &ft : fts)
+    for(const size_t &idx : indices)
     {
-        const MapPoint::Ptr &mpt = ft->mpt_;
+        const MapPoint::Ptr &mpt = mpts[idx];
 
         if(mpt->isBad())
         {
-            removeFeature(ft);
+            removeMapPointMatchByIndex(idx);
             continue;
         }
 
-        const std::map<KeyFrame::Ptr, Feature::Ptr> observations = mpt->getObservations();
+        const std::map<KeyFrame::Ptr, size_t> observations = mpt->getObservations();
         for(const auto &obs : observations)
         {
             if(obs.first->id_ == id_)
@@ -168,15 +332,13 @@ void KeyFrame::setBad()
 
     std::cout << "The keyframe " << id_ << " was set to be earased." << std::endl;
 
-    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts;
-    {
-        std::lock_guard<std::mutex> lock(mutex_feature_);
-        mpt_fts = mpt_fts_;
-    }
+    std::vector<size_t> indices = getMapPointMatchIndices();
+    std::vector<MapPoint::Ptr> mpts = getMapPoints();
 
-    for(const auto &it : mpt_fts)
+    for(const size_t &idx : indices)
     {
-        it.first->removeObservation(shared_from_this());
+        mpts[idx]->removeObservation(shared_from_this());
+        removeMapPointMatchByIndex(idx);
     }
 
     {
@@ -191,8 +353,7 @@ void KeyFrame::setBad()
 
         connectedKeyFrames_.clear();
         orderedConnectedKeyFrames_.clear();
-        mpt_fts_.clear();
-        seed_fts_.clear();
+        mpt_matches_.clear();
     }
     // TODO change refKF
 }
@@ -241,6 +402,34 @@ void KeyFrame::removeConnection(const KeyFrame::Ptr &kf)
     }
 
     updateOrderedConnections();
+}
+
+void KeyFrame::assignFeaturesToGrid()
+{
+    int num_reserve = fts_.size() / (GRID_COLS * GRID_ROWS);
+    for(int r = 0; r < GRID_ROWS; r++)
+        for(int c = 0; c < GRID_COLS; c++)
+            grid_[r][c].reserve(num_reserve);
+
+    for(size_t idx = 0; idx < N_; idx++)
+    {
+        const Corner &cr =  fts_[idx]->corner_;
+
+        int pos_x, pos_y;
+        if(getGridPos(cr.x, cr.y, pos_x, pos_y))
+            grid_[pos_y][pos_x].push_back(idx);
+    }
+}
+
+inline bool KeyFrame::getGridPos(const float x, const float y, int &pos_x, int &pos_y)
+{
+    pos_x = static_cast<int>(x * grid_col_inv_);//! x / cols * GRID_COLS;
+    pos_y = static_cast<int>(y * grid_row_inv_);
+
+    if(pos_x < 0 || pos_y < 0 || pos_x >= GRID_COLS || pos_y >= GRID_ROWS)
+        return false;
+    else
+        return true;
 }
 
 }

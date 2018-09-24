@@ -38,15 +38,15 @@ public:
 
     bool fusion(const MapPoint::Ptr &mpt);
 
-    void addObservation(const KeyFramePtr &kf, const Feature::Ptr &ft);
+    void addObservation(const KeyFramePtr &kf, const size_t &idx);
 
     int observations();
 
-    std::map<KeyFramePtr, Feature::Ptr> getObservations();
+    std::map<KeyFramePtr, size_t> getObservations();
 
     bool removeObservation(const KeyFramePtr &kf);
 
-    Feature::Ptr findObservation(const KeyFramePtr kf);
+    size_t getFeatureIndex(const KeyFramePtr &kf);
 
     void updateViewAndDepth();
 
@@ -97,8 +97,6 @@ public:
     static uint64_t next_id_;
     const uint64_t id_;
 
-    static const double log_level_factor_;
-
     Vector3d optimal_pose_;
     double optimal_inv_z_;
     uint64_t last_structure_optimal_;
@@ -107,7 +105,7 @@ private:
 
     Vector3d pose_;
 
-    std::unordered_map<KeyFramePtr, Feature::Ptr> obs_;
+    std::unordered_map<KeyFramePtr, size_t> obs_;
 
     Type type_;
 

@@ -20,12 +20,14 @@ public:
 
     typedef std::shared_ptr<Frame> Ptr;
 
+    //! ----- Image ---------------------------------------------
     const ImgPyr images() const;
-
-    const ImgPyr opticalImages() const;
 
     const cv::Mat getImage(int level) const;
 
+    const ImgPyr opticalImages();
+
+    //! ----- Pose ----------------------------------------------
     //! Transform (c)amera from (w)orld
     SE3d Tcw();
 
@@ -47,43 +49,47 @@ public:
     //! Set Extrinsic Matrix
     void setTcw(const SE3d& Tcw);
 
-    bool isVisiable(const Vector3d &xyz_w, const int border = 0);
+    //! ---- Feature & MapPoint & Seed ---------------------------
+    size_t getMapPointMatchSize();
 
-    //! Feature created by MapPoint
-    int featureNumber();
+    size_t getSeedMatchSize();
 
-    std::unordered_map<MapPoint::Ptr, Feature::Ptr> features();
+    std::vector<size_t> getMapPointMatchIndices();
+
+    std::vector<size_t> getSeedMatchIndices();
+
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> getMapPointFeatureMatches();
+
+    std::unordered_map<Seed::Ptr, Feature::Ptr> getSeedFeatureMatches();
+
+    bool removeMapPointMatchByIndex(const size_t &idx);
+
+    bool removeSeedMatchByIndex(const size_t &idx);
 
     std::vector<Feature::Ptr> getFeatures();
 
     std::vector<MapPoint::Ptr> getMapPoints();
 
-    bool addFeature(const Feature::Ptr &ft);
+    std::vector<Seed::Ptr> getSeeds();
 
-    bool removeFeature(const Feature::Ptr &ft);
+    bool addMapPointFeatureMatch(const MapPoint::Ptr &mpt, const Feature::Ptr &ft);
 
-    bool removeMapPoint(const MapPoint::Ptr &mpt);
+    bool addSeedFeatureMatch(const Seed::Ptr &seed, const Feature::Ptr &ft);
 
-    Feature::Ptr getFeatureByMapPoint(const MapPoint::Ptr &mpt);
+    //! ----- Scene ----------------------------------------------
+    bool isVisiable(const Vector3d &xyz_w, const int border = 0);
 
-    //! Feature created by Seed
-    int seedNumber();
+    bool getSceneDepth(double &depth_median, double &depth_min);
 
-    std::vector<Feature::Ptr> getSeeds();
-
-    bool addSeed(const Feature::Ptr &ft);
-
-    bool removeSeed(const Seed::Ptr &seed);
-
-    bool hasSeed(const Seed::Ptr &seed);
-
-    bool getSceneDepth(double &depth_mean, double &depth_min);
-
+    //! ----- KeyFrame -------------------------------------------
     std::map<std::shared_ptr<KeyFrame>, int> getOverLapKeyFrames();
 
     inline void setRefKeyFrame(const std::shared_ptr<KeyFrame> &kf) {ref_keyframe_ = kf;}
 
     inline std::shared_ptr<KeyFrame> getRefKeyFrame() const {return ref_keyframe_;}
+
+    //! ----- Static Function ------------------------------------
+    static void initScaleParameters(const FastDetector::Ptr &fast);
 
     inline static Ptr create(const cv::Mat& img, const double timestamp, AbstractCamera::Ptr cam)
     { return Ptr(new Frame(img, timestamp, cam)); }
@@ -92,6 +98,7 @@ protected:
 
     Frame(const cv::Mat& img, const double timestamp, const AbstractCamera::Ptr &cam);
 
+    //! only for keyframe init
     Frame(const ImgPyr& img_pyr, const uint64_t id, const double timestamp, const AbstractCamera::Ptr &cam);
 
 public:
@@ -104,22 +111,31 @@ public:
 
     AbstractCamera::Ptr cam_;
 
-    const int max_level_;
     static const cv::Size optical_win_size_;
     static float light_affine_a_;
     static float light_affine_b_;
 
-    SE3d optimal_Tcw_;//! for optimization
+    static bool isInit_;
+    static int nlevels_;
+    static double scale_factor_;
+    static double log_scale_factor_;
+    static std::vector<double> scale_factors_;
+    static std::vector<double> inv_scale_factors_;
+    static std::vector<double> level_sigma2_;
+    static std::vector<double> inv_level_sigma2_;
 
-    double disparity_;//! for depth filter
+    SE3d optimal_Tcw_;//! for optimization
 
 protected:
 
-    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts_;
-
-    std::unordered_map<Seed::Ptr, Feature::Ptr> seed_fts_;
-
     ImgPyr img_pyr_;
+
+    std::vector<Feature::Ptr> fts_;
+    std::vector<MapPoint::Ptr> mpts_;
+    std::vector<Seed::Ptr> seeds_;
+
+    std::unordered_set<size_t> mpt_matches_;
+    std::unordered_set<size_t> seed_matches_;
 
     SE3d Tcw_;
     SE3d Twc_;
@@ -129,7 +145,6 @@ protected:
 
     std::mutex mutex_pose_;
     std::mutex mutex_feature_;
-    std::mutex mutex_seed_;
 
 private:
 
