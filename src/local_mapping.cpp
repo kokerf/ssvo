@@ -386,6 +386,26 @@ int LocalMapper::createNewMapPoints(const KeyFrame::Ptr &current_keyframe)
             if(ratio_dist * ratio_factor < ratio_octave || ratio_octave * ratio_factor < ratio_dist)
                 continue;
 
+            if(0)
+            {
+                //! find subpixel feature
+                Vector2d px2 = ft2->px_;
+                bool succeed = FeatureTracker::findSubpixelFeature(current_keyframe, connected_keyframe, ft1, P3D, px2, ft2->corner_.level);
+                if(!succeed)
+                    continue;
+
+                const Vector2d px_diff = ft2->px_ - px2;
+                const double diff = px_diff.squaredNorm();
+
+                if(diff > image2_sigma2 * 5.991)// TODO sigma2 should be?
+                    continue;
+
+                ft2->px_ = px2;
+                ft2->fn_ = connected_keyframe->cam_->lift(px2);
+                ft2->corner_.x = px2[0];
+                ft2->corner_.y = px2[1];
+            }
+
             MapPoint::Ptr new_mpt = MapPoint::create(P3D);
             map_->insertMapPoint(new_mpt);
 

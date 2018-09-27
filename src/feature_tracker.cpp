@@ -329,6 +329,54 @@ bool FeatureTracker::trackFeature(const Frame::Ptr &frame_ref,
     return true;
 }
 
+bool FeatureTracker::findSubpixelFeature(const Frame::Ptr &frame_ref,
+                                         const Frame::Ptr &frame_cur,
+                                         const Feature::Ptr &ft_ref,
+                                         const Vector3d &p3d,
+                                         Vector2d &px_cur,
+                                         const int level_cur,
+                                         const int max_iterations,
+                                         const double epslion,
+                                         const double threshold,
+                                         bool verbose)
+{
+    static const int patch_size = AlignPatch::Size;
+    static const int patch_border_size = AlignPatch::SizeWithBorder;
+    const int TH_SSD = AlignPatch::Area * threshold;
+
+    const Vector3d obs_ref_dir(frame_ref->pose().translation() - p3d);
+    const SE3d T_cur_from_ref = frame_cur->Tcw() * frame_ref->pose();
+
+    Matrix2d A_cur_from_ref;
+    utils::getWarpMatrixAffine(frame_ref->cam_, frame_cur->cam_, ft_ref->px_, ft_ref->fn_, ft_ref->corner_.level,
+                               obs_ref_dir.norm(), T_cur_from_ref, patch_size, A_cur_from_ref);
+
+    const cv::Mat image_ref = frame_ref->getImage(ft_ref->corner_.level);
+    Matrix<float, patch_border_size, patch_border_size, RowMajor> patch_with_border;
+    utils::warpAffine<float, patch_border_size>(image_ref, patch_with_border, A_cur_from_ref,
+                                                ft_ref->px_, ft_ref->corner_.level, level_cur);
+
+    const cv::Mat image_cur = frame_cur->getImage(level_cur);
+
+    const double factor = Frame::scale_factors_.at(level_cur);
+    Vector3d estimate(0,0,0); estimate.head<2>() = px_cur / factor;
+
+    bool matched = AlignPatch::align2DI(image_cur, patch_with_border, estimate, max_iterations, epslion, verbose);
+    if(!matched)
+        return false;
+
+    ZSSD<float, patch_size> zssd(patch_with_border.block(1,1,8,8));
+    Matrix<float, patch_size, patch_size, RowMajor> patch_cur;
+    utils::interpolateMat<uchar, float, patch_size>(image_cur, patch_cur, estimate[0], estimate[1]);
+    float score = zssd.compute_score(patch_cur);
+    if(score > TH_SSD)
+        return false;
+
+    px_cur = estimate.head<2>() * factor;
+
+    return true;
+}
+
 int FeatureTracker::searchBoWForTriangulation(const KeyFrame::Ptr &keyframe1,
                                               const KeyFrame::Ptr &keyframe2,
                                               std::map<size_t, size_t> &matches,
