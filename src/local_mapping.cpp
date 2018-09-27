@@ -363,7 +363,7 @@ int LocalMapper::createNewMapPoints(const KeyFrame::Ptr &current_keyframe)
             if(rpj_err1_square > image1_sigma2 * 5.991)
                 continue;
 
-            const double& image2_sigma2 = Frame::level_sigma2_.at(ft1->corner_.level);
+            const double& image2_sigma2 = Frame::level_sigma2_.at(ft2->corner_.level);
             const double x2 = Rcw2.row(0).dot(P3D) + tcw2[0];
             const double y2 = Rcw2.row(1).dot(P3D) + tcw2[1];
 

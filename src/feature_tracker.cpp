@@ -462,6 +462,9 @@ int FeatureTracker::searchBoWForTriangulation(const KeyFrame::Ptr &keyframe1,
                     if(matched_idx[best_idx2] != -1 && matched_dist[best_idx2] < best_dist)
                         continue;
 
+                    if(matched_idx[best_idx2] != -1)
+                        matches.erase(matched_idx[best_idx2]);
+
                     matches.emplace(idx1, best_idx2);
 
                     matched_idx[best_idx2] = idx1;
@@ -713,8 +716,8 @@ void FeatureTracker::showAllFeatures(const KeyFrame::Ptr &keyframe)
     }
 
 //    cv::imwrite("ft_imag.png", show);
-    cv::imshow("KeyFrame feature", show);
-    cv::waitKey(0);
+//    cv::imshow("KeyFrame feature", show);
+//    cv::waitKey(0);
 }
 
 }
