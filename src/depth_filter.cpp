@@ -127,17 +127,14 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, bool report, bo
 
     //! LOG and timer for system;
     TimeTracing::TraceNames time_names;
-    time_names.push_back("total_without_klt");
-    time_names.push_back("klt_track");
-    time_names.push_back("update_seeds");
+    time_names.push_back("total");
     time_names.push_back("epl_search");
     time_names.push_back("create_seeds");
 
     TimeTracing::TraceNames log_names;
     log_names.push_back("frame_id");
-    log_names.push_back("num_tracked");
-    log_names.push_back("num_updated");
-    log_names.push_back("num_repoj");
+    log_names.push_back("num_new_seeds");
+    log_names.push_back("num_epl_search");
 
     string trace_dir = Config::timeTracingDirectory();
     dfltTrace.reset(new TimeTracing("ssvo_trace_filter", trace_dir, time_names, log_names));
@@ -191,33 +188,34 @@ void DepthFilter::run()
         KeyFrame::Ptr keyframe;
         if(checkNewFrame(frame, keyframe))
         {
-            dfltTrace->startTimer("total_without_klt");
+            dfltTrace->startTimer("total");
 
             int updated_count = 0;
-            int project_count = 0;
+            int searched_count = 0;
+            int new_seeds_count = 0;
 
             dfltTrace->startTimer("epl_search");
-            project_count = reprojectAllSeeds(frame);
+            searched_count = reprojectAllSeeds(frame);
             dfltTrace->stopTimer("epl_search");
-            dfltTrace->log("num_repoj", project_count);
+            dfltTrace->log("num_epl_search", searched_count);
 
-            dfltTrace->startTimer("create_seeds");
             if(keyframe)
             {
-                int new_seeds = createSeeds(keyframe);
+                dfltTrace->startTimer("create_seeds");
+                new_seeds_count = createSeeds(keyframe);
+                dfltTrace->stopTimer("create_seeds");
+                dfltTrace->log("num_new_seeds", new_seeds_count);
+
                 keyframe_process_callback_(keyframe);
 //                updateByConnectedKeyFrames(keyframe, 3);
-                LOG(INFO) << "[Filter] New created depth filter seeds: " << new_seeds;
             }
-            dfltTrace->stopTimer("create_seeds");
 
-            dfltTrace->stopTimer("total_without_klt");
-
+            dfltTrace->stopTimer("total");
             dfltTrace->writeToFile();
 
-            LOG_IF(WARNING, report_) << "[Filter][2] Frame: " << frame->id_
-                                     << ", Seeds after updated: " << updated_count
-                                     << ", new reprojected: " << project_count;
+            LOG_IF(WARNING, report_) << "[Filter][*] Frame: " << frame->id_
+                                     << " seeds searched: " <<  searched_count
+                                     << ", created: " << new_seeds_count;
         }
 
     }
@@ -276,32 +274,35 @@ void DepthFilter::insertFrame(const Frame::Ptr &frame, const KeyFrame::Ptr keyfr
 
     if(filter_thread_ == nullptr)
     {
-        dfltTrace->startTimer("total_without_klt");
+        dfltTrace->startTimer("total");
+
         int updated_count = 0;
-        int project_count = 0;
+        int searched_count = 0;
+        int new_seeds_count = 0;
 
         dfltTrace->startTimer("epl_search");
-        project_count = reprojectAllSeeds(frame);
+        searched_count = reprojectAllSeeds(frame);
         dfltTrace->stopTimer("epl_search");
-        dfltTrace->log("num_repoj", project_count);
+        dfltTrace->log("num_epl_search", searched_count);
 
-        dfltTrace->startTimer("create_seeds");
         if(keyframe)
         {
-            int new_seeds = createSeeds(keyframe);
+            dfltTrace->startTimer("create_seeds");
+            new_seeds_count = createSeeds(keyframe);
+            dfltTrace->stopTimer("create_seeds");
+            dfltTrace->log("num_new_seeds", new_seeds_count);
+
             keyframe_process_callback_(keyframe);
 //            updateByConnectedKeyFrames(keyframe, 3);
-            LOG(INFO) << "[Filter] New created depth filter seeds: " << new_seeds;
         }
-        dfltTrace->stopTimer("create_seeds");
 
-        dfltTrace->stopTimer("total_without_klt");
-
+        dfltTrace->stopTimer("total");
         dfltTrace->writeToFile();
 
-        LOG_IF(WARNING, report_) << "[Filter][2] Frame: " << frame->id_
-                                 << ", Seeds after updated: " << updated_count
-                                 << ", new reprojected: " << project_count;
+        LOG_IF(WARNING, report_) << "[Filter][*] Frame: " << frame->id_
+                                 << " seeds searched: " <<  searched_count
+                                 << ", created: " << new_seeds_count;
+
     }
     else
     {
