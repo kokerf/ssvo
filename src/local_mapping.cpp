@@ -28,7 +28,7 @@ LocalMapper::LocalMapper(const FastDetector::Ptr fast, bool report, bool verbose
 {
     map_ = Map::create();
 
-    brief_ = BRIEF::create();
+    brief_ = BRIEF::create(fast->getScaleFactor(), fast->getNLevels());
 
     options_.min_disparity = 100;
     options_.min_redundant_observations = 3;
@@ -61,30 +61,15 @@ LocalMapper::LocalMapper(const FastDetector::Ptr fast, bool report, bool verbose
     string trace_dir = Config::timeTracingDirectory();
     mapTrace.reset(new TimeTracing("ssvo_trace_map", trace_dir, time_names, log_names));
 
-
-
     std::string voc_dir = Config::DBoWDirectory();
     LOG_ASSERT(!voc_dir.empty()) << "Please check the config file! The DBoW directory is not set!";
     vocabulary_ = DBoW3::Vocabulary(voc_dir);
     LOG_ASSERT(!vocabulary_.empty()) << "Please check the config file! The Voc is empty!";
     database_ = DBoW3::Database(vocabulary_, true, 4);
-
-
 }
 
-void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur)
+void LocalMapper::createInitalMap(const KeyFrame::Ptr &keyframe_ref, const KeyFrame::Ptr &keyframe_cur)
 {
-    map_->clear();
-
-    //! create Key Frame
-    KeyFrame::Ptr keyframe_ref = KeyFrame::create(frame_ref);
-    KeyFrame::Ptr keyframe_cur = KeyFrame::create(frame_cur);
-
-    keyframe_ref->extractORB(fast_detector_, brief_);
-    keyframe_cur->extractORB(fast_detector_, brief_);
-    keyframe_ref->computeBoW(vocabulary_);
-    keyframe_cur->computeBoW(vocabulary_);
-
     //! before import, make sure the features are stored in the same order!
     std::vector<MapPoint::Ptr> mpts_ref = keyframe_ref->getMapPoints();
     std::vector<Feature::Ptr> fts_ref = keyframe_ref->getFeatures();
@@ -93,7 +78,6 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
     std::vector<MapPoint::Ptr> mpts_cur = keyframe_cur->getMapPoints();
     std::vector<Feature::Ptr> fts_cur = keyframe_cur->getFeatures();
     std::vector<size_t> matches_cur = keyframe_cur->getMapPointMatchIndices();
-
 
     for(const size_t &idx : matches_ref)
     {
@@ -109,17 +93,14 @@ void LocalMapper::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr 
         map_->insertMapPoint(mpt);
         mpt->resetType(MapPoint::STABLE);
         mpt->updateViewAndDepth();
-
     }
 
     keyframe_ref->setRefKeyFrame(keyframe_cur);
     keyframe_cur->setRefKeyFrame(keyframe_ref);
     keyframe_ref->updateConnections();
     keyframe_cur->updateConnections();
-    insertKeyFrame(keyframe_ref);
-    insertKeyFrame(keyframe_cur);
 
-    LOG_IF(INFO, report_) << "[Mapper] Creating inital map with " << map_->MapPointsInMap() << " map points";
+    LOG_IF(INFO, report_) << "Creating inital map with " << map_->MapPointsInMap() << " map points";
 }
 
 void LocalMapper::startMainThread()
@@ -139,10 +120,15 @@ void LocalMapper::stopMainThread()
     }
 }
 
+void LocalMapper::clear()
+{
+    map_->clear();
+}
+
 void LocalMapper::setStop()
 {
-        std::unique_lock<std::mutex> lock(mutex_stop_);
-        stop_require_ = true;
+    std::unique_lock<std::mutex> lock(mutex_stop_);
+    stop_require_ = true;
 }
 bool LocalMapper::isRequiredStop()
 {
@@ -159,17 +145,16 @@ void LocalMapper::run()
         {
             mapTrace->startTimer("total");
 
+            mapTrace->startTimer("dbow");
+            keyframe_cur->conputeDescriptor(brief_);
+            keyframe_cur->computeBoW(vocabulary_);
+            mapTrace->stopTimer("dbow");
+
             std::list<MapPoint::Ptr> bad_mpts;
             int new_seed_features = 0;
             int new_local_features = 0;
             if(map_->kfs_.size() > 2)
             {
-
-                mapTrace->startTimer("dbow");
-                keyframe_cur->extractORB(fast_detector_, brief_);
-                keyframe_cur->computeBoW(vocabulary_);
-                mapTrace->stopTimer("dbow");
-
 //                new_seed_features = createFeatureFromSeedFeature(keyframe_cur);
                 mapTrace->startTimer("reproj");
                 new_local_features = createNewMapPoints(keyframe_cur);
@@ -218,7 +203,9 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
 {
     //! incase add the same keyframe twice
     if(!map_->insertKeyFrame(keyframe))
-        return;;
+        return;
+
+    map_->insertKeyFrame(keyframe);
 
     mapTrace->log("frame_id", keyframe->frame_id_);
     mapTrace->log("keyframe_id", keyframe->id_);
@@ -232,16 +219,16 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
     {
         mapTrace->startTimer("total");
 
+        mapTrace->startTimer("dbow");
+        keyframe->conputeDescriptor(brief_);
+        keyframe->computeBoW(vocabulary_);
+        mapTrace->stopTimer("dbow");
+
         std::list<MapPoint::Ptr> bad_mpts;
         int new_seed_features = 0;
         int new_local_features = 0;
         if(map_->kfs_.size() > 2)
         {
-
-            mapTrace->startTimer("dbow");
-            keyframe->extractORB(fast_detector_, brief_);
-            keyframe->computeBoW(vocabulary_);
-            mapTrace->stopTimer("dbow");
 //            new_seed_features = createFeatureFromSeedFeature(keyframe);
             mapTrace->startTimer("reproj");
             new_local_features = createNewMapPoints(keyframe);
@@ -272,6 +259,20 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
 void LocalMapper::finishLastKeyFrame()
 {
 //    DepthFilter::updateByConnectedKeyFrames(keyframe_last_, 3);
+}
+
+void LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
+{
+    //! create new feature
+    MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->getInvDepth()));
+    seed->kf->removeSeedCreateByIndex(seed->ft_idx);
+    seed->kf->addMapPoint(mpt, seed->ft_idx);
+    map_->insertMapPoint(mpt);
+    mpt->addObservation(seed->kf, seed->ft_idx);
+    mpt->updateViewAndDepth();
+
+//    if(mpt->observations() > 1)
+//        Optimizer::refineMapPoint(mpt, 10, true);
 }
 
 int LocalMapper::createNewMapPoints(const KeyFrame::Ptr &current_keyframe)
@@ -305,8 +306,8 @@ int LocalMapper::createNewMapPoints(const KeyFrame::Ptr &current_keyframe)
         std::map<size_t, size_t> matches;
         FeatureTracker::searchBoWForTriangulation(current_keyframe, connected_keyframe, matches, 50, epl_usigma2);
 
-        std::vector<std::pair<size_t,size_t>> matches_vec(matches.begin(), matches.end());
-        FeatureTracker::showMatches(current_keyframe, connected_keyframe, matches_vec);
+//        std::vector<std::pair<size_t,size_t>> matches_vec(matches.begin(), matches.end());
+//        FeatureTracker::showMatches(current_keyframe, connected_keyframe, matches_vec);
 
         const Matrix4d Tcw2 = connected_keyframe->Tcw().matrix();
         const Matrix3d Rcw2 = Tcw2.topLeftCorner<3,3>();
@@ -386,7 +387,7 @@ int LocalMapper::createNewMapPoints(const KeyFrame::Ptr &current_keyframe)
                 continue;
 
             MapPoint::Ptr new_mpt = MapPoint::create(P3D);
-            map_->removeMapPoint(new_mpt);
+            map_->insertMapPoint(new_mpt);
 
             current_keyframe->addMapPoint(new_mpt, idx1);
             connected_keyframe->addMapPoint(new_mpt, idx2);

@@ -9,15 +9,15 @@ uint64_t KeyFrame::next_id_ = 0;
 KeyFrame::KeyFrame(const Frame::Ptr frame):
     Frame(frame->images(), next_id_++, frame->timestamp_, frame->cam_), frame_id_(frame->id_), isBad_(false)
 {
-    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts = frame->getMapPointFeatureMatches();
-    std::unordered_map<Seed::Ptr, Feature::Ptr> seed_fts = frame->getSeedFeatureMatches();
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts = frame->getMapPointFeaturesMatched();
+    std::unordered_map<Seed::Ptr, Feature::Ptr> seed_fts = frame->getSeedFeaturesMatched();
     N_ = mpt_fts.size() + seed_fts.size();
     mpts_.reserve(N_);
     seeds_.reserve(N_);
     fts_.reserve(N_);
     for(const auto &mpt_ft : mpt_fts)
     {
-        mpt_matches_.insert(fts_.size());
+        mpts_matched_.insert(fts_.size());
         mpts_.push_back(mpt_ft.first);
         seeds_.push_back(nullptr);
         fts_.push_back(mpt_ft.second);
@@ -25,7 +25,7 @@ KeyFrame::KeyFrame(const Frame::Ptr frame):
 
     for(const auto &seed_ft : seed_fts)
     {
-        seed_matches_.insert(fts_.size());
+        seeds_matched_.insert(fts_.size());
         mpts_.push_back(nullptr);
         seeds_.push_back(seed_ft.first);
         fts_.push_back(seed_ft.second);
@@ -46,14 +46,6 @@ size_t KeyFrame::N()
     return N_;
 }
 
-bool KeyFrame::addMapPoint(const MapPoint::Ptr &mpt, const size_t &idx)
-{
-    std::lock_guard<std::mutex> lock(mutex_feature_);
-    if(idx < 0 || idx >= N_) return false;
-    mpts_[idx] = mpt;
-    return mpt_matches_.insert(idx).second;
-}
-
 const Feature::Ptr& KeyFrame::getFeatureByIndex(const size_t &idx)
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
@@ -66,6 +58,40 @@ const MapPoint::Ptr& KeyFrame::getMapPointByIndex(const size_t &idx)
     return mpts_.at(idx);
 }
 
+bool KeyFrame::addMapPoint(const MapPoint::Ptr &mpt, const size_t &idx)
+{
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+    if(idx < 0 || idx >= N_) return false;
+    mpts_matched_.insert(idx);
+    mpts_[idx] = mpt;
+    return true;
+}
+
+bool KeyFrame::addSeedFeatureCreated(const Seed::Ptr &seed, const size_t &idx)
+{
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+    if(idx < 0 || idx >= N_) return false;
+    seeds_created_.insert(idx);
+    seeds_[idx] = seed;
+    return true;
+}
+
+bool KeyFrame::removeSeedCreateByIndex(const size_t &idx)
+{
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+    const auto it = seeds_created_.find(idx);
+    if(it == seeds_created_.end()) return false;
+    seeds_created_.erase(it);
+    seeds_[idx] = nullptr;
+    return true;
+}
+
+std::vector<size_t> KeyFrame::getSeedCreateIndices()
+{
+    std::lock_guard<std::mutex> lock(mutex_feature_);
+    return std::vector<size_t>(seeds_created_.begin(), seeds_created_.end());
+}
+
 //bool KeyFrame::removeMapPointMatchByMapPoint(const MapPoint::Ptr &mpt)
 //{
 //    size_t idx = mpt->getFeatureIndex(shared_from_this());
@@ -74,7 +100,7 @@ const MapPoint::Ptr& KeyFrame::getMapPointByIndex(const size_t &idx)
 //    return removeMapPointMatchByIndex(idx);
 //}
 
-void KeyFrame::extractORB(const FastDetector::Ptr fast, const BRIEF::Ptr brief)
+void KeyFrame::detectFast(const FastDetector::Ptr &fast)
 {
     const std::vector<Feature::Ptr> fts = getFeatures();
 
@@ -82,7 +108,11 @@ void KeyFrame::extractORB(const FastDetector::Ptr fast, const BRIEF::Ptr brief)
     old_corners.reserve(fts.size());
     for(const auto &ft : fts)
     {
-        old_corners.emplace_back(ft->corner_);
+        Corner &corner = ft->corner_;
+//        if(corner.score < 0)
+//            corner.score = FastDetector::shiTomasiScore(images()[corner.level], (int)std::round(corner.x), (int)std::round(corner.y));
+
+        old_corners.emplace_back(corner);
     }
 
     Corners new_corners;
@@ -94,15 +124,21 @@ void KeyFrame::extractORB(const FastDetector::Ptr fast, const BRIEF::Ptr brief)
 
         fts_.reserve(N_);
         mpts_.resize(N_, nullptr);
+        seeds_.resize(N_, nullptr);
 
         //! Add new features
         for(const Corner &corner : new_corners)
         {
-            fts_.emplace_back(Feature::create(corner));
-            fts_.back()->fn_ = cam_->lift(fts_.back()->px_);
+            const Vector3d fn(cam_->lift(Vector2d(corner.x, corner.y)));
+            fts_.emplace_back(Feature::create(corner, fn));
         }
     }
 
+    assignFeaturesToGrid();
+}
+
+void KeyFrame::conputeDescriptor(const BRIEF::Ptr &brief)
+{
     std::vector<cv::KeyPoint> kps; kps.reserve(N_);
     for(const Feature::Ptr & ft : fts_)
     {
@@ -115,12 +151,11 @@ void KeyFrame::extractORB(const FastDetector::Ptr fast, const BRIEF::Ptr brief)
     descriptors_.reserve(_descriptors.rows);
     for(int i = 0; i < _descriptors.rows; i++)
         descriptors_.push_back(_descriptors.row(i));
-
-    assignFeaturesToGrid();
 }
 
 void KeyFrame::computeBoW(const DBoW3::Vocabulary& vocabulary)
 {
+    LOG_ASSERT(!descriptors_.empty()) << "Please use conputeDescriptor first!";
     if(bow_vec_.empty())
         vocabulary.transform(descriptors_, bow_vec_, feat_vec_, 4);
 }
@@ -179,6 +214,11 @@ std::vector<size_t> KeyFrame::getFeaturesInArea(const float x,
         }
 
     return indices;
+}
+
+std::vector<size_t> KeyFrame::getFeaturesInGrid(const int r, const int c) const
+{
+    return grid_[r][c];
 }
 
 void KeyFrame::updateConnections()
@@ -353,7 +393,7 @@ void KeyFrame::setBad()
 
         connectedKeyFrames_.clear();
         orderedConnectedKeyFrames_.clear();
-        mpt_matches_.clear();
+        mpts_matched_.clear();
     }
     // TODO change refKF
 }

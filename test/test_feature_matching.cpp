@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
         kps2.emplace_back(cv::KeyPoint(corner.x, corner.y, 31, -1, 0, corner.level));
 
 
-    ssvo::BRIEF::Ptr brief = ssvo::BRIEF::create();
+    ssvo::BRIEF::Ptr brief = ssvo::BRIEF::create(fast_detector->getScaleFactor(), fast_detector->getNLevels());
     cv::Mat desp1, desp2;
     brief->compute(frame1->images(), kps1, desp1);
     brief->compute(frame2->images(), kps2, desp2);

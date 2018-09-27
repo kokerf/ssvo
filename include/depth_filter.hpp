@@ -16,13 +16,12 @@ public:
 
     typedef std::shared_ptr<DepthFilter> Ptr;
 
-    typedef std::function<void (const Seed::Ptr&)> Callback;
+    typedef std::function<void (const Seed::Ptr&)> SeedCallback;
+    typedef std::function<void (const KeyFrame::Ptr&)> KeyFrameCallback;
 
     void insertFrame(const Frame::Ptr &frame, const KeyFrame::Ptr keyframe = nullptr);
 
-//    int getSeedsForMapping(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame);
-
-    int updateByConnectedKeyFrames(const KeyFrame::Ptr &keyframe, int num = 2);
+    void insertKeyFrame(const KeyFrame::Ptr &keyframe);
 
     void startMainThread();
 
@@ -30,14 +29,20 @@ public:
 
     void logSeedsInfo();
 
-    static Ptr create(const FastDetector::Ptr &fast_detector, const Callback &callback, bool report = false, bool verbose = false)
-    { return Ptr(new DepthFilter(fast_detector, callback, report, verbose)); }
+    void setSeedConvergedCallback(const SeedCallback &callback);
+
+    void setKeyFrameProcessCallback(const KeyFrameCallback &callback);
+
+    static Ptr create(const FastDetector::Ptr &fast_detector, bool report = false, bool verbose = false)
+    { return Ptr(new DepthFilter(fast_detector, report, verbose)); }
 
 private:
 
-    DepthFilter(const FastDetector::Ptr &fast_detector, const Callback &callback, bool report, bool verbose);
+    DepthFilter(const FastDetector::Ptr &fast_detector, bool report, bool verbose);
 
-    Callback seed_coverged_callback_;
+    SeedCallback seed_converged_callback_;
+
+    KeyFrameCallback keyframe_process_callback_;
 
     void run();
 
@@ -47,7 +52,9 @@ private:
 
     bool checkNewFrame(Frame::Ptr &frame, KeyFrame::Ptr &keyframe);
 
-    int createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame = nullptr);
+    int createSeeds(const KeyFrame::Ptr &keyframe);
+
+    int updateByConnectedKeyFrames(const KeyFrame::Ptr &keyframe, int num = 2);
 
     int reprojectAllSeeds(const Frame::Ptr &frame);
 

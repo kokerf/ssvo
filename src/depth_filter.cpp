@@ -5,6 +5,7 @@
 #include "feature_alignment.hpp"
 #include "image_alignment.hpp"
 #include "time_tracing.hpp"
+#include "feature_tracker.hpp"
 
 namespace ssvo{
 
@@ -110,9 +111,8 @@ void showAffine(const cv::Mat &src, const Vector2d &px_ref, const Matrix2d &A_re
 TimeTracing::Ptr dfltTrace = nullptr;
 
 //! DepthFilter
-DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback &callback, bool report, bool verbose) :
-    seed_coverged_callback_(callback), fast_detector_(fast_detector),
-    report_(report), verbose_(report&&verbose), filter_thread_(nullptr), stop_require_(false)
+DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, bool report, bool verbose) :
+    fast_detector_(fast_detector), report_(report), verbose_(report&&verbose), filter_thread_(nullptr), stop_require_(false)
 {
     options_.max_kfs = 5;
     options_.max_features = Config::minCornersPerKeyFrame();
@@ -141,6 +141,16 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, const Callback 
 
     string trace_dir = Config::timeTracingDirectory();
     dfltTrace.reset(new TimeTracing("ssvo_trace_filter", trace_dir, time_names, log_names));
+}
+
+void DepthFilter::setSeedConvergedCallback(const SeedCallback &callback)
+{
+    seed_converged_callback_ = callback;
+}
+
+void DepthFilter::setKeyFrameProcessCallback(const KeyFrameCallback &callback)
+{
+    keyframe_process_callback_ = callback;
 }
 
 void DepthFilter::startMainThread()
@@ -194,8 +204,9 @@ void DepthFilter::run()
             dfltTrace->startTimer("create_seeds");
             if(keyframe)
             {
-                int new_seeds = createSeeds(keyframe, frame);
-                updateByConnectedKeyFrames(keyframe, 3);
+                int new_seeds = createSeeds(keyframe);
+                keyframe_process_callback_(keyframe);
+//                updateByConnectedKeyFrames(keyframe, 3);
                 LOG(INFO) << "[Filter] New created depth filter seeds: " << new_seeds;
             }
             dfltTrace->stopTimer("create_seeds");
@@ -277,8 +288,9 @@ void DepthFilter::insertFrame(const Frame::Ptr &frame, const KeyFrame::Ptr keyfr
         dfltTrace->startTimer("create_seeds");
         if(keyframe)
         {
-            int new_seeds = createSeeds(keyframe, frame);
-            updateByConnectedKeyFrames(keyframe, 3);
+            int new_seeds = createSeeds(keyframe);
+            keyframe_process_callback_(keyframe);
+//            updateByConnectedKeyFrames(keyframe, 3);
             LOG(INFO) << "[Filter] New created depth filter seeds: " << new_seeds;
         }
         dfltTrace->stopTimer("create_seeds");
@@ -319,85 +331,136 @@ void DepthFilter::insertFrame(const Frame::Ptr &frame, const KeyFrame::Ptr keyfr
 //    return (int) seeds.size();
 //}
 
-int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame)
+void DepthFilter::insertKeyFrame(const KeyFrame::Ptr &keyframe)
+{
+    createSeeds(keyframe);
+    keyframe_process_callback_(keyframe);
+}
+
+int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe)
 {
     if(keyframe == nullptr)
         return 0;
 
-    LOG_ASSERT(frame == nullptr || keyframe->frame_id_ == frame->id_) << "The keyframe " << keyframe->id_  << "(" << keyframe->frame_id_ << ") is not created from frame " << frame->id_;
+    keyframe->detectFast(fast_detector_);
 
-    std::vector<Feature::Ptr> fts = keyframe->getFeatures();
+    return 0;
 
-    std::vector<Feature::Ptr> seeds = keyframe->getSeeds();
+    std::vector<size_t> mpt_indices = keyframe->getMapPointMatchIndices();
+    std::vector<size_t> seed_indices = keyframe->getSeedMatchIndices();
 
-    Corners old_corners;
-    old_corners.reserve(fts.size()+seeds.size());
-    for(const Feature::Ptr &ft : fts)
-    {
-        old_corners.emplace_back(Corner(ft->px_[0], ft->px_[1], 0, ft->level_));
-    }
-    for(const Feature::Ptr &ft : seeds)
-    {
-        old_corners.emplace_back(Corner(ft->px_[0], ft->px_[1], 0, ft->level_));
-    }
+    std::unordered_set<size_t> mask_indices;
+    for(const size_t &idx : mpt_indices)
+        mask_indices.insert(idx);
+    for(const size_t &idx : seed_indices)
+        mask_indices.insert(idx);
 
-    // TODO 如果对应的seed收敛，在跟踪过的关键帧增加观测？
-    if(frame != nullptr)
-    {
-        std::vector<Feature::Ptr> seed_fts = frame->getSeeds();
-        for(const Feature::Ptr &ft : seed_fts)
+    //! get immature features
+    std::map<size_t, float> grid[KeyFrame::GRID_ROWS][KeyFrame::GRID_COLS];
+    for(size_t r = 0; r < KeyFrame::GRID_ROWS; r++)
+        for(size_t c = 0; c < KeyFrame::GRID_COLS; c++)
         {
-            const Vector2d &px = ft->px_;
-            old_corners.emplace_back(Corner(px[0], px[1], ft->level_, ft->level_));
+            std::vector<size_t> fts_in_cell = keyframe->getFeaturesInGrid(r, c);
+            for(const size_t& idx : fts_in_cell)
+            {
+                if(mask_indices.count(idx))
+                {
+                    grid[r][c].clear();
+                    break;
+                }
+
+                const Feature::Ptr& ft = keyframe->getFeatureByIndex(idx);
+                if(ft->corner_.score > 0)
+                    grid[r][c].emplace(idx, ft->corner_.score);
+            }
+        }
+
+    //! get grid size
+    const size_t max_immature_fts = 200;
+    const size_t max_step = std::sqrt(static_cast<float>(KeyFrame::GRID_ROWS*KeyFrame::GRID_COLS)/max_immature_fts);
+    size_t step = max_step;
+    for(;step > 0; step--)
+    {
+        size_t immature_fts = 0;
+        for(size_t r = 0; r < KeyFrame::GRID_ROWS; r += step)
+        {
+            for(size_t c = 0; c < KeyFrame::GRID_COLS; c += step)
+            {
+                bool empty = true;
+                const size_t max_rr = KeyFrame::GRID_ROWS < r + step ? KeyFrame::GRID_ROWS : r + step;
+                for(size_t rr = r; rr < max_rr; rr++)
+                {
+                    const size_t max_cc = KeyFrame::GRID_COLS < c + step ? KeyFrame::GRID_COLS : c + step;
+                    for(size_t cc = c; cc < max_cc; cc++)
+                    {
+                        if(!grid[rr][cc].empty())
+                        {
+                            empty = false;
+                            break;
+                        }
+                    }
+
+                    if(!empty)
+                        break;
+                }
+
+                if(!empty)
+                    immature_fts++;
+            }
+        }
+
+        if(immature_fts >= max_immature_fts)
+            break;
+    }
+
+    //! get seeds index
+    std::list<size_t> mew_seed_indices;
+    for(size_t r = 0; r < KeyFrame::GRID_ROWS; r += step)
+    {
+        for(size_t c = 0; c < KeyFrame::GRID_COLS; c += step)
+        {
+            size_t best_idx = -1;
+            float best_score = -1;
+            const size_t max_rr = KeyFrame::GRID_ROWS < r + step ? KeyFrame::GRID_ROWS : r + step;
+            for(size_t rr = r; rr < max_rr; rr++)
+            {
+                const size_t max_cc = KeyFrame::GRID_COLS < c + step ? KeyFrame::GRID_COLS : c + step;
+                for(size_t cc = c; cc < max_cc; cc++)
+                {
+                    for(const auto &it : grid[rr][cc])
+                    {
+                        const size_t& idx = it.first;
+                        const float& score = it.second;
+
+                        if(score > best_score)
+                        {
+                            best_idx = idx;
+                            best_score = score;
+                        }
+                    }
+                }
+            }
+
+            if(best_idx != -1)
+                mew_seed_indices.push_back(best_idx);
         }
     }
 
-    Corners new_corners;
-    fast_detector_->detect(keyframe->images(), new_corners, old_corners, options_.max_features);
-
-    if(new_corners.empty())
-        return 0;
+    FeatureTracker::showAllFeatures(keyframe);
 
     double depth_mean;
     double depth_min;
     keyframe->getSceneDepth(depth_mean, depth_min);
-    Seeds new_seeds;
-    for(const Corner &corner : new_corners)
+    for(const size_t &idx : mew_seed_indices)
     {
-        const Vector2d px(corner.x, corner.y);
-        const Vector3d fn(keyframe->cam_->lift(px));
-        new_seeds.emplace_back(Seed::create(keyframe, px, fn, corner.level, depth_mean, depth_min));
+        const Feature::Ptr &ft = keyframe->getFeatureByIndex(idx);
+        const Seed::Ptr new_seed = Seed::create(keyframe, idx, depth_mean, depth_min);
+        keyframe->addSeedFeatureCreated(new_seed, idx);
     }
 
-//    {
-//        std::unique_lock<std::mutex> lock(mutex_seeds_);
-//        seeds_convergence_rate_.emplace(keyframe->id_, std::make_tuple(new_seeds.size(), 0));
-//        seeds_buffer_.emplace_back(keyframe, std::make_shared<Seeds>(new_seeds));
-//        if(seeds_buffer_.size() > options_.max_seeds_buffer)
-//        {
-//            auto rate_itr = seeds_convergence_rate_.find(seeds_buffer_.front().first->id_);
-//            if(rate_itr!=seeds_convergence_rate_.end())
-//                std::get<1>(rate_itr->second) = seeds_buffer_.front().second->size();
-//            seeds_buffer_.pop_front();
-//        }
-//    }
+    FeatureTracker::showAllFeatures(keyframe);
 
-    for(const Seed::Ptr &seed : new_seeds)
-    {
-        Feature::Ptr new_ft = Feature::create(seed->px_ref, seed->level_ref, seed);
-        keyframe->addSeed(new_ft);
-        if(frame != nullptr)
-            frame->addSeed(new_ft);
-    }
-
-//    std::string info;
-//    for(const auto &it : seeds_buffer_)
-//    {
-//        info += "[" +  std::to_string(it.first->id_) + ", " + std::to_string(it.second->size()) + "], ";
-//    }
-//    LOG(ERROR) << info;
-
-    return (int)new_seeds.size();
+    return (int)mew_seed_indices.size();
 }
 
 int DepthFilter::updateByConnectedKeyFrames(const KeyFrame::Ptr &keyframe, int num)
@@ -419,7 +482,7 @@ int DepthFilter::updateByConnectedKeyFrames(const KeyFrame::Ptr &keyframe, int n
     {
         int matched_count_cur = reprojectSeeds(keyframe, kf, epl_threshold, options_.align_epslion*px_threshold, false);
 
-        matched_count+=matched_count_cur;
+        matched_count += matched_count_cur;
         if(matched_count_cur == 0)
             break;
     }
@@ -427,53 +490,11 @@ int DepthFilter::updateByConnectedKeyFrames(const KeyFrame::Ptr &keyframe, int n
     return matched_count;
 }
 
-int DepthFilter::trackSeeds(const Frame::Ptr &frame_last, const Frame::Ptr &frame_cur) const
-{
-    if(frame_cur == nullptr || frame_last == nullptr)
-        return 0;
-
-    dfltTrace->startTimer("klt_track");
-
-    //! track seeds by klt
-    std::vector<Feature::Ptr> seed_fts = frame_last->getSeeds();
-    const int N = seed_fts.size();
-    std::vector<cv::Point2f> pts_to_track;
-    pts_to_track.reserve(N);
-    for(int i = 0; i < N; i++)
-    {
-        pts_to_track.emplace_back(cv::Point2f((float)seed_fts[i]->px_[0], (float)seed_fts[i]->px_[1]));
-    }
-
-    if(pts_to_track.empty())
-        return 0;
-
-    std::vector<cv::Point2f> pts_tracked = pts_to_track;
-    std::vector<bool> status;
-    static cv::TermCriteria termcrit(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, options_.klt_epslion);
-    utils::kltTrack(frame_last->opticalImages(), frame_cur->opticalImages(), Frame::optical_win_size_,
-                    pts_to_track, pts_tracked, status, termcrit, true, verbose_);
-
-    //! erase untracked seeds
-    int tracked_count = 0;
-    for(int i = 0; i < N; i++)
-    {
-        if(status[i])
-        {
-            const cv::Point2f &px = pts_tracked[i];
-            Feature::Ptr new_ft = Feature::create(Vector2d(px.x, px.y), seed_fts[i]->level_, seed_fts[i]->seed_);
-            frame_cur->addSeed(new_ft);
-            tracked_count++;
-        }
-    }
-
-    dfltTrace->stopTimer("klt_track");
-
-    return tracked_count;
-}
-
 int DepthFilter::reprojectSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame, double epl_threshold, double pixel_error, bool created)
 {
-    std::vector<Feature::Ptr> seed_fts = keyframe->getSeeds();
+    std::vector<size_t> indices = keyframe->getSeedCreateIndices();
+    if(indices.empty()) return 0;
+    std::vector<Seed::Ptr> seeds = keyframe->getSeeds();
 
     SE3d T_cur_from_ref = frame->Tcw() * keyframe->pose();
 
@@ -481,11 +502,11 @@ int DepthFilter::reprojectSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr 
     int matched_count = 0;
     Vector2d px_matched;
     int level_matched;
-    for(const Feature::Ptr &ft : seed_fts)
+    for(const size_t &idx: indices)
     {
-        const Seed::Ptr &seed = ft->seed_;
-        if(frame->hasSeed(seed))
-            continue;
+        const Seed::Ptr &seed = seeds[idx];
+//        if(frame->hasSeed(seed))
+//            continue;
 
         project_count++;
         bool matched = findEpipolarMatch(seed, keyframe, frame, T_cur_from_ref, px_matched, level_matched);
@@ -500,14 +521,7 @@ int DepthFilter::reprojectSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr 
 
         double pixel_disparity = (seed->px_ref - px_matched).norm() / (1 << level_matched);//seed->level_ref);
         if(pixel_disparity < options_.min_pixel_disparity)
-        {
-            if(created)
-            {
-                Feature::Ptr new_ft = Feature::create(px_matched, level_matched, seed);
-                frame->addSeed(new_ft);
-            }
             continue;
-        }
 
         double depth = -1;
         const Vector3d fn_cur = frame->cam_->lift(px_matched);
@@ -523,16 +537,15 @@ int DepthFilter::reprojectSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr 
         //! check converge
         if(seed->checkConvergence())
         {
-            seed_coverged_callback_(seed);
-            keyframe->removeSeed(seed);
+            seed_converged_callback_(seed);
             continue;
         }
 
         //! update px
         if(created)
         {
-            Feature::Ptr new_ft = Feature::create(px_matched, level_matched, seed);
-            frame->addSeed(new_ft);
+            Feature::Ptr new_ft = Feature::create(px_matched, fn_cur, level_matched);
+            frame->addSeedFeatureMatch(seed, new_ft);
         }
         matched_count++;
     }
@@ -550,8 +563,6 @@ int DepthFilter::reprojectAllSeeds(const Frame::Ptr &frame)
     std::set<KeyFrame::Ptr> candidate_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_kfs);
     candidate_keyframes.insert(frame->getRefKeyFrame());
 
-    std::vector<Feature::Ptr> seed_fts = frame->getSeeds();
-
     int matched_count = 0;
     for(const KeyFrame::Ptr &kf : candidate_keyframes)
     {
@@ -560,34 +571,6 @@ int DepthFilter::reprojectAllSeeds(const Frame::Ptr &frame)
 
     return matched_count;
 }
-
-//bool DepthFilter::earseSeed(const KeyFrame::Ptr &keyframe, const Seed::Ptr &seed)
-//{
-//    //! earse seed
-//    std::unique_lock<std::mutex> lock(mutex_seeds_);
-//    auto buffer_itr = seeds_buffer_.begin();
-//    for(; buffer_itr != seeds_buffer_.end(); buffer_itr++)
-//    {
-//        if(keyframe != buffer_itr->first)
-//            continue;
-//
-//        Seeds &seeds = *buffer_itr->second;
-//        auto seeds_itr = seeds.begin();
-//        for(; seeds_itr != seeds.end(); seeds_itr++)
-//        {
-//            if(seed != *seeds_itr)
-//                continue;
-//
-//            seeds_itr = seeds.erase(seeds_itr);
-//            if(seeds.empty())
-//                seeds_buffer_.erase(buffer_itr);
-//
-//            return true;
-//        }
-//    }
-//
-//    return false;
-//}
 
 bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
                                     const KeyFrame::Ptr &keyframe,
@@ -617,12 +600,12 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
 
     //! calculate best search level
     const int level_ref = seed->level_ref;
-    const int level_cur = MapPoint::predictScale(z_ref, z_cur, level_ref, frame->max_level_);
+    const int level_cur = MapPoint::predictScale(z_ref, z_cur, level_ref, Frame::nlevels_-1);
     level_matched = level_cur;
     const double scale_cur = 1.0 / (1 << level_cur);
 
     const Vector2d px_cur(frame->cam_->project(xyz_cur) * scale_cur);
-    if(!frame->cam_->isInFrame(px_cur.cast<int>(), half_patch_size, level_cur))
+    if(!frame->cam_->isInFrame(px_cur.cast<int>(), half_patch_size, scale_cur))
         return false;
 
     //! px in image plane
@@ -755,7 +738,7 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
             Vector2f px = (frame->cam_->project(fn[0], fn[1]) * scale_cur).cast<float>();
 
             //! always in frame's view
-            if(!frame->cam_->isInFrame(px.cast<int>(), half_patch_size, level_cur))
+            if(!frame->cam_->isInFrame(px.cast<int>(), half_patch_size, scale_cur))
                 continue;
 
             Matrix<float, patch_size, patch_size, RowMajor> patch_cur;

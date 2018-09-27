@@ -19,8 +19,9 @@ public:
     static uint64_t next_id;
     const uint64_t id;
     const std::shared_ptr<KeyFrame> kf;     //!< Reference KeyFrame, where the seed created.
+    const size_t ft_idx;                    //!< Correspond feature index in keyframe.
     const Vector3d fn_ref;                  //!< Pixel in the keyframe's normalized plane where the depth should be computed.
-    const Vector2d px_ref;                  //!< Pixel matched in current frame
+    const Vector2d px_ref;                  //!< Pixel matched in reference frame
     const int level_ref;                    //!< Corner detected level in refrence frame
 
     Vector3d optimal_pose_;
@@ -37,8 +38,8 @@ public:
     double getVariance();
     double getInfoWeight();
 
-    inline static Ptr create(const std::shared_ptr<KeyFrame> &kf, const Vector2d &px, const Vector3d &fn, const int level, double depth_mean, double depth_min)
-    {return Ptr(new Seed(kf, px, fn, level, depth_mean, depth_min));}
+    inline static Ptr create(const std::shared_ptr<KeyFrame> &kf, const size_t &idx, double depth_mean, double depth_min)
+    {return Ptr(new Seed(kf, idx, depth_mean, depth_min));}
 
 private:
     double a;                               //!< a of Beta distribution: When high, probability of inlier is large.
@@ -50,7 +51,7 @@ private:
 
     std::mutex mutex_seed_;
 
-    Seed(const std::shared_ptr<KeyFrame> &kf, const Vector2d &px, const Vector3d &fn, const int level, double depth_mean, double depth_min);
+    Seed(const std::shared_ptr<KeyFrame> &kf, const size_t &idx, double depth_mean, double depth_min);
 };
 
 typedef std::list<Seed::Ptr> Seeds;

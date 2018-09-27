@@ -53,9 +53,14 @@ System::System(std::string config_file, std::string calib_flie) :
     feature_tracker_ = FeatureTracker::create(width, height, 20, image_border, true);
     initializer_ = Initializer::create(fast_detector_, true);
     mapper_ = LocalMapper::create(fast_detector_, true, false);
-    //DepthFilter::Callback depth_fliter_callback = std::bind(&LocalMapper::createFeatureFromSeed, mapper_, std::placeholders::_1);
-    //depth_filter_ = DepthFilter::create(fast_detector_, depth_fliter_callback, true);
+    depth_filter_ = DepthFilter::create(fast_detector_, true);
+    DepthFilter::SeedCallback seed_converge_callback = std::bind(&LocalMapper::createFeatureFromSeed, mapper_, std::placeholders::_1);
+    DepthFilter::KeyFrameCallback keyframe_callback = std::bind(&LocalMapper::insertKeyFrame, mapper_, std::placeholders::_1);
+    depth_filter_->setSeedConvergedCallback(seed_converge_callback);
+    depth_filter_->setKeyFrameProcessCallback(keyframe_callback);
+
     viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));
+    //viewer_->setShowFalg(false);
 
     Frame::initScaleParameters(fast_detector_);
 
@@ -145,7 +150,7 @@ System::Status System::initialize()
 
     std::vector<Vector3d> points;
     initializer_->createInitalMap(Config::mapScale());
-    mapper_->createInitalMap(initializer_->getReferenceFrame(), current_frame_);
+    createInitalMap(initializer_->getReferenceFrame(), current_frame_);
 
     LOG(WARNING) << "[System] Start two-view BA";
 
@@ -162,8 +167,6 @@ System::Status System::initialize()
     current_frame_->setRefKeyFrame(kf1);
     reference_keyframe_ = kf1;
     last_keyframe_ = kf1;
-
-    //depth_filter_->insertFrame(current_frame_, kf1);
 
     initializer_->reset();
 
@@ -182,7 +185,7 @@ System::Status System::tracking()
     //! alignment by SE3
     AlignSE3 align;
     sysTrace->startTimer("img_align");
-    align.run(last_frame_, current_frame_, Config::imageNLevels()-1, Config::alignBottomLevel(), Config::alignScaleFactor(), 30, 1e-8);
+    int obs = align.run(last_frame_, current_frame_, Config::imageNLevels()-1, Config::alignBottomLevel(), Config::alignScaleFactor(), 30, 1e-8);
     sysTrace->stopTimer("img_align");
 
     //! track local map
@@ -190,7 +193,7 @@ System::Status System::tracking()
     int matches = feature_tracker_->reprojectLoaclMap(current_frame_);
     sysTrace->stopTimer("feature_reproj");
     sysTrace->log("num_feature_reproj", matches);
-    LOG(WARNING) << "[System] Track with " << matches << " points";
+    LOG(WARNING) << "[System] Track with " << obs << ", "<< matches << " points";
 
     // TODO tracking status
     if(matches < Config::minQualityFts())
@@ -202,15 +205,8 @@ System::Status System::tracking()
     sysTrace->stopTimer("motion_ba");
 
     sysTrace->startTimer("per_depth_filter");
-    if(createNewKeyFrame())
-    {
-        //depth_filter_->insertFrame(current_frame_, reference_keyframe_);
-        mapper_->insertKeyFrame(reference_keyframe_);
-    }
-    else
-    {
-        //depth_filter_->insertFrame(current_frame_, nullptr);
-    }
+    bool keyframe_created = createNewKeyFrame();
+    depth_filter_->insertFrame(current_frame_, keyframe_created ? reference_keyframe_: nullptr);
     sysTrace->stopTimer("per_depth_filter");
 
     sysTrace->startTimer("light_affine");
@@ -261,8 +257,8 @@ System::Status System::relocalize()
 
 void System::calcLightAffine()
 {
-    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts_last = last_frame_->getMapPointFeatureMatches();
-    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts_curr = current_frame_->getMapPointFeatureMatches();
+    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts_last = last_frame_->getMapPointFeaturesMatched();
+    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts_curr = current_frame_->getMapPointFeaturesMatched();
 
     const cv::Mat img_last = last_frame_->getImage(0);
     const cv::Mat img_curr = current_frame_->getImage(0);
@@ -313,11 +309,27 @@ void System::calcLightAffine()
 //    std::cout << "a: " << a << " b: " << b << std::endl;
 }
 
+void System::createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur)
+{
+    mapper_->clear();
+
+    //! create Key Frame
+    KeyFrame::Ptr keyframe_ref = KeyFrame::create(frame_ref);
+    KeyFrame::Ptr keyframe_cur = KeyFrame::create(frame_cur);
+
+    //! create seeds
+    depth_filter_->insertKeyFrame(keyframe_ref);
+    depth_filter_->insertKeyFrame(keyframe_cur);
+
+    //! add to map
+    mapper_->createInitalMap(keyframe_ref, keyframe_cur);
+}
+
 bool System::createNewKeyFrame()
 {
     std::map<KeyFrame::Ptr, int> overlap_kfs = current_frame_->getOverLapKeyFrames();
 
-    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts = current_frame_->getMapPointFeatureMatches();
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts = current_frame_->getMapPointFeaturesMatched();
 
     KeyFrame::Ptr max_overlap_keyframe;
     int max_overlap = 0;
@@ -355,7 +367,7 @@ bool System::createNewKeyFrame()
     double dist1 = tran.dot(tran);
     double dist2 = 0.01 * (T_cur_from_ref.rotationMatrix() - Matrix3d::Identity()).norm();
     if(dist1+dist2  < 0.01 * median_depth)
-        c1 = false;
+        ;//c1 = false;
 
     //! check disparity
     std::list<float> disparities;
@@ -367,7 +379,7 @@ bool System::createNewKeyFrame()
 
         std::vector<float> disparity;
         disparity.reserve(ovlp_kf.second);
-        std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts_kf = ovlp_kf.first->getMapPointFeatureMatches();
+        std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts_kf = ovlp_kf.first->getMapPointFeaturesMatched();
         for(const auto &item : mpt_fts_kf)
         {
             const MapPoint::Ptr &mpt = item.first;

@@ -3,7 +3,7 @@
 namespace ssvo{
 
 Viewer::Viewer(const Map::Ptr &map, cv::Size image_size) :
-    map_(map), image_size_(image_size), required_stop_(false), is_finished_(false)
+    map_(map), image_size_(image_size), cv_show_(true), required_stop_(false), is_finished_(false)
 {
     map_point_size = 3;
     key_frame_size = 0.05;
@@ -13,6 +13,11 @@ Viewer::Viewer(const Map::Ptr &map, cv::Size image_size) :
     pongolin_thread_ = std::make_shared<std::thread>(std::bind(&Viewer::run, this));
 }
 
+bool Viewer::setShowFalg(bool cv_show)
+{
+    std::lock_guard<std::mutex> lock(mutex_frame_);
+    cv_show_ = cv_show;
+}
 
 void Viewer::setStop()
 {
@@ -235,15 +240,20 @@ void Viewer::drawCurrentImage(pangolin::GlTexture &gl_texture, cv::Mat &image)
     if(image.type() == CV_8UC1)
         cv::cvtColor(image, image, CV_GRAY2RGB);
     gl_texture.Upload(image.data, GL_RGB, GL_UNSIGNED_BYTE);
-    cv::imshow("SSVO Current Image", image);
-    cv::waitKey(1);
+
+    std::lock_guard<std::mutex> lock(mutex_frame_);
+    if(cv_show_)
+    {
+        cv::imshow("SSVO Current Image", image);
+        cv::waitKey(1);
+    }
 }
 
 void Viewer::drawMapPoints(Map::Ptr &map, Frame::Ptr &frame)
 {
     std::unordered_map<MapPoint::Ptr, Feature::Ptr> obs_mpts;
     if(frame)
-        obs_mpts = frame->getMapPointFeatureMatches();
+        obs_mpts = frame->getMapPointFeaturesMatched();
 
     std::vector<MapPoint::Ptr> mpts = map->getAllMapPoints();
 
@@ -308,7 +318,7 @@ void Viewer::drawTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
 {
     //! draw features
     const cv::Mat src = frame->getImage(0);
-    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts = frame->getMapPointFeatureMatches();
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts = frame->getMapPointFeaturesMatched();
     cv::cvtColor(src, dst, CV_GRAY2RGB);
     int font_face = 1;
     double font_scale = 0.5;
@@ -325,20 +335,21 @@ void Viewer::drawTrackedPoints(const Frame::Ptr &frame, cv::Mat &dst)
         cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
     }
 
-//    //! draw seeds
-//    std::vector<Feature::Ptr> seed_fts = frame->getSeeds();
-//    for(const Feature::Ptr &ft : seed_fts)
-//    {
-//        Seed::Ptr seed = ft->seed_;
-//        cv::Point2f px(ft->px_[0], ft->px_[1]);
-//        double convergence = 0;
-//        double scale = MIN(convergence, 256.0) / 256.0;
-//        cv::Scalar color(255*scale, 0, 255*(1-scale));
-//        cv::circle(dst, px, 2, color, -1);
-//
-////        string id_str = std::to_string();
-////        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
-//    }
+    //! draw seeds
+    std::unordered_map<Seed::Ptr, Feature::Ptr> seed_fts = frame->getSeedFeaturesMatched();
+    for(const auto &seed_ft : seed_fts)
+    {
+        const Seed::Ptr &seed = seed_ft.first;
+        const Feature::Ptr &ft = seed_ft.second;
+        cv::Point2f px(ft->px_[0], ft->px_[1]);
+        double convergence = 0;
+        double scale = MIN(convergence, 256.0) / 256.0;
+        cv::Scalar color(255*scale, 0, 255*(1-scale));
+        cv::circle(dst, px, 2, color, -1);
+
+//        string id_str = std::to_string();
+//        cv::putText(dst, id_str, px-cv::Point2f(1,1), font_face, font_scale, color);
+    }
 
 }
 

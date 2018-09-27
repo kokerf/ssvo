@@ -145,7 +145,7 @@ list(APPEND SOURCEFILES
     src/image_alignment.cpp
     src/initializer.cpp
     src/optimizer.cpp
-    #src/depth_filter.cpp
+    src/depth_filter.cpp
     src/local_mapping.cpp
     src/system.cpp
     src/viewer.cpp

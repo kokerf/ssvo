@@ -48,6 +48,8 @@ public:
 
     static void showEplMatch(const cv::Mat &image1, const cv::Mat &image2, const Matrix3d &F12, const Vector2d &px1, const Vector2d &px2);
 
+    static void showAllFeatures(const KeyFrame::Ptr &keyframe);
+
     inline static FeatureTracker::Ptr create(int width, int height, int grid_size, int border, bool report = false, bool verbose = false)
     {return FeatureTracker::Ptr(new FeatureTracker(width, height, grid_size, border, report, verbose));}
 

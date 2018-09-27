@@ -24,6 +24,7 @@ public:
         GRID_COLS = 64,
     };
 
+    //! about features
     size_t N();
 
     bool addMapPoint(const MapPoint::Ptr& mpt, const size_t &idx);
@@ -32,14 +33,25 @@ public:
 
     const MapPoint::Ptr& getMapPointByIndex(const size_t &idx);
 
+    bool addSeedFeatureCreated(const Seed::Ptr &seed, const size_t &idx);
+
+    bool removeSeedCreateByIndex(const size_t &idx);
+
+    std::vector<size_t> getSeedCreateIndices();
+
 //    bool removeMapPointMatchByMapPoint(const MapPoint::Ptr &mpt);
 
-    void extractORB(const FastDetector::Ptr fast, const BRIEF::Ptr brief);
+    void detectFast(const FastDetector::Ptr &fast);
+
+    void conputeDescriptor(const BRIEF::Ptr &brief);
 
     void computeBoW(const DBoW3::Vocabulary& vocabulary);
 
     std::vector<size_t> getFeaturesInArea(const float x, const float y, const float r, const int min_level = -1, const int max_level = -1);
 
+    std::vector<size_t> getFeaturesInGrid(const int r, const int c) const;
+
+    //! keyframes
     void setBad();
 
     bool isBad();
@@ -50,12 +62,14 @@ public:
 
     std::set<KeyFrame::Ptr> getSubConnectedKeyFrames(int num=-1);
 
+    //! deleted funcs
     const ImgPyr opticalImages() = delete;    //! disable this function
 
     bool addMapPointFeatureMatch(const MapPoint::Ptr &mpt, const Feature::Ptr &ft) = delete;
 
     bool addSeedFeatureMatch(const Seed::Ptr &seed, const Feature::Ptr &ft) = delete;
 
+    //! static funcs
     inline static KeyFrame::Ptr create(const Frame::Ptr frame)
     { return Ptr(new KeyFrame(frame)); }
 
@@ -93,6 +107,7 @@ private:
     float grid_row_inv_;
 
     size_t N_;
+    std::unordered_set<size_t> seeds_created_;
 
     std::vector<std::size_t> grid_[GRID_ROWS][GRID_COLS];
 

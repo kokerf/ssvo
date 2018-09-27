@@ -63,18 +63,21 @@ void loadImages(const std::string &strFileDirectory, std::vector<string> &vstrIm
 
 void evalueErrors(KeyFrame::Ptr kf1, KeyFrame::Ptr kf2, double& error)
 {
-    std::vector<Feature::Ptr> fts1 = kf1->getFeatures();
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts1 = kf1->getMapPointFeaturesMatched();
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts2 = kf2->getMapPointFeaturesMatched();
     double residuals[2] = {0,0};
     Matrix3d R = kf2->Tcw().rotationMatrix();
     Vector3d t = kf2->Tcw().translation();
-    for(Feature::Ptr ft1:fts1)
+    for(const auto & mpt_ft1 : mpt_fts1)
     {
-        MapPoint::Ptr mpt = ft1->mpt_;
+        const MapPoint::Ptr &mpt = mpt_ft1.first;
+        const Feature::Ptr &ft1 = mpt_ft1.second;
 
-        if(mpt == nullptr)
+        const auto itr = mpt_fts2.find(mpt);
+        if(itr == mpt_fts2.end())
             continue;
 
-        Feature::Ptr ft2 = mpt->findObservation(kf2);
+        Feature::Ptr ft2 = itr->second;
 
         Vector3d p1 = mpt->pose();
         Vector3d p2 = R*p1 + t;
@@ -118,7 +121,8 @@ int main(int argc, char const *argv[])
     int fps = camera->fps();
     int width = camera->width();
     int height = camera->height();
-    int nlevel = Config::imageNLevel();
+    int nlevels = Config::imageNLevels();
+    double scale_factor = Config::imageScaleFactor();
     int image_border = 8;
     int grid_size = Config::gridSize();
     int grid_min_size = Config::gridMinSize();
@@ -133,8 +137,8 @@ int main(int argc, char const *argv[])
     cv::Mat K = camera->K();
     cv::Mat DistCoef = camera->D();
 
-    FastDetector::Ptr detector = FastDetector::create(width, height, image_border, nlevel, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
-
+    FastDetector::Ptr detector = FastDetector::create(width, height, image_border, nlevels, scale_factor, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
+    Frame::initScaleParameters(detector);
     Initializer::Ptr initializer = Initializer::create(detector, true);
 
     std::vector<Corner> corners;
@@ -166,13 +170,13 @@ int main(int argc, char const *argv[])
         cv::waitKey(fps);
     }
 
-    ssvo::LocalMapper::Ptr mapper = ssvo::LocalMapper::create(fps);
+    ssvo::LocalMapper::Ptr mapper = ssvo::LocalMapper::create(detector);
     std::vector<Vector3d> points;
     initializer->createInitalMap(1.0);
-    mapper->createInitalMap(initializer->getReferenceFrame(), frame_cur);
+    KeyFrame::Ptr kf0 = KeyFrame::create(initializer->getReferenceFrame());
+    KeyFrame::Ptr kf1 = KeyFrame::create(frame_cur);
+    mapper->createInitalMap(kf0, kf1);
 
-    KeyFrame::Ptr kf0 = mapper->map_->getKeyFrame(0);
-    KeyFrame::Ptr kf1 = mapper->map_->getKeyFrame(1);
     LOG_ASSERT(kf0 != nullptr && kf1 != nullptr) << "Can not find intial keyframes in map!";
 
     double error = 0;

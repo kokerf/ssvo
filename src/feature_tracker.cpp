@@ -151,8 +151,7 @@ bool FeatureTracker::matchMapPointsFromCell(const Frame::Ptr &frame, Grid<std::p
         if(result != 1)
             continue;
 
-        Feature::Ptr new_ft = Feature::create(Corner(px[0], px[1], -1, level));
-        new_ft->fn_ = frame->cam_->lift(new_ft->px_);
+        Feature::Ptr new_ft = Feature::create(Corner(px[0], px[1], -1, level), frame->cam_->lift(px));
         frame->addMapPointFeatureMatch(mpt, new_ft);
         mpt->increaseFound(2);
 
@@ -193,8 +192,7 @@ int FeatureTracker::matchMapPointsFromLastFrame(const Frame::Ptr &frame_cur, con
         if(result != 1)
             continue;
 
-        Feature::Ptr new_ft = Feature::create(px_cur, level_cur);
-        new_ft->fn_ = frame_cur->cam_->lift(px_cur);
+        Feature::Ptr new_ft = Feature::create(px_cur, frame_cur->cam_->lift(px_cur), level_cur);
         frame_cur->addMapPointFeatureMatch(mpt, new_ft);
         mpt->increaseFound(2);
 
@@ -395,7 +393,8 @@ int FeatureTracker::searchBoWForTriangulation(const KeyFrame::Ptr &keyframe1,
     std::vector<size_t> matched_idx(keyframe2->getFeatures().size(), -1);
     std::vector<int> matched_dist(keyframe2->getFeatures().size(), 256);
 
-
+    int dist_outlier = 0;
+    int epl_outlier = 0;
     while(ft1_itr != ft1_end && ft2_itr != ft2_end)
     {
         if(ft1_itr->first == ft2_itr->first)
@@ -425,7 +424,10 @@ int FeatureTracker::searchBoWForTriangulation(const KeyFrame::Ptr &keyframe1,
 
                     const int dist = DBoW3::DescManip::distance_8uc1(descriptor1, descriptor2);
                     if(dist > best_dist)
+                    {
+                        dist_outlier++;
                         continue;
+                    }
 
                     // TODO  MORE CHECK
 
@@ -436,7 +438,10 @@ int FeatureTracker::searchBoWForTriangulation(const KeyFrame::Ptr &keyframe1,
                     utils::Fundamental::computeErrors(px1, px2, E21, err1, err2);
 
                     if(err1 > max_epl_err*sigma1 || err2 > max_epl_err*sigma2)
+                    {
+                        epl_outlier++;
                         continue;
+                    }
 
                     if(dist < best_dist)
                     {
@@ -473,14 +478,16 @@ int FeatureTracker::searchBoWForTriangulation(const KeyFrame::Ptr &keyframe1,
         }
     }
 
+    std::cout << "Outlier: " << dist_outlier << ", " << epl_outlier << std::endl;
+
     return matches.size();
 }
 
 
 void FeatureTracker::showMatches(const Frame::Ptr frame1, const Frame::Ptr frame2)
 {
-    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts1 = frame1->getMapPointFeatureMatches();
-    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts2 = frame2->getMapPointFeatureMatches();
+    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts1 = frame1->getMapPointFeaturesMatched();
+    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts2 = frame2->getMapPointFeaturesMatched();
 
     const cv::Mat &image1 = frame1->getImage(0);
     const cv::Mat &image2 = frame2->getImage(0);
@@ -575,6 +582,8 @@ void FeatureTracker::showMatches(const Frame::Ptr frame1,
     }
 
     cv::imwrite("KeyFrame Matches.png", show);
+//    cv::imshow("KeyFrame Matches", show);
+//    cv::waitKey(0);
 }
 
 void FeatureTracker::showEplMatch(const cv::Mat &image1,
@@ -654,6 +663,54 @@ void FeatureTracker::showEplMatch(const cv::Mat &image1,
 
     cv::imwrite("imag1.png", show1);
     cv::imwrite("imag2.png", show2);
+}
+
+void FeatureTracker::showAllFeatures(const KeyFrame::Ptr &keyframe)
+{
+    std::vector<Feature::Ptr> fts = keyframe->getFeatures();
+    std::vector<size_t> mpt_indices = keyframe->getMapPointMatchIndices();
+    std::vector<size_t> seed_matched_indices = keyframe->getSeedMatchIndices();
+    std::vector<size_t> seed_created_indices = keyframe->getSeedCreateIndices();
+
+    cv::Mat img = keyframe->getImage(0);
+    cv::Mat show;
+    cv::cvtColor(img, show, CV_GRAY2RGB);
+
+    cv::Scalar color0(150, 100, 0);
+    cv::Scalar color1(0, 255, 0);
+    cv::Scalar color2(0, 0, 255);
+    cv::Scalar color3(255, 0, 255);
+
+    std::unordered_map<size_t, size_t> masked_fts;
+    for(const size_t &idx : mpt_indices)
+        masked_fts.emplace(idx, 1);
+
+    for(const size_t &idx : seed_matched_indices)
+        masked_fts.emplace(idx, 2);
+
+    for(const size_t &idx : seed_created_indices)
+        masked_fts.emplace(idx, 3);
+
+    for(size_t idx = 0; idx < fts.size(); idx++)
+    {
+        Feature::Ptr &ft = fts[idx];
+        cv::Point2i px(std::round(ft->px_[0]), std::round(ft->px_[1]));
+
+        const auto itr = masked_fts.find(idx);
+        if(itr == masked_fts.end())
+            cv::circle(show, px, 3, color0);
+        else if(itr->second == 1)
+            cv::circle(show, px, 3, color1);
+        else if(itr->second == 2)
+            cv::circle(show, px, 3, color2);
+        else if(itr->second == 3)
+            cv::circle(show, px, 3, color3);
+
+    }
+
+//    cv::imwrite("ft_imag.png", show);
+    cv::imshow("KeyFrame feature", show);
+    cv::waitKey(0);
 }
 
 }

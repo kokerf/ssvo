@@ -67,7 +67,7 @@ int AlignSE3::run(Frame::Ptr reference_frame,
     ref_frame_ = reference_frame;
     cur_frame_ = current_frame;
 
-    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts = ref_frame_->getMapPointFeatureMatches();
+    const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts = ref_frame_->getMapPointFeaturesMatched();
     std::vector<Feature::Ptr> fts; fts.reserve(mpt_fts.size());
     std::vector<MapPoint::Ptr> mpts; mpts.reserve(mpt_fts.size());
     for(const auto &it : mpt_fts)

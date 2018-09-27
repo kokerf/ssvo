@@ -58,9 +58,9 @@ public:
 
     std::vector<size_t> getSeedMatchIndices();
 
-    std::unordered_map<MapPoint::Ptr, Feature::Ptr> getMapPointFeatureMatches();
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> getMapPointFeaturesMatched();
 
-    std::unordered_map<Seed::Ptr, Feature::Ptr> getSeedFeatureMatches();
+    std::unordered_map<Seed::Ptr, Feature::Ptr> getSeedFeaturesMatched();
 
     bool removeMapPointMatchByIndex(const size_t &idx);
 
@@ -134,8 +134,8 @@ protected:
     std::vector<MapPoint::Ptr> mpts_;
     std::vector<Seed::Ptr> seeds_;
 
-    std::unordered_set<size_t> mpt_matches_;
-    std::unordered_set<size_t> seed_matches_;
+    std::unordered_set<size_t> mpts_matched_;
+    std::unordered_set<size_t> seeds_matched_;
 
     SE3d Tcw_;
     SE3d Twc_;

@@ -80,7 +80,9 @@ int main(int argc, char const *argv[])
     Config::file_name_ = std::string(argv[2]);
     int width = pinhole_cam->width();
     int height = pinhole_cam->height();
-    int level = Config::imageNLevel()-1;
+    int nlevels = Config::imageNLevels();
+    double scale_factor = Config::imageScaleFactor();
+
     int image_border = 8;
     int grid_size = Config::gridSize();
     int grid_min_size = Config::gridMinSize();
@@ -95,7 +97,7 @@ int main(int argc, char const *argv[])
     computePyramid(image, image_pyramid, 2, 4, cv::Size(40, 40));
 
     Corners new_corners, old_corners;
-    FastDetector::Ptr fast_detector = FastDetector::create(width, height, image_border, level+1, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
+    FastDetector::Ptr fast_detector = FastDetector::create(width, height, image_border, nlevels, scale_factor, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
 
     LOG(WARNING) << "=== This is a FAST corner detector demo ===";
     const int n_trials = 1000;

@@ -383,10 +383,8 @@ void Initializer::createInitalMap(double map_scale)
 
         LOG_ASSERT(cand_cur_->level[i] >= 0 && cand_cur_->level[i] < Frame::nlevels_) << "Error in level, index:" << i;
         LOG_ASSERT(cand_ref_->level[i] >= 0 && cand_ref_->level[i] < Frame::nlevels_) << "Error in level, index:" << i;
-        Feature::Ptr feature_ref = Feature::create(px_ref, cand_ref_->level[i]);
-        feature_ref->fn_ = ft_ref;
-        Feature::Ptr feature_cur = Feature::create(px_cur, cand_cur_->level[i]);
-        feature_cur->fn_ = ft_cur;
+        Feature::Ptr feature_ref = Feature::create(px_ref, ft_cur, cand_ref_->level[i]);
+        Feature::Ptr feature_cur = Feature::create(px_cur, ft_cur, cand_cur_->level[i]);
 
         cand_ref_->frame->addMapPointFeatureMatch(mpt, feature_ref);
         cand_cur_->frame->addMapPointFeatureMatch(mpt, feature_cur);

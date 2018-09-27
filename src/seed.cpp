@@ -10,8 +10,11 @@ const double Seed::convergence_rate = 1.0/200.0;
 
 //! =================================================================================================
 //! Seed
-Seed::Seed(const KeyFrame::Ptr &kf, const Vector2d &px, const Vector3d &fn, const int level, double depth_mean, double depth_min) :
-    id(next_id++), kf(kf), fn_ref(fn), px_ref(px), level_ref(level),
+Seed::Seed(const KeyFrame::Ptr &kf, const size_t &idx, double depth_mean, double depth_min) :
+    id(next_id++), kf(kf), ft_idx(idx),
+    fn_ref(kf->getFeatureByIndex(idx)->fn_),
+    px_ref(kf->getFeatureByIndex(idx)->px_),
+    level_ref(kf->getFeatureByIndex(idx)->corner_.level),
     a(10),
     b(5),
     mu(1.0/depth_mean),

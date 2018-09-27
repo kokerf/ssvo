@@ -15,7 +15,7 @@ public:
 
     typedef std::shared_ptr<LocalMapper> Ptr;
 
-    void createInitalMap(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur);
+    void createInitalMap(const KeyFrame::Ptr &keyframe_ref, const KeyFrame::Ptr &keyframe_cur);
 
     void insertKeyFrame(const KeyFrame::Ptr &keyframe);
 
@@ -23,9 +23,13 @@ public:
 
     void stopMainThread();
 
+    void clear();
+
     void addOptimalizeMapPoint(const MapPoint::Ptr &mpt);
 
     int refineMapPoints(const int max_optimalize_num = -1, const double outlier_thr = 2.0/480.0);
+
+    void createFeatureFromSeed(const Seed::Ptr &seed);
 
     KeyFrame::Ptr relocalizeByDBoW(const Frame::Ptr &frame, const Corners &corners);
 

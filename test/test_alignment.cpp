@@ -185,17 +185,19 @@ void align_by_ceres(Frame::Ptr reference_frame, Frame::Ptr current_frame, int le
     const int border = 4+1;
     Vector3d ref_pose = reference_frame->pose().translation();
 
-    std::vector<Feature::Ptr> fts = reference_frame->getFeatures();
-    for(Feature::Ptr ft : fts)
+    std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts1 = reference_frame->getMapPointFeaturesMatched();
+    for(const auto & mpt_ft1 : mpt_fts1)
     {
-        Vector2d ref_px = ft->px_*scale;
-        MapPoint::Ptr mpt = ft->mpt_;
+        const MapPoint::Ptr &mpt = mpt_ft1.first;
+        const Feature::Ptr &ft1 = mpt_ft1.second;
+
+        Vector2d ref_px = ft1->px_*scale;
         if(mpt == nullptr ||
             ref_px[0] < border || ref_px[1] < border || ref_px[0] + border > cols - 1 || ref_px[1] + border > rows - 1)
             continue;
 
-        double depth = (ft->mpt_->pose() - ref_pose).norm();
-        Vector3d ref_xyz = ft->fn_;
+        double depth = (mpt->pose() - ref_pose).norm();
+        Vector3d ref_xyz = ft1->fn_;
         ref_xyz *= depth;
 
         Matrix<double, 16, 1> patch, dx, dy;
@@ -256,7 +258,8 @@ int main(int argc, char *argv[])
     Config::file_name_ = std::string(argv[2]);
     int width = camera->width();
     int height = camera->height();
-    int nlevel = Config::imageNLevel();
+    int nlevels = Config::imageNLevels();
+    double scale_factor = Config::imageScaleFactor();
     int grid_size = Config::gridSize();
     int grid_min_size = Config::gridMinSize();
     int fast_max_threshold = Config::fastMaxThreshold();
@@ -272,7 +275,7 @@ int main(int argc, char *argv[])
     frame1->setPose(Matrix3d::Identity(), Vector3d::Zero());
 
     std::vector<Corner> corners, old_corners;
-    FastDetector::Ptr fast_detector = FastDetector::create(width, height, 8, nlevel, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
+    FastDetector::Ptr fast_detector = FastDetector::create(width, height, 8, nlevels, scale_factor, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
     fast_detector->detect(frame0->images(), corners, old_corners, 200, fast_min_eigen);
 
     cv::Mat kps_img;
@@ -296,13 +299,13 @@ int main(int argc, char *argv[])
             continue;
 
         Vector2d px_ref(u, v);
-        Vector3d pt = frame1->cam_->lift(px_ref);
-        pt *= depth/5000.0/pt[2];
+        Vector3d fn_ref = frame1->cam_->lift(px_ref);
+        Vector3d pt = (depth/5000.0) * fn_ref;
 
         ssvo::MapPoint::Ptr mpt = ssvo::MapPoint::create(pt);
-        Feature::Ptr feature_ref = Feature::create(px_ref, pt.normalized(), 0, mpt);
+        Feature::Ptr feature_ref = Feature::create(px_ref, fn_ref, 0);
 
-        frame0->addFeature(feature_ref);
+        frame0->addMapPointFeatureMatch(mpt, feature_ref);
     }
 
     LOG(INFO) << "Start Alignmnet";

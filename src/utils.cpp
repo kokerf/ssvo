@@ -344,7 +344,7 @@ void Fundamental::Normalize(const std::vector<cv::Point2d>& fts, std::vector<cv:
     T <<  scale_x, 0, -mean.x*scale_x, 0, scale_y, -mean.y*scale_y, 0,0,1;
 }
 
-inline void Fundamental::computeErrors(const cv::Point2d& p1, const cv::Point2d& p2, const Matrix3d& F21, double& err1, double& err2)
+void Fundamental::computeErrors(const cv::Point2d& p1, const cv::Point2d& p2, const Matrix3d& F21, double& err1, double& err2)
 {
     const double &F0 = F21(0,0);
     const double &F1 = F21(0,1);

@@ -30,6 +30,19 @@ std::string to_binary(const cv::Mat &desp)
     return out;
 }
 
+void buildPyramid(const cv::Mat &image, std::vector<cv::Mat> &image_pyr, int nlevels, float scale)
+{
+    image_pyr.resize(nlevels);
+    image_pyr[0] = image.clone();
+    for(int i = 1; i < nlevels; i++)
+    {
+        cv::Size sz(cvRound((float)image_pyr[i-1].cols/scale), cvRound((float)image_pyr[i-1].rows/scale));
+
+        image_pyr[i] = cv::Mat(sz, image.type());
+        cv::resize(image_pyr[i-1], image_pyr[i], sz, 0, 0, cv::INTER_LINEAR);
+    }
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -47,8 +60,10 @@ int main(int argc, char *argv[])
     std::cout << voc << std::endl;
     std::cout << db << std::endl;
 
-
+    const float scale_factor = 1.2;
+    const int nlevels = 8;
     std::vector<cv::Mat> images;
+    std::vector<std::vector<cv::Mat>> imgPyrs;
     for(int i = 0; i < img_path.size(); ++i)
     {
         cv::Mat img = cv::imread(img_path[i], CV_LOAD_IMAGE_GRAYSCALE);
@@ -58,32 +73,37 @@ int main(int argc, char *argv[])
             return false;
         }
         images.push_back(img);
+
+        std::vector<cv::Mat> imgPyr;
+        buildPyramid(img, imgPyr, nlevels, scale_factor);
+        imgPyrs.push_back(imgPyr);
     }
 
     std::vector<std::vector<cv::KeyPoint> > kps(images.size());
     std::vector<cv::Mat > desps(images.size());
     std::vector<cv::Mat > desps1(images.size());
 
-    cv::Ptr<cv::ORB> orb = cv::ORB::create(500, 2, 1);
-    ssvo::BRIEF brief;
+    cv::Ptr<cv::ORB> orb = cv::ORB::create(100, scale_factor, nlevels);
+    ssvo::BRIEF::Ptr brief = ssvo::BRIEF::create(scale_factor, nlevels);
+
     double t0 = cv::getTickCount();
     for(int i = 0; i < images.size(); ++i)
     {
-        orb->detect(images[i], kps[i]);
+        orb->detect(imgPyrs[i][0], kps[i]);
     }
 
     double t1 = cv::getTickCount();
     for(int i = 0; i < images.size(); ++i)
     {
-        orb->compute(images[i], kps[i], desps[i]);
+        orb->compute(imgPyrs[i][0], kps[i], desps[i]);
     }
 
     double t2 = cv::getTickCount();
     for(int i = 0; i < images.size(); ++i)
     {
-        std::vector<cv::Mat> imgPyr;
-        cv::buildPyramid(images[0], imgPyr, 0);
-        brief.compute(imgPyr, kps[i], desps1[i]);
+        std::vector<cv::Mat> imgPyr_temp;
+        buildPyramid(imgPyrs[i][0], imgPyr_temp, nlevels, scale_factor);
+        brief->compute(imgPyr_temp, kps[i], desps1[i]);
     }
 
     double t3 = cv::getTickCount();
@@ -92,10 +112,10 @@ int main(int argc, char *argv[])
         << ", " << (t3-t2)/cv::getTickFrequency()/images.size()  << std::endl;
 
 
-    for(int j = 0; j < kps.size(); ++j)
+    for(int j = 0; j < kps[0].size(); ++j)
     {
-        std::cout << "1: " << to_binary(desps[0].row(j)) << std::endl;
-        std::cout << "2: " << to_binary(desps1[0].row(j)) << std::endl;
+        std::cout << "1: " << kps[0][j].octave << " " << to_binary(desps[0].row(j)) << std::endl;
+        std::cout << "2: " << kps[0][j].octave << " " << to_binary(desps1[0].row(j)) << std::endl;
     }
 
     std::vector<DBoW3::BowVector> bvs(images.size());

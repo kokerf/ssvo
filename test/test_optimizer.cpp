@@ -11,7 +11,7 @@ using namespace ssvo;
 int main(int argc, char const *argv[])
 {
     google::InitGoogleLogging(argv[0]);
-    if(argc != 2)
+    if(argc != 3)
     {
         std::cout << " Usage: ./test_optimizer calib_file config_file" << std::endl;
         return -1;
@@ -32,30 +32,48 @@ int main(int argc, char const *argv[])
     std::cout << "K with noise: \n" << K << std::endl;
     cv::Mat img = cv::Mat(width, height, CV_8UC1);
 
-    KeyFrame::Ptr kf1 = KeyFrame::create(Frame::create(img, 0, cam));
-    KeyFrame::Ptr kf2 = KeyFrame::create(Frame::create(img, 0, cam));
-    KeyFrame::Ptr kf3 = KeyFrame::create(Frame::create(img, 0, cam));
+    int nlevels = Config::imageNLevels();
+    double scale_factor = Config::imageScaleFactor();
+    int image_border = 8;
+    int grid_size = Config::gridSize();
+    int grid_min_size = Config::gridMinSize();
+    int fast_max_threshold = Config::fastMaxThreshold();
+    int fast_min_threshold = Config::fastMinThreshold();
+    FastDetector::Ptr detector = FastDetector::create(width, height, image_border, nlevels, scale_factor, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
+    Frame::initScaleParameters(detector);
 
-    kf1->setPose(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.0,0.0,0.0));
-    kf2->setPose(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.1,0.0,0.0));
-    kf3->setPose(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.2,0.0,0.0));
+    Frame::Ptr frame1 = Frame::create(img, 0, cam);
+    Frame::Ptr frame2 = Frame::create(img, 0, cam);
+    Frame::Ptr frame3 = Frame::create(img, 0, cam);
+
+    frame1->setPose(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.0,0.0,0.0));
+    frame2->setPose(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.1,0.0,0.0));
+    frame3->setPose(Eigen::Matrix3d::Identity(), Eigen::Vector3d(0.2,0.0,0.0));
 
     Eigen::Vector3d pose(10, 3, 30);
     MapPoint::Ptr mpt = MapPoint::create(pose);
 
-    Eigen::Vector2d px1 = cam->project(kf1->Tcw() * pose);
-    Eigen::Vector2d px2 = cam->project(kf2->Tcw() * pose);
-    Eigen::Vector2d px3 = cam->project(kf3->Tcw() * pose);
+    Eigen::Vector2d px1 = cam->project(frame1->Tcw() * pose);
+    Eigen::Vector2d px2 = cam->project(frame2->Tcw() * pose);
+    Eigen::Vector2d px3 = cam->project(frame3->Tcw() * pose);
     std::cout << "px1: " << px1.transpose() << std::endl;
     std::cout << "px2: " << px2.transpose() << std::endl;
     std::cout << "px3: " << px3.transpose() << std::endl;
 
-    Feature::Ptr ft1 = Feature::create(px1, kf1->cam_->lift(px1), 0, mpt);
-    Feature::Ptr ft2 = Feature::create(px2, kf1->cam_->lift(px2), 0, mpt);
-    Feature::Ptr ft3 = Feature::create(px3, kf1->cam_->lift(px3), 0, mpt);
-    mpt->addObservation(kf1, ft1);
-    mpt->addObservation(kf2, ft2);
-    mpt->addObservation(kf3, ft3);
+    Feature::Ptr ft1 = Feature::create(px1, frame1->cam_->lift(px1), 0);
+    Feature::Ptr ft2 = Feature::create(px2, frame2->cam_->lift(px2), 0);
+    Feature::Ptr ft3 = Feature::create(px3, frame3->cam_->lift(px3), 0);
+    frame1->addMapPointFeatureMatch(mpt, ft1);
+    frame2->addMapPointFeatureMatch(mpt, ft2);
+    frame3->addMapPointFeatureMatch(mpt, ft3);
+
+    KeyFrame::Ptr kf1 = KeyFrame::create(frame1);
+    KeyFrame::Ptr kf2 = KeyFrame::create(frame2);
+    KeyFrame::Ptr kf3 = KeyFrame::create(frame3);
+
+    mpt->addObservation(kf1, 0);
+    mpt->addObservation(kf2, 0);
+    mpt->addObservation(kf3, 0);
     Eigen::Vector3d pose_noise(pose[0]+0.011, pose[1]-0.001, pose[2]+2);
     mpt->setPose(pose_noise);
 

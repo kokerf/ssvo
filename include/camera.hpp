@@ -82,8 +82,8 @@ public:
 
     inline bool isInFrame(const Vector2i &obs, int boundary, double scale_factor) const
     {
-        if(obs[0] >= boundary && obs[0] < std::round(width() / scale_factor) - boundary
-            && obs[1] >= boundary && obs[1] < std::round(height() / scale_factor) - boundary)
+        if(obs[0] >= boundary && obs[0] < std::round(width() * scale_factor) - boundary
+            && obs[1] >= boundary && obs[1] < std::round(height() * scale_factor) - boundary)
             return true;
         return false;
     }

@@ -2,6 +2,8 @@
 #include <opencv2/imgproc.hpp>
 #include "brief.hpp"
 
+#include <opencv2/opencv.hpp>
+
 namespace ssvo{
 
 static int bit_pattern_31_[256*4] =
@@ -264,7 +266,8 @@ static int bit_pattern_31_[256*4] =
         -1,-6, 0,-11/*mean (0.127148), correlation (0.547401)*/
     };
 
-BRIEF::BRIEF()
+BRIEF::BRIEF(float scale_factor, int nlevels) :
+    scale_factor_(scale_factor), nlevels_(nlevels)
 {
     const int npoints = 512;
     const cv::Point* pattern0 = (const cv::Point*)bit_pattern_31_;
@@ -287,6 +290,14 @@ BRIEF::BRIEF()
             ++v0;
         umax_[v] = v0;
         ++v0;
+    }
+
+    scale_factors_.resize(nlevels, 1.0f);
+    inv_scale_factors_.resize(nlevels, 1.0f);
+    for(int i = 1; i < nlevels; i++)
+    {
+        scale_factors_[i] = scale_factor * scale_factors_[i-1];
+        inv_scale_factors_[i] = 1.0f / scale_factors_[i];
     }
 
 //    border_tl_.resize(nlevels);
@@ -383,20 +394,38 @@ void BRIEF::compute(const std::vector<cv::Mat> &images, const std::vector<cv::Ke
     for(size_t i = 0; i < nlevels; ++i)
     {
         cv::Mat image_border;
-        cv::copyMakeBorder(images[i], image_border, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD, cv::BORDER_REFLECT_101);
+        if(i != 0)
+            cv::copyMakeBorder(images[i], image_border, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD, cv::BORDER_REFLECT_101+cv::BORDER_ISOLATED);
+        else
+            cv::copyMakeBorder(images[i], image_border, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD, EDGE_THRESHOLD, cv::BORDER_REFLECT_101);
+
         image_pyramid_border[i] = image_border(cv::Rect(EDGE_THRESHOLD, EDGE_THRESHOLD, images[i].cols, images[i].rows));
 
         // preprocess the resized image
         cv::GaussianBlur(image_pyramid_border[i], image_pyramid_border_gauss[i], cv::Size(7, 7), 2, 2, cv::BORDER_REFLECT_101);
     }
 
+
     int size = (int)keypoints.size();
     descriptors = cv::Mat::zeros(size, 32, CV_8UC1);
     for(int i = 0; i < size; i++)
     {
         cv::KeyPoint keypoint = keypoints[i];
-        keypoint.pt /= (1 << keypoint.octave);
+        keypoint.pt *= inv_scale_factors_.at(keypoint.octave);
         keypoint.angle = IC_Angle(image_pyramid_border[keypoint.octave], keypoint.pt, umax_);
+
+//        if(keypoint.octave>0)
+//        {
+//            cv::Mat show;
+//            cv::cvtColor(images[keypoint.octave], show, cv::COLOR_GRAY2BGR);
+//            cv::circle(show, keypoint.pt, 3, cv::Scalar(0, 255, 0));
+//            cv::imshow("ss", show);
+//            cv::waitKey(0);
+//        }
+//
+//        int a = image_pyramid_border[keypoint.octave].at<uchar>(cvRound(keypoint.pt.y), cvRound(keypoint.pt.x));
+//        int b = images[keypoint.octave].at<uchar>(cvRound(keypoint.pt.y), cvRound(keypoint.pt.x));
+//        std::cout << "a: " << a << ", b: " << b << "px: " << keypoint.pt.x << ", " << keypoint.pt.y<< std::endl;
 
         compute(keypoint, image_pyramid_border_gauss[keypoint.octave], &pattern_[0], descriptors.ptr((int)i));
     }

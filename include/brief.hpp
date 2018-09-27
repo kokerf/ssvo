@@ -25,16 +25,24 @@ public:
 
     void compute(const cv::KeyPoint &kpt, const cv::Mat &img, const cv::Point *pattern, uchar *desc) const;
 
-    inline static Ptr create()
-    { return Ptr(new BRIEF());}
+    inline static Ptr create(float scale_factor, int nlevels)
+    { return Ptr(new BRIEF(scale_factor, nlevels));}
 
 private:
 
-    BRIEF();
+    BRIEF(float scale_factor, int nlevels);
+
+    const float scale_factor_;
+
+    const int nlevels_;
 
     std::vector<cv::Point> pattern_;
 
     std::vector<int> umax_;
+
+    std::vector<float> scale_factors_;
+
+    std::vector<float> inv_scale_factors_;
 
     std::vector<cv::Point2i> border_tl_;
 

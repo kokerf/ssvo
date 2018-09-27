@@ -15,6 +15,8 @@ public:
 
     void run();
 
+    bool setShowFalg(bool cv_show);
+
     void setStop();
 
     bool waitForFinish();
@@ -62,6 +64,7 @@ private:
     float key_frame_line_width;
     float key_frame_graph_line_width;
 
+    bool cv_show_;
     bool required_stop_;
     bool is_finished_;
 

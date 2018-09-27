@@ -164,7 +164,7 @@ bool Frame::addMapPointFeatureMatch(const MapPoint::Ptr &mpt, const Feature::Ptr
     mpts_.push_back(mpt);
     seeds_.push_back(nullptr);
 
-    return mpt_matches_.insert(N).second;
+    return mpts_matched_.insert(N).second;
 }
 
 bool Frame::addSeedFeatureMatch(const Seed::Ptr &seed, const Feature::Ptr &ft)
@@ -176,48 +176,48 @@ bool Frame::addSeedFeatureMatch(const Seed::Ptr &seed, const Feature::Ptr &ft)
     mpts_.push_back(nullptr);
     seeds_.push_back(seed);
 
-    return seed_matches_.insert(N).second;
+    return seeds_matched_.insert(N).second;
 }
 
 size_t Frame::getMapPointMatchSize()
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    return mpt_matches_.size();
+    return mpts_matched_.size();
 }
 
 size_t Frame::getSeedMatchSize()
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    return seed_matches_.size();
+    return seeds_matched_.size();
 }
 
 std::vector<size_t> Frame::getMapPointMatchIndices()
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    return std::vector<size_t>(mpt_matches_.begin(), mpt_matches_.end());
+    return std::vector<size_t>(mpts_matched_.begin(), mpts_matched_.end());
 }
 
 std::vector<size_t> Frame::getSeedMatchIndices()
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    return std::vector<size_t>(seed_matches_.begin(), seed_matches_.end());;
+    return std::vector<size_t>(seeds_matched_.begin(), seeds_matched_.end());;
 }
 
-std::unordered_map<MapPoint::Ptr, Feature::Ptr> Frame::getMapPointFeatureMatches()
+std::unordered_map<MapPoint::Ptr, Feature::Ptr> Frame::getMapPointFeaturesMatched()
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
     std::unordered_map<MapPoint::Ptr, Feature::Ptr> map_fts;
-    for(const size_t &idx : mpt_matches_)
+    for(const size_t &idx : mpts_matched_)
         map_fts.emplace(mpts_[idx], fts_[idx]);
 
     return map_fts;
 }
 
-std::unordered_map<Seed::Ptr, Feature::Ptr> Frame::getSeedFeatureMatches()
+std::unordered_map<Seed::Ptr, Feature::Ptr> Frame::getSeedFeaturesMatched()
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
     std::unordered_map<Seed::Ptr, Feature::Ptr> seed_fts;
-    for(const size_t &idx : seed_matches_)
+    for(const size_t &idx : seeds_matched_)
         seed_fts.emplace(seeds_[idx], fts_[idx]);
 
     return seed_fts;
@@ -226,18 +226,20 @@ std::unordered_map<Seed::Ptr, Feature::Ptr> Frame::getSeedFeatureMatches()
 bool Frame::removeMapPointMatchByIndex(const size_t &idx)
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    const auto it = mpt_matches_.find(idx);
-    if(it == mpt_matches_.end()) return false;
-    mpt_matches_.erase(it);
+    const auto it = mpts_matched_.find(idx);
+    if(it == mpts_matched_.end()) return false;
+    mpts_matched_.erase(it);
+    mpts_[idx] = nullptr;
     return true;
 }
 
 bool Frame::removeSeedMatchByIndex(const size_t &idx)
 {
     std::lock_guard<std::mutex> lock(mutex_feature_);
-    const auto it = seed_matches_.find(idx);
-    if(it == seed_matches_.end()) return false;
-    seed_matches_.erase(it);
+    const auto it = seeds_matched_.find(idx);
+    if(it == seeds_matched_.end()) return false;
+    seeds_matched_.erase(it);
+    seeds_[idx] = nullptr;
     return true;
 }
 

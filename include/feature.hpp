@@ -36,20 +36,20 @@ public:
 
     Vector3d fn_;
 
-    inline static Ptr create(const Corner &corner)
-    {return std::make_shared<Feature>(Feature(corner));}
+    inline static Ptr create(const Corner &corner, const Vector3d &fn)
+    {return std::make_shared<Feature>(Feature(corner, fn));}
 
-    inline static Ptr create(const Vector2d &px, const int level = 0)
-    {return std::make_shared<Feature>(Feature(px));}
+    inline static Ptr create(const Vector2d &px, const Vector3d &fn, const int level = 0)
+    {return std::make_shared<Feature>(Feature(px, fn, level));}
 
 private:
 
-    Feature(const Corner &corner):
-        corner_(corner), px_(Vector2d(corner.x, corner.y))
+    Feature(const Corner &corner, const Vector3d &fn):
+        corner_(corner), px_(Vector2d(corner.x, corner.y)), fn_(fn)
     {}
 
-    Feature(const Vector2d &px, const int level = 0):
-        corner_(px[0], px[1], -1, level), px_(px)
+    Feature(const Vector2d &px, const Vector3d &fn, const int level = 0):
+        corner_(px[0], px[1], -1, level), px_(px), fn_(fn)
     {}
 
 };
