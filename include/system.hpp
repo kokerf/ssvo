@@ -87,8 +87,6 @@ private:
     KeyFrame::Ptr reference_keyframe_;
     KeyFrame::Ptr last_keyframe_;
 
-    double time_;
-
     std::list<double > frame_timestamp_buffer_;
     std::list<Sophus::SE3d> frame_pose_buffer_;
     std::list<KeyFrame::Ptr> reference_keyframe_buffer_;

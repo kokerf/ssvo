@@ -11,24 +11,6 @@ namespace ssvo
 
 class FeatureTracker : public noncopyable
 {
-//    struct Candidate {
-//        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-//        MapPoint::Ptr pt;    //!< 3D point.
-//        Vector2d px;         //!< projected 2D pixel location.
-//        Candidate(MapPoint::Ptr pt, Vector2d& px) : pt(pt), px(px) {}
-//        Candidate(){}
-//    };
-//
-//    struct Grid {
-//        typedef std::list<Candidate, aligned_allocator<Candidate> > Cell;
-//        int grid_size;
-//        int grid_n_cols;
-//        int grid_n_rows;
-//        std::vector<Cell*> cells;
-//        std::vector<int> grid_order;
-//        std::vector<bool> occupied;
-//    };
-
 public:
     typedef std::shared_ptr<FeatureTracker> Ptr;
 
@@ -52,6 +34,18 @@ public:
 
     inline static FeatureTracker::Ptr create(int width, int height, int grid_size, int border, bool report = false, bool verbose = false)
     {return FeatureTracker::Ptr(new FeatureTracker(width, height, grid_size, border, report, verbose));}
+
+public:
+
+    struct LogInfo {
+        int num_frame_matches;
+        int num_cells_matches;
+        int num_total_project;
+        int num_local_mpts;
+        double time_frame_match;
+        double time_cells_create;
+        double time_cells_match;
+    } logs_;
 
 private:
 
@@ -79,7 +73,6 @@ private:
 
     bool report_;
     bool verbose_;
-    int total_project_;
 };
 
 }//! end of ssvo
