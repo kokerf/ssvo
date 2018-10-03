@@ -402,7 +402,7 @@ bool System::createNewKeyFrame()
 
 //    int all_features = current_frame_->featureNumber() + current_frame_->seedNumber();
     bool c2 = disparities.front() > options_.min_kf_disparity;
-    bool c3 = current_frame_->getMapPointMatchSize() < reference_keyframe_->getMapPointMatchSize() * options_.min_ref_track_rate;
+    bool c3 = current_frame_->getMapPointMatchSize() < std::min((int)last_keyframe_->getMapPointMatchSize(), 200) * options_.min_ref_track_rate;
 //    bool c4 = current_frame_->featureNumber() < reference_keyframe_->featureNumber() * 0.9;
 
     sysTrace->log("is_keyframe", c1+10*c2+100*c3);
