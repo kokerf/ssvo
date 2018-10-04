@@ -93,6 +93,7 @@ void LocalMapper::createInitalMap(const KeyFrame::Ptr &keyframe_ref, const KeyFr
         map_->insertMapPoint(mpt);
         mpt->resetType(MapPoint::STABLE);
         mpt->updateViewAndDepth();
+        mpt->computeDistinctiveDescriptor();
     }
 
     keyframe_ref->setRefKeyFrame(keyframe_cur);
@@ -140,29 +141,28 @@ void LocalMapper::run()
 {
     while(!isRequiredStop())
     {
-        KeyFrame::Ptr keyframe_cur = checkNewKeyFrame();
-        if(keyframe_cur)
+        KeyFrame::Ptr keyframe = checkNewKeyFrame();
+        if(keyframe)
         {
             mapTrace->startTimer("total");
 
             mapTrace->startTimer("dbow");
-            keyframe_cur->conputeDescriptor(brief_);
-            keyframe_cur->computeBoW(vocabulary_);
+            finishNewKeyFrame(keyframe);
             mapTrace->stopTimer("dbow");
 
             std::list<MapPoint::Ptr> bad_mpts;
-            int new_seed_features = 0;
-            int new_local_features = 0;
+            int new_created_features = 0;
+            int new_projected_features = 0;
             if(map_->kfs_.size() > 2)
             {
-//                new_seed_features = createFeatureFromSeedFeature(keyframe_cur);
                 mapTrace->startTimer("reproj");
-                new_local_features = createNewMapPoints(keyframe_cur);
+                new_created_features = createNewMapPoints(keyframe);
+                new_projected_features = searchInLocalMap(keyframe);
                 mapTrace->stopTimer("reproj");
-                LOG_IF(INFO, report_) << "[Mapper] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
+                LOG_IF(INFO, report_) << "[Mapper] create features: " << new_created_features << " + " << new_projected_features;
 
                 mapTrace->startTimer("local_ba");
-                Optimizer::localBundleAdjustment(keyframe_cur, bad_mpts, options_.num_local_ba_kfs, options_.min_local_ba_connected_fts, report_, verbose_);
+                Optimizer::localBundleAdjustment(keyframe, bad_mpts, options_.num_local_ba_kfs, options_.min_local_ba_connected_fts, report_, verbose_);
                 mapTrace->stopTimer("local_ba");
             }
 
@@ -171,16 +171,16 @@ void LocalMapper::run()
                 map_->removeMapPoint(mpt);
             }
 
-            checkCulling(keyframe_cur);
+            checkCulling(keyframe);
 
             mapTrace->startTimer("dbow");
-            addToDatabase(keyframe_cur);
+            addToDatabase(keyframe);
             mapTrace->stopTimer("dbow");
 
             mapTrace->stopTimer("total");
             mapTrace->writeToFile();
 
-            keyframe_last_ = keyframe_cur;
+            keyframe_last_ = keyframe;
         }
     }
 }
@@ -220,20 +220,19 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
         mapTrace->startTimer("total");
 
         mapTrace->startTimer("dbow");
-        keyframe->conputeDescriptor(brief_);
-        keyframe->computeBoW(vocabulary_);
+        finishNewKeyFrame(keyframe);
         mapTrace->stopTimer("dbow");
 
         std::list<MapPoint::Ptr> bad_mpts;
-        int new_seed_features = 0;
-        int new_local_features = 0;
+        int new_created_features = 0;
+        int new_projected_features = 0;
         if(map_->kfs_.size() > 2)
         {
-//            new_seed_features = createFeatureFromSeedFeature(keyframe);
             mapTrace->startTimer("reproj");
-            new_local_features = createNewMapPoints(keyframe);
+            new_created_features = createNewMapPoints(keyframe);
+            new_projected_features = searchInLocalMap(keyframe);
             mapTrace->stopTimer("reproj");
-            LOG_IF(INFO, report_) << "[Mapper] create " << new_seed_features << " features from seeds and " << new_local_features << " from local map.";
+            LOG_IF(INFO, report_) << "[Mapper] create features: " << new_created_features << " + " << new_projected_features;
 
             mapTrace->startTimer("local_ba");
             Optimizer::localBundleAdjustment(keyframe, bad_mpts, options_.num_local_ba_kfs, options_.min_local_ba_connected_fts, report_, verbose_);
@@ -256,23 +255,86 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
     }
 }
 
-void LocalMapper::finishLastKeyFrame()
+void LocalMapper::finishNewKeyFrame(const KeyFrame::Ptr &keyframe)
 {
-//    DepthFilter::updateByConnectedKeyFrames(keyframe_last_, 3);
+    keyframe->conputeDescriptor(brief_);
+    keyframe->computeBoW(vocabulary_);
+
+    const std::vector<size_t> indices = keyframe->getMapPointMatchIndices();
+    for(const size_t &idx : indices)
+    {
+        const MapPoint::Ptr &mpt = keyframe->getMapPointByIndex(idx);
+        mpt->computeDistinctiveDescriptor();
+    }
 }
 
 void LocalMapper::createFeatureFromSeed(const Seed::Ptr &seed)
 {
     //! create new feature
+    if(seed->kf->getMapPointByIndex(seed->ft_idx))
+        return;
     MapPoint::Ptr mpt = MapPoint::create(seed->kf->Twc() * (seed->fn_ref/seed->getInvDepth()));
     seed->kf->removeSeedCreateByIndex(seed->ft_idx);
     seed->kf->addMapPoint(mpt, seed->ft_idx);
     map_->insertMapPoint(mpt);
     mpt->addObservation(seed->kf, seed->ft_idx);
     mpt->updateViewAndDepth();
+    mpt->computeDistinctiveDescriptor();
 
 //    if(mpt->observations() > 1)
 //        Optimizer::refineMapPoint(mpt, 10, true);
+}
+
+void LocalMapper::createFeatureFromSeeds(const KeyFrame::Ptr &keyframe)
+{
+    return;
+
+    const std::vector<size_t> seed_indices = keyframe->getSeedMatchIndices();
+    const std::vector<Seed::Ptr> seeds = keyframe->getSeeds();
+
+    for(const size_t &idx : seed_indices)
+    {
+        const Seed::Ptr &seed = seeds[idx];
+        const KeyFrame::Ptr &keyframe_ref = seed->kf;
+        const size_t &idx_ref = seed->ft_idx;
+
+        const MapPoint::Ptr &mpt_ref = keyframe_ref->getMapPointByIndex(idx_ref);
+        if(!mpt_ref)
+        {
+            MapPoint::Ptr mpt = MapPoint::create(keyframe_ref->Twc() * (seed->fn_ref/seed->getInvDepth()));
+            keyframe_ref->removeSeedCreateByIndex(idx_ref);
+            keyframe_ref->addMapPoint(mpt, idx_ref);
+            keyframe->removeSeedMatchByIndex(idx);
+            keyframe->addMapPoint(mpt, idx);
+
+            map_->insertMapPoint(mpt);
+            mpt->addObservation(keyframe_ref, idx_ref);
+            mpt->addObservation(keyframe, idx);
+            mpt->updateViewAndDepth();
+            mpt->computeDistinctiveDescriptor();
+        }
+        else
+        {
+
+            const Vector3d pose = keyframe_ref->Tcw() * mpt_ref->pose();
+            const double d_mpt = 1.0 / pose[2];
+
+            const double sigma = std::sqrt(seed->getVariance());
+            const double d_seed = seed->getInvDepth();
+            if(std::abs(d_mpt-d_seed) <= sigma) //! add observation
+            {
+                keyframe->removeSeedMatchByIndex(idx);
+                keyframe->addMapPoint(mpt_ref, idx);
+                mpt_ref->addObservation(keyframe, idx);
+                mpt_ref->updateViewAndDepth();
+                mpt_ref->computeDistinctiveDescriptor();
+            }
+            else
+            {
+                keyframe->removeSeedMatchByIndex(idx);
+            }
+        }
+    }
 }
 
 int LocalMapper::createNewMapPoints(const KeyFrame::Ptr &current_keyframe)
@@ -409,12 +471,16 @@ int LocalMapper::createNewMapPoints(const KeyFrame::Ptr &current_keyframe)
             MapPoint::Ptr new_mpt = MapPoint::create(P3D);
             map_->insertMapPoint(new_mpt);
 
+            current_keyframe->removeSeedCreateByIndex(idx1);
+            connected_keyframe->removeSeedCreateByIndex(idx2);
+
             current_keyframe->addMapPoint(new_mpt, idx1);
             connected_keyframe->addMapPoint(new_mpt, idx2);
 
             new_mpt->addObservation(current_keyframe, idx1);
             new_mpt->addObservation(connected_keyframe, idx2);
             new_mpt->updateViewAndDepth();
+            new_mpt->computeDistinctiveDescriptor();
 
             new_mpt_count++;
         }
@@ -425,7 +491,74 @@ int LocalMapper::createNewMapPoints(const KeyFrame::Ptr &current_keyframe)
 
 int LocalMapper::searchInLocalMap(const KeyFrame::Ptr &keyframe)
 {
+    const std::set<KeyFrame::Ptr> connected_keyframes = keyframe->getConnectedKeyFrames(options_.num_reproject_kfs);
 
+    std::set<KeyFrame::Ptr> local_keyframes = connected_keyframes;
+    if(connected_keyframes.size() < options_.num_reproject_kfs)
+    {
+        const std::set<KeyFrame::Ptr> sub_connected_keyframes = keyframe->getSubConnectedKeyFrames(options_.num_reproject_kfs - connected_keyframes.size());
+        for(const KeyFrame::Ptr &kf : sub_connected_keyframes)
+            local_keyframes.insert(kf);
+    }
+
+    std::unordered_set<MapPoint::Ptr> local_mpts_set;
+    for(const KeyFrame::Ptr & kf : local_keyframes)
+    {
+        const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts = kf->getMapPointFeaturesMatched();
+        for(const auto &mpt_ft : mpt_fts)
+        {
+            if(!local_mpts_set.count(mpt_ft.first))
+                local_mpts_set.insert(mpt_ft.first);
+        }
+    }
+
+    std::vector<MapPoint::Ptr> local_mpts(local_mpts_set.begin(), local_mpts_set.end());
+    std::map<MapPoint::Ptr, size_t> matches;
+    FeatureTracker::searchBowByProjection(keyframe, local_mpts, matches, 50, 2.0);
+
+    if(matches.empty())
+        return 0;
+
+    for(const auto & mpt_idx : matches)
+    {
+        const MapPoint::Ptr &mpt = mpt_idx.first;
+        const size_t &idx = mpt_idx.second;
+
+        const MapPoint::Ptr &mpt_kf = keyframe->getMapPointByIndex(idx);
+        if(mpt_kf)
+        {
+            if(!mpt_kf->isBad())
+            {
+                mpt->fusion(mpt_kf);
+                keyframe->removeMapPointMatchByIndex(idx);
+                keyframe->addMapPoint(mpt, idx);
+            }
+            else
+            {
+                mpt_kf->removeObservation(keyframe);
+                keyframe->removeMapPointMatchByIndex(idx);
+                keyframe->addMapPoint(mpt, idx);
+            }
+        }
+        else
+        {
+            keyframe->addMapPoint(mpt, idx);
+            mpt->addObservation(keyframe, idx);
+        }
+    }
+
+    std::vector<size_t > mpt_indices = keyframe->getMapPointMatchIndices();
+    for(const size_t &idx : mpt_indices)
+    {
+        const MapPoint::Ptr &mpt = keyframe->getMapPointByIndex(idx);
+        if(matches.count(mpt))
+        {
+            mpt->updateViewAndDepth();
+            mpt->computeDistinctiveDescriptor();
+        }
+    }
+
+    return (int)matches.size();
 }
 
 void LocalMapper::addOptimalizeMapPoint(const MapPoint::Ptr &mpt)

@@ -25,7 +25,9 @@ public:
     static bool findSubpixelFeature(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, const Feature::Ptr &ft_ref, const Vector3d &p3d,
                                     Vector2d &px_cur, const int level_cur, const int max_iterations = 30, const double epslion = 0.01, const double threshold = 4.0, bool verbose = false);
 
-    static int searchBoWForTriangulation(const KeyFrame::Ptr &keyframe1, const KeyFrame::Ptr &keyframe2, std::map<size_t, size_t> &matches, int max_dist, double max_epl_err);
+    static int searchBoWForTriangulation(const KeyFrame::Ptr &keyframe1, const KeyFrame::Ptr &keyframe2, std::map<size_t, size_t> &matches, int max_desp, double max_epl_err);
+
+    static int searchBowByProjection(const KeyFrame::Ptr &keyframe, const std::vector<MapPoint::Ptr> &mpts, std::map<MapPoint::Ptr, size_t> &matches, int max_desp, double threshold = 1.0);
 
     static void showMatches(const Frame::Ptr frame1, const Frame::Ptr frame2);
 

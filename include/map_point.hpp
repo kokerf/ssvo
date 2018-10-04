@@ -50,6 +50,10 @@ public:
 
     void updateViewAndDepth();
 
+    void computeDistinctiveDescriptor();
+
+    cv::Mat descriptor();
+
     int predictScale(const double dist, const int max_level);
 
     static int predictScale(const double dist_ref, const double dist_cur, const int level_ref, const int max_level);
@@ -57,6 +61,8 @@ public:
     double getMinDistanceInvariance();
 
     double getMaxDistanceInvariance();
+
+    Vector3d getMeanViewDirection();
 
     bool getCloseViewObs(const FramePtr &frame, KeyFramePtr &keyframe, int &level);
 
@@ -112,6 +118,8 @@ private:
     Vector3d obs_dir_; //!< mean viewing direction, from map point to keyframe
     double min_distance_;
     double max_distance_;
+
+    cv::Mat descriptor_;
 
     KeyFramePtr refKF_;
 

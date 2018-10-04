@@ -38,10 +38,10 @@ void Optimizer::twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame
         mpt->optimal_pose_ = mpt->pose();
         mpts.push_back(mpt);
 
-        ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft1->fn_[0]/ft1->fn_[2], ft1->fn_[1]/ft1->fn_[2], Frame::inv_level_sigma2_.at(ft1->corner_.level));
+        ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft1->fn_[0]/ft1->fn_[2], ft1->fn_[1]/ft1->fn_[2], Frame::inv_scale_factors_.at(ft1->corner_.level));
         problem.AddResidualBlock(cost_function1, NULL, kf1->optimal_Tcw_.data(), mpt->optimal_pose_.data());
 
-        ceres::CostFunction* cost_function2 = ceres_slover::ReprojectionErrorSE3::Create(ft2->fn_[0]/ft2->fn_[2], ft2->fn_[1]/ft2->fn_[2], Frame::inv_level_sigma2_.at(ft2->corner_.level));
+        ceres::CostFunction* cost_function2 = ceres_slover::ReprojectionErrorSE3::Create(ft2->fn_[0]/ft2->fn_[2], ft2->fn_[1]/ft2->fn_[2], Frame::inv_scale_factors_.at(ft2->corner_.level));
         problem.AddResidualBlock(cost_function2, NULL, kf2->optimal_Tcw_.data(), mpt->optimal_pose_.data());
     }
 
@@ -72,6 +72,16 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
     double t0 = (double)cv::getTickCount();
     size = size > 0 ? size-1 : 0;
     std::set<KeyFrame::Ptr> actived_keyframes = keyframe->getConnectedKeyFrames(size, min_shared_fts);
+
+    std::set<KeyFrame::Ptr> sub_connected_keyframes;
+    if(actived_keyframes.size() < min_shared_fts)
+    {
+        const std::set<KeyFrame::Ptr> sub_connected_keyframes = keyframe->getSubConnectedKeyFrames(min_shared_fts - sub_connected_keyframes.size());
+        for(const KeyFrame::Ptr &kf : sub_connected_keyframes)
+            actived_keyframes.insert(kf);
+    }
+
+
     actived_keyframes.insert(keyframe);
     std::unordered_set<MapPoint::Ptr> local_mappoints;
     std::set<KeyFrame::Ptr> fixed_keyframe;
@@ -127,7 +137,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
             const KeyFrame::Ptr &kf = item.first;
             const size_t &idx = item.second;
             const Feature::Ptr ft = kf->getFeatureByIndex(idx);
-            ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2], Frame::inv_level_sigma2_.at(ft->corner_.level));
+            ceres::CostFunction* cost_function1 = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2], Frame::inv_scale_factors_.at(ft->corner_.level));
             problem.AddResidualBlock(cost_function1, lossfunction, kf->optimal_Tcw_.data(), mpt->optimal_pose_.data());
         }
     }
@@ -157,7 +167,7 @@ void Optimizer::localBundleAdjustment(const KeyFrame::Ptr &keyframe, std::list<M
             const size_t &idx = item.second;
             const Feature::Ptr &ft = kf->getFeatureByIndex(idx);
             double residual = utils::reprojectError(ft->fn_.head<2>(), kf->Tcw(), mpt->optimal_pose_);
-            if(residual < max_residual)
+            if(residual < max_residual * Frame::level_sigma2_.at(ft->corner_.level))
                 continue;
 
             mpt->removeObservation(kf);
@@ -369,7 +379,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_see
         MapPoint::Ptr mpt = mpts[i];// TODO mpt is good?
 
         mpt->optimal_pose_ = mpt->pose();
-        ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2], Frame::inv_level_sigma2_.at(ft->corner_.level));
+        ceres::CostFunction* cost_function = ceres_slover::ReprojectionErrorSE3::Create(ft->fn_[0]/ft->fn_[2], ft->fn_[1]/ft->fn_[2], Frame::inv_scale_factors_.at(ft->corner_.level));
         res_ids[i] = problem.AddResidualBlock(cost_function, lossfunction, frame->optimal_Tcw_.data(), mpt->optimal_pose_.data());
         problem.SetParameterBlockConstant(mpt->optimal_pose_.data());
     }
@@ -391,7 +401,7 @@ void Optimizer::motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_see
         {
             Feature::Ptr ft = fts[i];
             const ceres::ResidualBlockId &res_id = res_ids[i];
-            if(reprojectionError(problem, res_id).squaredNorm() > TH_REPJ * (1 << ft->corner_.level))
+            if(reprojectionError(problem, res_id).squaredNorm() > TH_REPJ * Frame::level_sigma2_.at(ft->corner_.level))
             {
                 remove_count++;
                 problem.RemoveResidualBlock(res_id);

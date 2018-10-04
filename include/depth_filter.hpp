@@ -33,6 +33,8 @@ public:
 
     void setKeyFrameProcessCallback(const KeyFrameCallback &callback);
 
+    void setKeyFrameSeedsCallback(const KeyFrameCallback &callback);
+
     static Ptr create(const FastDetector::Ptr &fast_detector, bool report = false, bool verbose = false)
     { return Ptr(new DepthFilter(fast_detector, report, verbose)); }
 
@@ -43,6 +45,8 @@ private:
     SeedCallback seed_converged_callback_;
 
     KeyFrameCallback keyframe_process_callback_;
+
+    KeyFrameCallback keyframe_seeds_callback_;
 
     void run();
 
@@ -67,6 +71,7 @@ private:
 
     struct Option{
         int max_kfs; //! max keyframes for seeds tracking(exclude current keyframe)
+        int max_seeds_buffer;
         int max_features;
         double max_perprocess_kfs;
         double max_epl_length;
@@ -81,6 +86,7 @@ private:
     FastDetector::Ptr fast_detector_;
 
     std::deque<std::pair<Frame::Ptr, KeyFrame::Ptr> > frames_buffer_;
+    std::deque<KeyFrame::Ptr> seeds_buffer_;
 //    std::map<uint64_t, std::tuple<int, int> > seeds_convergence_rate_;
 
     const bool report_;

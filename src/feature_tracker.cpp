@@ -255,7 +255,7 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
         cv::Mat show_ref, show_cur;
         cv::cvtColor(image_ref, show_ref, CV_GRAY2RGB);
         cv::cvtColor(image_cur, show_cur, CV_GRAY2RGB);
-        cv::circle(show_ref, cv::Point2i((int)ft_ref->px_[0], (int)ft_ref->px_[1])/(1 << ft_ref->corner_.level), 3, cv::Scalar(255,0,0));
+        cv::circle(show_ref, cv::Point2i((int)ft_ref->px_[0], (int)ft_ref->px_[1])*Frame::inv_scale_factors_.at(ft_ref->corner_.level), 3, cv::Scalar(255,0,0));
         cv::circle(show_cur, cv::Point2i((int)estimate[0], (int)estimate[1]), 3, cv::Scalar(255,0,0));
         cv::imshow("ref track", show_ref);
         cv::imshow("cur track", show_cur);
@@ -380,7 +380,7 @@ bool FeatureTracker::findSubpixelFeature(const Frame::Ptr &frame_ref,
 int FeatureTracker::searchBoWForTriangulation(const KeyFrame::Ptr &keyframe1,
                                               const KeyFrame::Ptr &keyframe2,
                                               std::map<size_t, size_t> &matches,
-                                              int max_dist, double max_epl_err)
+                                              int max_desp, double max_epl_err)
 {
     const DBoW3::FeatureVector &feat_vec1 = keyframe1->feat_vec_;
     const DBoW3::FeatureVector &feat_vec2 = keyframe2->feat_vec_;
@@ -463,7 +463,7 @@ int FeatureTracker::searchBoWForTriangulation(const KeyFrame::Ptr &keyframe1,
 
                 const double sigma1 = Frame::level_sigma2_.at(ft1->corner_.level);
 
-                int best_dist = max_dist;
+                int best_dist = max_desp;
                 int best_idx2 = -1;
                 for(const size_t &idx2 : ft2_itr->second)
                 {
@@ -536,6 +536,88 @@ int FeatureTracker::searchBoWForTriangulation(const KeyFrame::Ptr &keyframe1,
 //    std::cout << "Outlier: " << dist_outlier << ", " << epl_outlier << std::endl;
 
     return matches.size();
+}
+
+int FeatureTracker::searchBowByProjection(const KeyFrame::Ptr &keyframe,
+                                          const std::vector<MapPoint::Ptr> &mpts,
+                                          std::map<MapPoint::Ptr, size_t> &matches,
+                                          int max_desp,
+                                          double threshold)
+{
+    std::unordered_set<MapPoint::Ptr> mpts_found;
+    {
+        const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts = keyframe->getMapPointFeaturesMatched();
+        for(const auto &mpt_ft : mpt_fts)
+            mpts_found.insert(mpt_ft.first);
+    }
+
+    const SE3d Tcw = keyframe->Tcw();
+    const Vector3d Owc = keyframe->pose().translation();
+
+    for(const MapPoint::Ptr &mpt : mpts)
+    {
+        if(mpt->isBad() || mpts_found.count(mpt))
+            continue;
+
+        const Vector3d Pw = mpt->pose();
+        const Vector3d Pc = Tcw * Pw;
+
+        if(Pc[2] <= 0.0f)
+            continue;
+
+        const Vector2d px_mpt = keyframe->cam_->project(Pc);
+        if(!keyframe->cam_->isInFrame(px_mpt.cast<int>()))
+            continue;
+
+        const double max_dist = mpt->getMaxDistanceInvariance();
+        const double min_dist = mpt->getMinDistanceInvariance();
+
+        const Vector3d dist = Owc - Pw;
+        const double dist_norm = dist.norm();
+
+        if(dist_norm > max_dist || dist_norm < min_dist)
+            continue;
+
+        const Vector3d obs_dir = mpt->getMeanViewDirection();
+        const double cos_theta = dist.dot(obs_dir)/dist_norm;
+
+        if(cos_theta < 0.5)
+            continue;
+
+        const int level = mpt->predictScale(dist_norm, Frame::nlevels_-1);
+        const double radius = threshold * Frame::scale_factors_.at(level);
+        const std::vector<size_t> indices = keyframe->getFeaturesInArea(px_mpt[0], px_mpt[1], radius, level-1, level+1);
+        if(indices.empty())
+            continue;
+
+        const cv::Mat desp1 = mpt->descriptor();
+
+        int best_dist = max_desp;
+        int best_idx = -1;
+        for(const size_t &idx : indices)
+        {
+            const Feature::Ptr &ft = keyframe->getFeatureByIndex(idx);
+            const Vector2d &px = ft->px_;
+            const Vector2d rpj_err = px_mpt - px;
+            const double rpj_err_square = rpj_err.squaredNorm();
+            const double sigma2 = Frame::level_sigma2_.at(ft->corner_.level);
+            if(rpj_err_square > sigma2 * 5.991)
+                continue;
+
+            const cv::Mat &desp2 = keyframe->descriptors_.at(idx);
+            const int desp_dist = DBoW3::DescManip::distance(desp1, desp2);
+            if(desp_dist < best_dist)
+            {
+                best_dist = desp_dist;
+                best_idx = idx;
+            }
+        }
+
+        if(best_idx >= 0)
+            matches.emplace(mpt, best_idx);
+    }
+
+    return (int)matches.size();
 }
 
 

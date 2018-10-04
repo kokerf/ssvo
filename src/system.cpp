@@ -55,9 +55,11 @@ System::System(std::string config_file, std::string calib_flie) :
     mapper_ = LocalMapper::create(fast_detector_, true, false);
     depth_filter_ = DepthFilter::create(fast_detector_, true);
     DepthFilter::SeedCallback seed_converge_callback = std::bind(&LocalMapper::createFeatureFromSeed, mapper_, std::placeholders::_1);
-    DepthFilter::KeyFrameCallback keyframe_callback = std::bind(&LocalMapper::insertKeyFrame, mapper_, std::placeholders::_1);
+    DepthFilter::KeyFrameCallback mapping_callback = std::bind(&LocalMapper::insertKeyFrame, mapper_, std::placeholders::_1);
+    DepthFilter::KeyFrameCallback keyframe_seeds_callback = std::bind(&LocalMapper::createFeatureFromSeeds, mapper_, std::placeholders::_1);
     depth_filter_->setSeedConvergedCallback(seed_converge_callback);
-    depth_filter_->setKeyFrameProcessCallback(keyframe_callback);
+    depth_filter_->setKeyFrameProcessCallback(mapping_callback);
+    depth_filter_->setKeyFrameSeedsCallback(keyframe_seeds_callback);
 
     viewer_ = Viewer::create(mapper_->map_, cv::Size(width, height));
     //viewer_->setShowFalg(false);

@@ -49,8 +49,8 @@ void showEplMatch(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame, const 
     Vector2d epl0 = frame->cam_->project(epl_near);
     Vector2d epl1 = frame->cam_->project(epl_far);
 
-    const double scale_cur = 1.0/(1<<level_cur);
-    const double scale_ref = 1.0/(1<<level_ref);
+    const double scale_cur = Frame::inv_scale_factors_.at(level_cur);
+    const double scale_ref = Frame::inv_scale_factors_.at(level_ref);
     const Vector2d px_src = keyframe->cam_->project(xyz_ref);
 
     cv::Point2d pl0(epl0[0]*scale_cur, epl0[1]*scale_cur);
@@ -89,7 +89,7 @@ void showAffine(const cv::Mat &src, const Vector2d &px_ref, const Matrix2d &A_re
         cv::cvtColor(src_show, src_show, CV_GRAY2RGB);
 
     const double half_size = size*0.5;
-    const int factor = 1 << level;
+    const int factor = Frame::scale_factors_.at(level);
     Vector2d tl = A_ref_cur * Vector2d(-half_size, -half_size) * factor;
     Vector2d tr = A_ref_cur * Vector2d(half_size, -half_size) * factor;
     Vector2d bl = A_ref_cur * Vector2d(-half_size, half_size) * factor;
@@ -115,6 +115,7 @@ DepthFilter::DepthFilter(const FastDetector::Ptr &fast_detector, bool report, bo
     fast_detector_(fast_detector), report_(report), verbose_(report&&verbose), filter_thread_(nullptr), stop_require_(false)
 {
     options_.max_kfs = 5;
+    options_.max_seeds_buffer = 2;
     options_.max_features = Config::minCornersPerKeyFrame();
     options_.max_epl_length = 1000;
     options_.epl_dist2_threshold = 16;
@@ -148,6 +149,11 @@ void DepthFilter::setSeedConvergedCallback(const SeedCallback &callback)
 void DepthFilter::setKeyFrameProcessCallback(const KeyFrameCallback &callback)
 {
     keyframe_process_callback_ = callback;
+}
+
+void DepthFilter::setKeyFrameSeedsCallback(const KeyFrameCallback &callback)
+{
+    keyframe_seeds_callback_ = callback;
 }
 
 void DepthFilter::startMainThread()
@@ -190,7 +196,6 @@ void DepthFilter::run()
         {
             dfltTrace->startTimer("total");
 
-            int updated_count = 0;
             int searched_count = 0;
             int new_seeds_count = 0;
 
@@ -206,16 +211,26 @@ void DepthFilter::run()
                 dfltTrace->stopTimer("create_seeds");
                 dfltTrace->log("num_new_seeds", new_seeds_count);
 
+                seeds_buffer_.push_back(keyframe);
+                if(seeds_buffer_.size() > options_.max_seeds_buffer)
+                    seeds_buffer_.pop_front();
+
                 keyframe_process_callback_(keyframe);
 //                updateByConnectedKeyFrames(keyframe, 3);
             }
 
             dfltTrace->stopTimer("total");
-            dfltTrace->writeToFile();
 
-            LOG_IF(WARNING, report_) << "[Filter][*] Frame: " << frame->id_
-                                     << " seeds searched: " <<  searched_count
-                                     << ", created: " << new_seeds_count;
+            const double time_total = dfltTrace->getTimer("total");
+            const double time_epl_search = dfltTrace->getTimer("epl_search");
+            const double time_seeds_create = dfltTrace->getTimer("create_seeds");
+            LOG_IF(WARNING, report_) << "----------\n"
+                                     << "[Filter][*] Frame: " << frame->id_ << "\n"
+                                     << std::fixed << std::setprecision(6)
+                                     << "> Tim(ms): " << time_total << " = " << time_epl_search << "(S) + " << time_seeds_create << "(C) + ...\n"
+                                     << "> Seeds  : " << searched_count << "(S), " << new_seeds_count << "(C)";
+
+            dfltTrace->writeToFile();
         }
 
     }
@@ -276,7 +291,6 @@ void DepthFilter::insertFrame(const Frame::Ptr &frame, const KeyFrame::Ptr keyfr
     {
         dfltTrace->startTimer("total");
 
-        int updated_count = 0;
         int searched_count = 0;
         int new_seeds_count = 0;
 
@@ -292,16 +306,26 @@ void DepthFilter::insertFrame(const Frame::Ptr &frame, const KeyFrame::Ptr keyfr
             dfltTrace->stopTimer("create_seeds");
             dfltTrace->log("num_new_seeds", new_seeds_count);
 
+            seeds_buffer_.push_back(keyframe);
+            if(seeds_buffer_.size() > options_.max_seeds_buffer)
+                seeds_buffer_.pop_front();
+
             keyframe_process_callback_(keyframe);
 //            updateByConnectedKeyFrames(keyframe, 3);
         }
 
         dfltTrace->stopTimer("total");
-        dfltTrace->writeToFile();
 
-        LOG_IF(WARNING, report_) << "[Filter][*] Frame: " << frame->id_
-                                 << " seeds searched: " <<  searched_count
-                                 << ", created: " << new_seeds_count;
+        const double time_total = dfltTrace->getTimer("total");
+        const double time_epl_search = dfltTrace->getTimer("epl_search");
+        const double time_seeds_create = dfltTrace->getTimer("create_seeds");
+        LOG_IF(WARNING, report_) << "----------\n"
+                                 << "[Filter][*] Frame: " << frame->id_ << "\n"
+                                 << std::fixed << std::setprecision(6)
+                                 << "> Tim(ms): " << time_total << " = " << time_epl_search << "(S) + " << time_seeds_create << "(C) + ...\n"
+                                 << "> Seeds  : " << searched_count << "(S), " << new_seeds_count << "(C)";
+
+        dfltTrace->writeToFile();
 
     }
     else
@@ -345,8 +369,10 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe)
 
     keyframe->detectFast(fast_detector_);
 
-    return 0;
+    keyframe_seeds_callback_(keyframe);
 
+    //return 0;
+    
     std::vector<size_t> mpt_indices = keyframe->getMapPointMatchIndices();
     std::vector<size_t> seed_indices = keyframe->getSeedMatchIndices();
 
@@ -447,19 +473,18 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe)
         }
     }
 
-    FeatureTracker::showAllFeatures(keyframe);
+    //FeatureTracker::showAllFeatures(keyframe);
 
     double depth_mean;
     double depth_min;
     keyframe->getSceneDepth(depth_mean, depth_min);
     for(const size_t &idx : mew_seed_indices)
     {
-        const Feature::Ptr &ft = keyframe->getFeatureByIndex(idx);
         const Seed::Ptr new_seed = Seed::create(keyframe, idx, depth_mean, depth_min);
         keyframe->addSeedFeatureCreated(new_seed, idx);
     }
 
-    FeatureTracker::showAllFeatures(keyframe);
+    //FeatureTracker::showAllFeatures(keyframe);
 
     return (int)mew_seed_indices.size();
 }
@@ -520,7 +545,7 @@ int DepthFilter::reprojectSeeds(const KeyFrame::Ptr &keyframe, const Frame::Ptr 
         if(dist2 > epl_threshold)
             continue;
 
-        double pixel_disparity = (seed->px_ref - px_matched).norm() / (1 << level_matched);//seed->level_ref);
+        double pixel_disparity = (seed->px_ref - px_matched).norm() * Frame::inv_scale_factors_.at(level_matched);//seed->level_ref);
         if(pixel_disparity < options_.min_pixel_disparity)
             continue;
 
@@ -560,12 +585,12 @@ int DepthFilter::reprojectAllSeeds(const Frame::Ptr &frame)
     static double pixel_usigma = Config::imagePixelSigma()/focus_length;
     static double epl_threshold = options_.epl_dist2_threshold*pixel_usigma*pixel_usigma;
     static double px_threshold = options_.pixel_error_threshold*pixel_usigma;
-    //! get new seeds for track
-    std::set<KeyFrame::Ptr> candidate_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_kfs);
-    candidate_keyframes.insert(frame->getRefKeyFrame());
+//    //! get new seeds for track
+//    std::set<KeyFrame::Ptr> candidate_keyframes = frame->getRefKeyFrame()->getConnectedKeyFrames(options_.max_kfs);
+//    candidate_keyframes.insert(frame->getRefKeyFrame());
 
     int matched_count = 0;
-    for(const KeyFrame::Ptr &kf : candidate_keyframes)
+    for(const KeyFrame::Ptr &kf : seeds_buffer_)
     {
         matched_count += reprojectSeeds(kf, frame, epl_threshold, px_threshold);
     }
@@ -603,10 +628,10 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
     const int level_ref = seed->level_ref;
     const int level_cur = MapPoint::predictScale(z_ref, z_cur, level_ref, Frame::nlevels_-1);
     level_matched = level_cur;
-    const double scale_cur = 1.0 / (1 << level_cur);
+    const double inv_scale_cur = Frame::inv_scale_factors_.at(level_cur);
 
-    const Vector2d px_cur(frame->cam_->project(xyz_cur) * scale_cur);
-    if(!frame->cam_->isInFrame(px_cur.cast<int>(), half_patch_size, scale_cur))
+    const Vector2d px_cur(frame->cam_->project(xyz_cur) * inv_scale_cur);
+    if(!frame->cam_->isInFrame(px_cur.cast<int>(), half_patch_size, inv_scale_cur))
         return false;
 
     //! px in image plane
@@ -622,16 +647,16 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
         xyz_near = z_ref_min_adjust * R_fn + t;
     }
 
-    Vector2d px_near = frame->cam_->project(xyz_near) * scale_cur;
-    Vector2d px_far  = frame->cam_->project(xyz_far) * scale_cur;
+    Vector2d px_near = frame->cam_->project(xyz_near) * inv_scale_cur;
+    Vector2d px_far  = frame->cam_->project(xyz_far) * inv_scale_cur;
     Vector2d epl_px_dir(px_near - px_far);
     epl_px_dir.normalize();
 
     //! make search pixel all within image
     const int min_sample_width = half_patch_size;
     const int min_sample_height = half_patch_size;
-    const int max_sample_width = frame->cam_->width() * scale_cur;
-    const int max_sample_height = frame->cam_->height() * scale_cur;
+    const int max_sample_width = frame->cam_->width() * inv_scale_cur;
+    const int max_sample_height = frame->cam_->height() * inv_scale_cur;
     if(px_near[0] <= min_sample_width)
     {
         double adjust = ceil(min_sample_width - px_near[0])/epl_px_dir[0];
@@ -691,8 +716,8 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
         return false;
 
     //! get px in normilzed plane
-    xyz_near = frame->cam_->lift(px_near / scale_cur);
-    xyz_far = frame->cam_->lift(px_far / scale_cur);
+    xyz_near = frame->cam_->lift(px_near / inv_scale_cur);
+    xyz_far = frame->cam_->lift(px_far / inv_scale_cur);
     Vector2d epl_dir = (xyz_near - xyz_far).head<2>();
 
     //! get warp patch
@@ -736,10 +761,10 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
         Vector2d fn(fn_start);
         for(int i = 0; i < n_steps; ++i, fn += step)
         {
-            Vector2f px = (frame->cam_->project(fn[0], fn[1]) * scale_cur).cast<float>();
+            Vector2f px = (frame->cam_->project(fn[0], fn[1]) * inv_scale_cur).cast<float>();
 
             //! always in frame's view
-            if(!frame->cam_->isInFrame(px.cast<int>(), half_patch_size, scale_cur))
+            if(!frame->cam_->isInFrame(px.cast<int>(), half_patch_size, inv_scale_cur))
                 continue;
 
             Matrix<float, patch_size, patch_size, RowMajor> patch_cur;
@@ -768,7 +793,7 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
             return false;
 
         Vector2d pn_best = fn_start + index_best * step;
-        px_best = frame->cam_->project(pn_best[0], pn_best[1]) * scale_cur;
+        px_best = frame->cam_->project(pn_best[0], pn_best[1]) * inv_scale_cur;
 
         double t1 = (double)cv::getTickCount();
         double time = (t1-t0)/cv::getTickFrequency();
@@ -793,14 +818,14 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
             //        showMatch(keyframe->getImage(level_ref), current_frame_->getImage(level_cur), px_near, px_far, ft->px/factor, px_best);
 //            DISPLAY:
             showEplMatch(keyframe, frame, T_cur_from_ref, level_ref, level_cur, xyz_near, xyz_far, xyz_ref, px_best);
-            showAffine(keyframe->getImage(level_ref), seed->px_ref * scale_cur, A_cur_from_ref.inverse(), 8, level_ref);
+            showAffine(keyframe->getImage(level_ref), seed->px_ref * inv_scale_cur, A_cur_from_ref.inverse(), 8, level_ref);
         }
 
         return false;
     }
 
     //! transform to level-0
-    px_matched = estimate.head<2>() / scale_cur;
+    px_matched = estimate.head<2>() / inv_scale_cur;
 
     LOG_IF(INFO, verbose_) << "Found! [" << seed->px_ref.transpose() << "] "
                            << "dst: [" << px_matched.transpose() << "] "

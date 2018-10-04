@@ -31,6 +31,8 @@ public:
 
     void createFeatureFromSeed(const Seed::Ptr &seed);
 
+    void createFeatureFromSeeds(const KeyFrame::Ptr &keyframe);
+
     KeyFrame::Ptr relocalizeByDBoW(const Frame::Ptr &frame, const Corners &corners);
 
     static void showMatches(const KeyFrame::Ptr &keyframe1, const KeyFrame::Ptr &keyframe2);
@@ -50,7 +52,7 @@ private:
 
     KeyFrame::Ptr checkNewKeyFrame();
 
-    void finishLastKeyFrame();
+    void finishNewKeyFrame(const KeyFrame::Ptr &keyframe);
 
     int createNewMapPoints(const KeyFrame::Ptr &keyframe);
 

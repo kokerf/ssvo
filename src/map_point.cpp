@@ -180,6 +180,9 @@ size_t MapPoint::getFeatureIndex(const KeyFrame::Ptr &kf)
 
 void MapPoint::updateViewAndDepth()
 {
+    if(isBad())
+        return;
+
     {
         std::lock_guard<std::mutex> lock(mutex_obs_);
 
@@ -213,6 +216,74 @@ void MapPoint::updateViewAndDepth()
     }
 }
 
+void MapPoint::computeDistinctiveDescriptor()
+{
+    if(isBad())
+        return;
+
+    std::unordered_map<KeyFrame::Ptr, size_t> obs_temp;
+    {
+        std::lock_guard<std::mutex> lock(mutex_obs_);
+        obs_temp = obs_;
+    }
+
+    if(obs_temp.empty())
+        return;
+
+    std::vector<cv::Mat> descriptors;
+    descriptors.reserve(obs_temp.size());
+
+    for(const auto &obv : obs_temp)
+    {
+        const KeyFrame::Ptr kf = obv.first;
+        if(kf->isBad()) continue;
+        descriptors.push_back(kf->descriptors_.at(obv.second));
+    }
+
+    if(descriptors.empty())
+        return;
+
+    const size_t N = descriptors.size();
+
+    std::vector<std::vector<int>> dist(N, std::vector<int>(N));
+    for(size_t i=0;i<N;i++)
+    {
+        dist[i][i]=0;
+        for(size_t j=i+1;j<N;j++)
+        {
+            int distij = DBoW3::DescManip::distance_8uc1(descriptors[i],descriptors[j]);
+            dist[i][j]=distij;
+            dist[j][i]=distij;
+        }
+    }
+
+    int best_median = std::numeric_limits<int>::max();
+    int best_idx = 0;
+
+    for(size_t i=0;i<N;i++)
+    {
+        std::sort(dist[i].begin(), dist[i].end());
+        int median = dist[i][0.5*(N-1)];
+
+        if(median<best_median)
+        {
+            best_median = median;
+            best_idx = i;
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(mutex_obs_);
+        descriptor_ = descriptors.at(best_idx).clone();
+    }
+}
+
+cv::Mat MapPoint::descriptor()
+{
+    std::lock_guard<std::mutex> lock(mutex_obs_);
+    return descriptor_.clone();
+}
+
 double MapPoint::getMinDistanceInvariance()
 {
     std::lock_guard<std::mutex> lock(mutex_pose_);
@@ -223,6 +294,12 @@ double MapPoint::getMaxDistanceInvariance()
 {
     std::lock_guard<std::mutex> lock(mutex_pose_);
     return 1.2f * max_distance_;
+}
+
+Vector3d MapPoint::getMeanViewDirection()
+{
+    std::lock_guard<std::mutex> lock(mutex_obs_);
+    return obs_dir_;
 }
 
 int MapPoint::predictScale(const double dist, const int max_level)
