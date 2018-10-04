@@ -82,31 +82,6 @@ void showEplMatch(const KeyFrame::Ptr &keyframe, const Frame::Ptr &frame, const 
     cv::waitKey(0);
 }
 
-void showAffine(const cv::Mat &src, const Vector2d &px_ref, const Matrix2d &A_ref_cur, const int size, const int level)
-{
-    cv::Mat src_show = src.clone();
-    if(src_show.channels() == 1)
-        cv::cvtColor(src_show, src_show, CV_GRAY2RGB);
-
-    const double half_size = size*0.5;
-    const int factor = Frame::scale_factors_.at(level);
-    Vector2d tl = A_ref_cur * Vector2d(-half_size, -half_size) * factor;
-    Vector2d tr = A_ref_cur * Vector2d(half_size, -half_size) * factor;
-    Vector2d bl = A_ref_cur * Vector2d(-half_size, half_size) * factor;
-    Vector2d br = A_ref_cur * Vector2d(half_size, half_size) * factor;
-    cv::Point2d TL(tl[0]+px_ref[0], tl[1]+px_ref[1]);
-    cv::Point2d TR(tr[0]+px_ref[0], tr[1]+px_ref[1]);
-    cv::Point2d BL(bl[0]+px_ref[0], bl[1]+px_ref[1]);
-    cv::Point2d BR(br[0]+px_ref[0], br[1]+px_ref[1]);
-    cv::Scalar color(0, 255, 0);
-    cv::line(src_show, TL, TR, color, 1);
-    cv::line(src_show, TR, BR, color, 1);
-    cv::line(src_show, BR, BL, color, 1);
-    cv::line(src_show, BL, TL, color, 1);
-    cv::imshow("AFFINE", src_show);
-    cv::waitKey(0);
-}
-
 //! =================================================================================================
 TimeTracing::Ptr dfltTrace = nullptr;
 
@@ -818,7 +793,7 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
             //        showMatch(keyframe->getImage(level_ref), current_frame_->getImage(level_cur), px_near, px_far, ft->px/factor, px_best);
 //            DISPLAY:
             showEplMatch(keyframe, frame, T_cur_from_ref, level_ref, level_cur, xyz_near, xyz_far, xyz_ref, px_best);
-            showAffine(keyframe->getImage(level_ref), seed->px_ref * inv_scale_cur, A_cur_from_ref.inverse(), 8, level_ref);
+            FeatureTracker::showAffine(keyframe->getImage(level_ref), seed->px_ref * inv_scale_cur, A_cur_from_ref.inverse(), 8, level_ref);
         }
 
         return false;

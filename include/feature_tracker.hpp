@@ -37,6 +37,8 @@ public:
 
     static void showAllFeatures(const KeyFrame::Ptr &keyframe);
 
+    static void showAffine(const cv::Mat &src, const Vector2d &px_ref, const Matrix2d &A_ref_cur, const int size, const int level);
+
     inline static FeatureTracker::Ptr create(int width, int height, int grid_size, int border, bool report = false, bool verbose = false)
     {return FeatureTracker::Ptr(new FeatureTracker(width, height, grid_size, border, report, verbose));}
 

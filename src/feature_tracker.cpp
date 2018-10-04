@@ -227,15 +227,16 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
         return -1;
 
     const size_t idx = mpt->getFeatureIndex(kf_ref);
-    const Feature::Ptr ft_ref = kf_ref->getFeatureByIndex(idx);
+    const Feature::Ptr &ft_ref = kf_ref->getFeatureByIndex(idx);
     if(!ft_ref)
         return -1;
 
     const Vector3d obs_ref_dir(kf_ref->pose().translation() - mpt->pose());
+    const Vector3d fn_ref_norm = ft_ref->fn_.normalized();
     const SE3d T_cur_from_ref = frame->Tcw() * kf_ref->pose();
 
     Matrix2d A_cur_from_ref;
-    utils::getWarpMatrixAffine(kf_ref->cam_, frame->cam_, ft_ref->px_, ft_ref->fn_, ft_ref->corner_.level,
+    utils::getWarpMatrixAffine(kf_ref->cam_, frame->cam_, ft_ref->px_, fn_ref_norm, ft_ref->corner_.level,
                                obs_ref_dir.norm(), T_cur_from_ref, patch_size, A_cur_from_ref);
 
     // TODO 如果Affine很小的话，则不用warp
@@ -260,6 +261,8 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
         cv::imshow("ref track", show_ref);
         cv::imshow("cur track", show_cur);
         cv::waitKey(0);
+
+        FeatureTracker::showAffine(image_ref, ft_ref->px_*(1.0/factor), A_cur_from_ref.inverse(), 8, ft_ref->corner_.level);
     }
 
     bool matched = AlignPatch::align2DI(image_cur, patch_with_border, estimate, max_iterations, epslion, verbose);
@@ -294,13 +297,14 @@ bool FeatureTracker::trackFeature(const Frame::Ptr &frame_ref,
     const int TH_SSD = AlignPatch::Area * threshold;
 
     const Vector3d obs_ref_dir(frame_ref->pose().translation() - mpt->pose());
+    const Vector3d fn_ref_norm = ft_ref->fn_.normalized();
     const SE3d T_cur_from_ref = frame_cur->Tcw() * frame_ref->pose();
 
     Matrix2d A_cur_from_ref;
-    utils::getWarpMatrixAffine(frame_ref->cam_, frame_cur->cam_, ft_ref->px_, ft_ref->fn_, ft_ref->corner_.level,
+    utils::getWarpMatrixAffine(frame_ref->cam_, frame_cur->cam_, ft_ref->px_, fn_ref_norm, ft_ref->corner_.level,
                                obs_ref_dir.norm(), T_cur_from_ref, patch_size, A_cur_from_ref);
 
-    level_cur = utils::getBestSearchLevel(A_cur_from_ref, frame_cur->nlevels_-1, Frame::scale_factor_);
+    level_cur = utils::getBestSearchLevel(A_cur_from_ref, Frame::nlevels_-1, Frame::scale_factor_);
 //    std::cout << "A:\n" << A_cur_from_ref << std::endl;
 
     const cv::Mat image_ref = frame_ref->getImage(ft_ref->corner_.level);
@@ -345,10 +349,11 @@ bool FeatureTracker::findSubpixelFeature(const Frame::Ptr &frame_ref,
     const int TH_SSD = AlignPatch::Area * threshold;
 
     const Vector3d obs_ref_dir(frame_ref->pose().translation() - p3d);
+    const Vector3d fn_ref_norm = ft_ref->fn_.normalized();
     const SE3d T_cur_from_ref = frame_cur->Tcw() * frame_ref->pose();
 
     Matrix2d A_cur_from_ref;
-    utils::getWarpMatrixAffine(frame_ref->cam_, frame_cur->cam_, ft_ref->px_, ft_ref->fn_, ft_ref->corner_.level,
+    utils::getWarpMatrixAffine(frame_ref->cam_, frame_cur->cam_, ft_ref->px_, fn_ref_norm, ft_ref->corner_.level,
                                obs_ref_dir.norm(), T_cur_from_ref, patch_size, A_cur_from_ref);
 
     const cv::Mat image_ref = frame_ref->getImage(ft_ref->corner_.level);
@@ -848,6 +853,33 @@ void FeatureTracker::showAllFeatures(const KeyFrame::Ptr &keyframe)
 //    cv::imwrite("ft_imag.png", show);
 //    cv::imshow("KeyFrame feature", show);
 //    cv::waitKey(0);
+}
+
+
+
+void FeatureTracker::showAffine(const cv::Mat &src, const Vector2d &px_ref, const Matrix2d &A_ref_cur, const int size, const int level)
+{
+    cv::Mat src_show = src.clone();
+    if(src_show.channels() == 1)
+        cv::cvtColor(src_show, src_show, CV_GRAY2RGB);
+
+    const double half_size = size*0.5;
+    const int factor = Frame::scale_factors_.at(level);
+    Vector2d tl = A_ref_cur * Vector2d(-half_size, -half_size) * factor;
+    Vector2d tr = A_ref_cur * Vector2d(half_size, -half_size) * factor;
+    Vector2d bl = A_ref_cur * Vector2d(-half_size, half_size) * factor;
+    Vector2d br = A_ref_cur * Vector2d(half_size, half_size) * factor;
+    cv::Point2d TL(tl[0]+px_ref[0], tl[1]+px_ref[1]);
+    cv::Point2d TR(tr[0]+px_ref[0], tr[1]+px_ref[1]);
+    cv::Point2d BL(bl[0]+px_ref[0], bl[1]+px_ref[1]);
+    cv::Point2d BR(br[0]+px_ref[0], br[1]+px_ref[1]);
+    cv::Scalar color(0, 255, 0);
+    cv::line(src_show, TL, TR, color, 1);
+    cv::line(src_show, TR, BR, color, 1);
+    cv::line(src_show, BR, BL, color, 1);
+    cv::line(src_show, BL, TL, color, 1);
+    cv::imshow("AFFINE", src_show);
+    cv::waitKey(0);
 }
 
 }

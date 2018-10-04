@@ -156,8 +156,8 @@ void LocalMapper::run()
             if(map_->kfs_.size() > 2)
             {
                 mapTrace->startTimer("reproj");
-                new_created_features = createNewMapPoints(keyframe);
-                new_projected_features = searchInLocalMap(keyframe);
+                //new_created_features = createNewMapPoints(keyframe);
+                //new_projected_features = searchInLocalMap(keyframe);
                 mapTrace->stopTimer("reproj");
                 LOG_IF(INFO, report_) << "[Mapper] create features: " << new_created_features << " + " << new_projected_features;
 
@@ -229,8 +229,8 @@ void LocalMapper::insertKeyFrame(const KeyFrame::Ptr &keyframe)
         if(map_->kfs_.size() > 2)
         {
             mapTrace->startTimer("reproj");
-            new_created_features = createNewMapPoints(keyframe);
-            new_projected_features = searchInLocalMap(keyframe);
+            //new_created_features = createNewMapPoints(keyframe);
+            //new_projected_features = searchInLocalMap(keyframe);
             mapTrace->stopTimer("reproj");
             LOG_IF(INFO, report_) << "[Mapper] create features: " << new_created_features << " + " << new_projected_features;
 
