@@ -11,9 +11,9 @@ bool align2D(
     const int n_iter,
     Vector2d& cur_px_estimate)
 {
-    const int halfpatch_size_ = 4;
-    const int patch_size_ = 8;
-    const int patch_area_ = 64;
+    const int halfpatch_size_ = AlignPatch8x8::HalfSize;
+    const int patch_size_ = AlignPatch8x8::Size;
+    const int patch_area_ = AlignPatch8x8::Area;
     bool converged=false;
 
 #ifdef _MSC_VER 
@@ -177,8 +177,8 @@ int main(int argc, char *argv[])
 
     cv::Point2f p = corners[0];
 
-    const int patch_size = AlignPatch::Size;
-    const int patch_size_with_border = AlignPatch::SizeWithBorder;
+    const int patch_size = AlignPatch8x8::Size;
+    const int patch_size_with_border = AlignPatch8x8::SizeWithBorder;
     Matrix<float, patch_size_with_border, patch_size_with_border, RowMajor> patch_ref_with_border;
     Matrix<uchar, Dynamic, Dynamic, RowMajor> gray_eigen = Eigen::Map<Matrix<uchar, Dynamic, Dynamic, RowMajor> >(gray.data, gray.rows, gray.cols);
     utils::interpolateMat<uchar, float, patch_size_with_border>(gray_eigen, patch_ref_with_border, p.x, p.y);
@@ -200,7 +200,7 @@ int main(int argc, char *argv[])
         for(int i = 0; i < N; i++)
         {
             estimate0 = Eigen::Vector3d(p.x, p.y, 0) + px_error;
-            converged0 = AlignPatch::align2DI(gray, patch_ref_with_border, estimate0, max_iter, EPS);
+            converged0 = AlignPatch8x8::align2DI(gray, patch_ref_with_border, estimate0, max_iter, EPS);
         }
 
         double t1 = (double) cv::getTickCount();
@@ -210,7 +210,7 @@ int main(int argc, char *argv[])
         for(int i = 0; i < N; i++)
         {
             estimate1 = Eigen::Vector3d(p.x, p.y, 0) + px_error;
-            converged1 = AlignPatch::align2DI(noise, patch_ref_with_border, estimate1, max_iter, EPS);
+            converged1 = AlignPatch8x8::align2DI(noise, patch_ref_with_border, estimate1, max_iter, EPS);
         }
         double t2 = (double) cv::getTickCount();
 
@@ -260,7 +260,7 @@ int main(int argc, char *argv[])
 
     std::cout << std::endl;
     {
-        Matrix<float, AlignPatch::Area, 1> patch_ref, patch_ref_gx, patch_ref_gy;
+        Matrix<float, AlignPatch8x8::Area, 1> patch_ref, patch_ref_gx, patch_ref_gy;
         double t0 = (double) cv::getTickCount();
         bool converged0 = false;
         Eigen::Vector3d estimate0;
@@ -268,7 +268,7 @@ int main(int argc, char *argv[])
         {
             estimate0 = Eigen::Vector3d(p.x, p.y, 0) + px_error;
             utils::interpolateMat<uchar, float, patch_size_with_border>(gray, patch_ref_with_border, p.x, p.y);
-            converged0 = AlignPatch::align2DI(gray, patch_ref_with_border, estimate0, max_iter, EPS);
+            converged0 = AlignPatch8x8::align2DI(gray, patch_ref_with_border, estimate0, max_iter, EPS);
         }
         double t1 = (double) cv::getTickCount();
 
@@ -278,21 +278,21 @@ int main(int argc, char *argv[])
         {
             estimate1 = Eigen::Vector3d(p.x, p.y, 0) + px_error;
             utils::interpolateMat<uchar, float, patch_size>(gray, patch_ref, patch_ref_gx, patch_ref_gy, p.x, p.y);
-            converged1 = AlignPatch::align2DI(gray, patch_ref, patch_ref_gx, patch_ref_gy, estimate1, max_iter, EPS);
+            converged1 = AlignPatch8x8::align2DI(gray, patch_ref, patch_ref_gx, patch_ref_gy, estimate1, max_iter, EPS);
         }
         double t2 = (double) cv::getTickCount();
 
         for(int i = 0; i < N; i++)
         {
             estimate0 = Eigen::Vector3d(p.x, p.y, 0) + px_error;
-            converged0 = AlignPatch::align2DI(gray, patch_ref_with_border, estimate0, max_iter, EPS);
+            converged0 = AlignPatch8x8::align2DI(gray, patch_ref_with_border, estimate0, max_iter, EPS);
         }
         double t3 = (double) cv::getTickCount();
 
         for(int i = 0; i < N; i++)
         {
             estimate1 = Eigen::Vector3d(p.x, p.y, 0) + px_error;
-            converged1 = AlignPatch::align2DI(gray, patch_ref, patch_ref_gx, patch_ref_gy, estimate1, max_iter, EPS);
+            converged1 = AlignPatch8x8::align2DI(gray, patch_ref, patch_ref_gx, patch_ref_gy, estimate1, max_iter, EPS);
         }
         double t4 = (double) cv::getTickCount();
 

@@ -42,7 +42,7 @@ System::System(std::string config_file, std::string calib_flie) :
     const double scale_factor = Config::imageScaleFactor();
     const int width = camera_->width();
     const int height = camera_->height();
-    const int image_border = AlignPatch::Size;
+    const int image_border = AlignPatch8x8::Size;
     //! corner detector
     const int grid_size = Config::gridSize();
     const int grid_min_size = Config::gridMinSize();

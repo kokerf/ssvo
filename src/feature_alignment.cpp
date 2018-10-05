@@ -8,7 +8,8 @@ const Pattern<float, 32, 8> AlignPattern::pattern_(pattern4);
 //
 // Align Patch
 //
-bool AlignPatch::align2DI(const cv::Mat &image_cur,
+template <int PatchSize>
+bool AlignPatch<PatchSize>::align2DI(const cv::Mat &image_cur,
                           const Matrix<float, SizeWithBorder, SizeWithBorder, RowMajor> &patch_ref_with_border,
                           Vector3d &estimate,
                           const int max_iterations,
@@ -22,7 +23,7 @@ bool AlignPatch::align2DI(const cv::Mat &image_cur,
     //! get jacobian
     float ref_patch_gx[Area] = {0.0};
     float ref_patch_gy[Area] = {0.0};
-    const int stride = Size + 2;
+    const int stride = SizeWithBorder;
     const float* patch_ref_with_border_ptr = patch_ref_with_border.data() + stride + 1;
     Matrix3f H; H.setZero();
     Vector3f J(0, 0, 1);
@@ -88,7 +89,7 @@ bool AlignPatch::align2DI(const cv::Mat &image_cur,
 
         if(verbose)
         {
-            Matrix<float, Size, Size, RowMajor> patch_res = patch_cur - patch_ref_with_border.block<Size,Size>(1,1);
+            Matrix<float, Size, Size, RowMajor> patch_res = patch_cur - patch_ref_with_border.block(1,1,Size,Size);
             patch_res.array() += idiff+update[2];
             float residual = patch_res.cwiseAbs().sum()/(Size*Size);
 
@@ -116,7 +117,8 @@ bool AlignPatch::align2DI(const cv::Mat &image_cur,
     return converged;
 }
 
-bool AlignPatch::align2DI(const cv::Mat &image_cur,
+template <int PatchSize>
+bool AlignPatch<PatchSize>::align2DI(const cv::Mat &image_cur,
                           const Matrix<float, Area, 1> &patch_ref,
                           const Matrix<float, Area, 1> &patch_ref_gx,
                           const Matrix<float, Area, 1> &patch_ref_gy,
@@ -304,5 +306,9 @@ bool AlignPattern::align2DI(const cv::Mat &image_cur,
     estimate << u, v, idiff;
     return converged;
 }
+
+template class AlignPatch<8>;
+template class AlignPatch<16>;
+template class AlignPatch<32>;
 
 }

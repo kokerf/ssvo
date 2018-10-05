@@ -11,10 +11,11 @@
 namespace ssvo {
 
 //! ====================== Patch align
+template <int PatchSize>
 class AlignPatch{
 public:
     enum {
-        Size = 8,
+        Size = PatchSize,
         Area = Size*Size,
         HalfSize = Size/2,
         SizeWithBorder = Size+2,
@@ -36,6 +37,10 @@ public:
                          const double epslion = 1E-2f,
                          const bool verbose = false);
 };
+
+typedef AlignPatch<8> AlignPatch8x8;
+typedef AlignPatch<16> AlignPatch16x16;
+typedef AlignPatch<32> AlignPatch32x32;
 
 
 //! ====================== Pattern align

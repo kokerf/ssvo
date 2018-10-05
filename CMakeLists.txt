@@ -175,7 +175,7 @@ add_executable(test_alignment test/test_alignment.cpp)
 target_link_libraries(test_alignment ${PROJECT_NAME})
 
 add_executable(test_alignment_2d test/test_alignment_2d.cpp src/feature_alignment.cpp)
-target_link_libraries(test_alignment_2d ${PROJECT_NAME})
+target_link_libraries(test_alignment_2d ${LINK_LIBS})
 
 add_executable(test_triangulation test/test_triangulation.cpp)
 target_link_libraries(test_triangulation ${PROJECT_NAME})

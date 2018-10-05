@@ -580,9 +580,8 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
                                     Vector2d &px_matched,
                                     int &level_matched)
 {
-    static const int patch_size = AlignPatch::Size;
-//    static const int patch_area = AlignPatch::Area;
-    static const int half_patch_size = AlignPatch::HalfSize;
+    static const int PatchSize = AlignPatch8x8::Size;
+    static const int HalfPatchSize = AlignPatch8x8::HalfSize;
 
     //! check if in the view of current frame
     const double z_ref = 1.0/seed->getInvDepth();
@@ -606,7 +605,7 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
     const double inv_scale_cur = Frame::inv_scale_factors_.at(level_cur);
 
     const Vector2d px_cur(frame->cam_->project(xyz_cur) * inv_scale_cur);
-    if(!frame->cam_->isInFrame(px_cur.cast<int>(), half_patch_size, inv_scale_cur))
+    if(!frame->cam_->isInFrame(px_cur.cast<int>(), HalfPatchSize, inv_scale_cur))
         return false;
 
     //! px in image plane
@@ -628,8 +627,8 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
     epl_px_dir.normalize();
 
     //! make search pixel all within image
-    const int min_sample_width = half_patch_size;
-    const int min_sample_height = half_patch_size;
+    const int min_sample_width = HalfPatchSize;
+    const int min_sample_height = HalfPatchSize;
     const int max_sample_width = frame->cam_->width() * inv_scale_cur;
     const int max_sample_height = frame->cam_->height() * inv_scale_cur;
     if(px_near[0] <= min_sample_width)
@@ -699,19 +698,19 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
     Matrix2d A_cur_from_ref;
 
     utils::getWarpMatrixAffine(keyframe->cam_, frame->cam_, seed->px_ref, seed->fn_ref, level_ref,
-                               z_ref, T_cur_from_ref, patch_size, A_cur_from_ref);
+                               z_ref, T_cur_from_ref, PatchSize, A_cur_from_ref);
 
 //    double det = A_cur_from_ref.determinant() / factor;
 //    std::cout << "***** det: " <<  det << std::endl;
 
-    static const int patch_border_size = patch_size+2;
+    static const int patch_border_size = PatchSize+2;
     cv::Mat image_ref = keyframe->getImage(level_ref);
     Matrix<float, patch_border_size, patch_border_size, RowMajor> patch_with_border;
     utils::warpAffine<float, patch_border_size>(image_ref, patch_with_border, A_cur_from_ref,
                                                 seed->px_ref, level_ref, level_cur);
 
-    Matrix<float, patch_size, patch_size, RowMajor> patch;
-    patch = patch_with_border.block(1, 1, patch_size, patch_size);
+    Matrix<float, PatchSize, PatchSize, RowMajor> patch;
+    patch = patch_with_border.block(1, 1, PatchSize, PatchSize);
 
     const cv::Mat image_cur = frame->getImage(level_cur);
 
@@ -725,7 +724,7 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
         // TODO 使用模板来加速！！！
         //! SSD
         double t0 = (double)cv::getTickCount();
-        ZSSD<float, patch_size> zssd(patch);
+        ZSSD<float, PatchSize> zssd(patch);
         double score_best = std::numeric_limits<double>::max();
         double score_second = score_best;
         int index_best = -1;
@@ -739,11 +738,11 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
             Vector2f px = (frame->cam_->project(fn[0], fn[1]) * inv_scale_cur).cast<float>();
 
             //! always in frame's view
-            if(!frame->cam_->isInFrame(px.cast<int>(), half_patch_size, inv_scale_cur))
+            if(!frame->cam_->isInFrame(px.cast<int>(), HalfPatchSize, inv_scale_cur))
                 continue;
 
-            Matrix<float, patch_size, patch_size, RowMajor> patch_cur;
-            utils::interpolateMat<uchar, float, patch_size>(image_cur, patch_cur, px[0], px[1]);
+            Matrix<float, PatchSize, PatchSize, RowMajor> patch_cur;
+            utils::interpolateMat<uchar, float, PatchSize>(image_cur, patch_cur, px[0], px[1]);
 
             float score = zssd.compute_score(patch_cur);
 
@@ -782,7 +781,7 @@ bool DepthFilter::findEpipolarMatch(const Seed::Ptr &seed,
     }
 
     estimate.head<2>() = px_best;
-    if(!AlignPatch::align2DI(image_cur, patch_with_border, estimate, 30, options_.align_epslion, verbose_))
+    if(!AlignPatch8x8::align2DI(image_cur, patch_with_border, estimate, 30, options_.align_epslion, verbose_))
     {
 //        std::cout << "dx:\n " << dx << std::endl;
 //        std::cout << "dy:\n " << dy << std::endl;

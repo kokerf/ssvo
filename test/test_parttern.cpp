@@ -30,7 +30,7 @@ int main(int argc, char *argv[])
     Matrix<float, num, 1> pattern_gx;
     Matrix<float, num, 1> pattern_gy;
 
-    const int patch_size_with_border = AlignPatch::SizeWithBorder;
+    const int patch_size_with_border = AlignPatch8x8::SizeWithBorder;
     Matrix<float, patch_size_with_border, patch_size_with_border, RowMajor> patch;
 
     std::vector<cv::Point2f> corners;
@@ -67,7 +67,7 @@ int main(int argc, char *argv[])
     {
         utils::interpolateMat<uchar, float, patch_size_with_border>(cv_mat, patch, x, y);
         estimate0 = estimate;
-        AlignPatch::align2DI(cv_mat, patch, estimate0, iter);
+        AlignPatch8x8::align2DI(cv_mat, patch, estimate0, iter);
     }
     double t1 = cv::getTickCount();
     for(int i = 0; i < N; ++i)
@@ -102,7 +102,7 @@ int main(int argc, char *argv[])
     cout << x << " " << y << endl;
 
     estimate0 = estimate;
-    AlignPatch::align2DI(cv_mat, patch, estimate0, 30, 0.01, true);
+    AlignPatch8x8::align2DI(cv_mat, patch, estimate0, 30, 0.01, true);
     cout << " Est: " <<  estimate0.transpose() << endl;
 
     estimate1 = estimate;
