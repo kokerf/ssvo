@@ -129,7 +129,7 @@ int AlignSE3::run(Frame::Ptr reference_frame,
     if(verbose_)
     {
         std::string output;
-        std::for_each(logs_.begin(), logs_.end(), [&](const std::string &s) { output += s; });
+        std::for_each(logs_.begin(), logs_.end(), [&](const std::string &s) { output += s + "\n"; });
         LOG(INFO) << output;
         LOG(INFO) << "T_cur_from_ref:\n " << T_cur_from_ref_.matrix3x4();
     }
@@ -217,7 +217,10 @@ double AlignSE3::computeResidual(int level, int N)
     Jres_.setZero();
     double res = 0;
     count_ = 0;
-    cv::Mat showimg = cv::Mat::zeros(rows, cols, CV_8UC1);
+
+    cv::Mat showimg;// = cv::Mat::zeros(rows, cols, CV_8UC1);
+    if(visible_)
+        cv::cvtColor(cur_img, showimg, CV_GRAY2RGB);
     for(int n = 0; n < N; ++n)
     {
         const Vector3d cur_xyz = T_cur_from_ref_ * ref_feature_cache_.col(n);
@@ -239,12 +242,21 @@ double AlignSE3::computeResidual(int level, int N)
         if(visible_)
         {
             cv::Mat mat_double(PatchSize, PatchSize, CV_64FC1, residual.data());
-            mat_double = cv::abs(mat_double);
+            mat_double = cv::abs(mat_double)*20;
             Vector2i start = cur_px.cast<int>() - Vector2i(HalfPatchSize, HalfPatchSize);
             Vector2i end = start + Vector2i(PatchSize, PatchSize);
             cv::Mat mat_uchar;
             mat_double.convertTo(mat_uchar, CV_8UC1);
-            mat_uchar.copyTo(showimg.rowRange(start[1], end[1]).colRange(start[0], end[0]));
+            std::vector<cv::Mat> mat_uchar_vec;
+            mat_uchar_vec.push_back(cv::Mat::zeros(mat_uchar.size(), CV_8UC1));
+            mat_uchar_vec.push_back(cv::Mat::zeros(mat_uchar.size(), CV_8UC1));
+            mat_uchar_vec.push_back(mat_uchar);
+            cv::Mat mat_uchar_color;
+            cv::merge(mat_uchar_vec, mat_uchar_color);
+
+            cv::Mat show_roi = showimg(cv::Range(start[1], end[1]), cv::Range(start[0], end[0]));
+            float scale = static_cast<float>(cv::mean(mat_uchar).val[0])/PatchArea/10;
+            show_roi = (1-scale)*show_roi + scale*mat_uchar_color;
         }
 
     }
