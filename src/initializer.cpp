@@ -244,7 +244,7 @@ Initializer::Result Initializer::addImage(Frame::Ptr frame_cur)
     double t1 = (double)cv::getTickCount();
 
     //! [1] KLT tracking
-    const bool backward_check = true;
+    const bool backward_check = false;
     cand_cur_->getInliers(inliers_);
     static cv::TermCriteria termcrit(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 30, 0.001);
     utils::kltTrack(cand_last_->frame->opticalImages(), cand_cur_->frame->opticalImages(), Frame::optical_win_size_,
