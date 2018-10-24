@@ -4,6 +4,7 @@
 #include <DBoW3/DescManip.h>
 #include "brief.hpp"
 #include "feature_tracker.hpp"
+#include "time_tracing.hpp"
 
 std::string to_binary(const cv::Mat &desp)
 {
@@ -71,7 +72,7 @@ void matches_by_dbow(const std::vector<cv::Mat> &desp1, const std::vector<cv::Ma
 //                    showEplMatch(keyframe1->getImage(0), keyframe2->getImage(0), F12, ft1->px_, ft2->px_);
                     if(is_matches[best_idx2] != -1 && best_dist >= dist_matches[best_idx2])
                     {
-                        std::cout << "error" << std::endl;
+                        //std::cout << "error" << std::endl;
                         continue;
                     }
 
@@ -146,13 +147,6 @@ int main(int argc, char *argv[])
     for(int i = 0; i < desp2.rows; i++)
         desp_vec2.push_back(desp2.row(i));
 
-    DBoW3::BowVector bow_vec1, bow_vec2;
-    DBoW3::FeatureVector feat_vec1, feat_vec2;
-
-    voc.transform(desp_vec1, bow_vec1, feat_vec1, 4);
-    voc.transform(desp_vec2, bow_vec2, feat_vec2, 4);
-
-
     cv::Mat kp_show1, kp_show2;
     cv::drawKeypoints(img1, kps1, kp_show1);
     cv::drawKeypoints(img2, kps2, kp_show2);
@@ -161,29 +155,63 @@ int main(int argc, char *argv[])
 
     cv::waitKey(0);
 
-
+    const int N = 1000;
     std::vector<cv::DMatch> matches;
     cv::Mat match_show;
 
-    if(1)
-    {
-        matches_by_dbow(desp_vec1, desp_vec2, feat_vec1, feat_vec2, matches);
-    }
-    else
-    {
-        cv::BFMatcher bfMatcher = cv::BFMatcher(cv::Hamming::normType, true);
-        std::vector<cv::DMatch> matches_temp;
-        bfMatcher.match(desp1, desp2, matches_temp);
+    ssvo::SecondTimer timer;
+    double duration[3] = {0};
 
-        for(const auto m : matches_temp)
+    {
+        DBoW3::BowVector bow_vec1, bow_vec2;
+        DBoW3::FeatureVector feat_vec1, feat_vec2;
+        voc.transform(desp_vec1, bow_vec1, feat_vec1, 4);
+
+        timer.start();
+        for(int i = 0; i < N; i++)
         {
-            if(m.distance < 50) matches.push_back(m);
+            voc.transform(desp_vec2, bow_vec2, feat_vec2, 4);
         }
+        duration[0] = timer.stop();
+
+        timer.start();
+        for(int i = 0; i < N; i++)
+        {
+            matches.clear();
+            matches.reserve(kps1.size());
+            matches_by_dbow(desp_vec1, desp_vec2, feat_vec1, feat_vec2, matches);
+        }
+        duration[1] = timer.stop();
+
+        cv::drawMatches(img1, kps1, img2, kps2, matches, match_show);
+
+        cv::imshow("dbow_match", match_show);
+        cv::waitKey(0);
     }
 
-    cv::drawMatches(img1, kps1, img2, kps2, matches, match_show);
-    cv::imshow("match", match_show);
-    cv::waitKey(0);
+    cv::BFMatcher bfMatcher = cv::BFMatcher(cv::Hamming::normType, true);
+    {
+        timer.start();
+        for(int i = 0; i < N; i++)
+        {
+            std::vector<cv::DMatch> matches_temp;
+            bfMatcher.match(desp1, desp2, matches_temp);
+            matches.clear();
+            matches.reserve(matches_temp.size());
+            for(const auto m : matches_temp)
+            {
+                if(m.distance < 50) matches.push_back(m);
+            }
+        }
+        duration[2] = timer.stop();
+
+        cv::drawMatches(img1, kps1, img2, kps2, matches, match_show);
+        cv::imshow("bf_match", match_show);
+        cv::waitKey(0);
+    }
+
+    std::cout << "Dbow time cost: " << duration[0]/N << " + " << duration[1]/N << "\n"
+              << "Bf   time cost: " << duration[2]/N << std::endl;
 
     return 0;
 }
