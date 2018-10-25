@@ -94,7 +94,7 @@ int main(int argc, char const *argv[])
     if (image.empty()) throw std::runtime_error("Could not open image: " + img_file_names[0]);
 
     std::vector<cv::Mat> image_pyramid;
-    computePyramid(image, image_pyramid, 2, 4, cv::Size(40, 40));
+    computePyramid(image, image_pyramid, scale_factor, nlevels-1, cv::Size(40, 40));
 
     Corners new_corners, old_corners;
     FastDetector::Ptr fast_detector = FastDetector::create(width, height, image_border, nlevels, scale_factor, grid_size, grid_min_size, fast_max_threshold, fast_min_threshold);
@@ -163,7 +163,7 @@ int main(int argc, char const *argv[])
         if(img.channels()!=1)
             cv::cvtColor(cur_img, cur_img, cv::COLOR_RGB2GRAY);
         std::vector<cv::Mat> image_pyramid;
-        computePyramid(cur_img, image_pyramid, 2, 4, cv::Size(40, 40));
+        computePyramid(cur_img, image_pyramid, scale_factor, nlevels-1, cv::Size(40, 40));
 
         double t0 = (double)cv::getTickCount();
         fast_detector->detect(image_pyramid, new_corners, old_corners, 100, fast_min_eigen);
@@ -204,10 +204,11 @@ int computePyramid(const cv::Mat& image, std::vector<cv::Mat>& image_pyramid, co
     image_pyramid.resize(level + 1);
 
     image_pyramid[0] = image.clone();
+    float inv_scale = 1.0/scale_factor;
     for(int i = 1; i <= level; ++i)
     {
-        cv::Size size(round(image_pyramid[i - 1].cols / scale_factor), round(image_pyramid[i - 1].rows / scale_factor));
-
+        cv::Size size(round(image_pyramid[0].cols * inv_scale), round(image_pyramid[0].rows * inv_scale));
+        inv_scale /= scale_factor;
         if(size.height < min_size.height || size.width < min_size.width)
         {
             image_pyramid.resize(level);
