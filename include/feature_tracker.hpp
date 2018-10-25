@@ -29,15 +29,15 @@ public:
 
     static int searchBowByProjection(const KeyFrame::Ptr &keyframe, const std::vector<MapPoint::Ptr> &mpts, std::map<MapPoint::Ptr, size_t> &matches, int max_desp, double threshold = 1.0);
 
-    static void showMatches(const Frame::Ptr frame1, const Frame::Ptr frame2);
+    static void drawMatches(const Frame::Ptr frame1, const Frame::Ptr frame2, cv::Mat &out, bool with_proj = false);
 
-    static void showMatches(const Frame::Ptr frame1, const Frame::Ptr frame2, const std::vector<std::pair<size_t, size_t>> &matches);
+    static void drawMatches(const Frame::Ptr frame1, const Frame::Ptr frame2, cv::Mat &out, const std::vector<std::pair<size_t, size_t>> &matches);
 
-    static void showEplMatch(const cv::Mat &image1, const cv::Mat &image2, const Matrix3d &F12, const Vector2d &px1, const Vector2d &px2);
+    static void drawEplMatch(const cv::Mat &image1, const cv::Mat &image2, cv::Mat &out1, cv::Mat &out2, const Matrix3d &F12, const Vector2d &px1, const Vector2d &px2);
 
-    static void showAllFeatures(const KeyFrame::Ptr &keyframe);
+    static void drawAllFeatures(const KeyFrame::Ptr &keyframe, cv::Mat &out);
 
-    static void showAffine(const cv::Mat &src, const Vector2d &px_ref, const Matrix2d &A_ref_cur, const int size, const int level);
+    static void drawAffine(const cv::Mat &src, cv::Mat &dst, const Vector2d &px_ref, const Matrix2d &A_ref_cur, const int size, const int level);
 
     inline static FeatureTracker::Ptr create(int width, int height, int grid_size, int border, bool report = false, bool verbose = false)
     {return FeatureTracker::Ptr(new FeatureTracker(width, height, grid_size, border, report, verbose));}

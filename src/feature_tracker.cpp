@@ -206,6 +206,11 @@ int FeatureTracker::matchMapPointsFromLastFrame(const Frame::Ptr &frame_cur, con
         matches_count++;
     }
 
+//    cv::Mat match;
+//    drawMatches(frame_cur->getRefKeyFrame(), frame_cur, match, true);
+//    cv::imshow("match", match);
+//    cv::waitKey(0);
+
     return matches_count;
 }
 
@@ -262,7 +267,12 @@ int FeatureTracker::reprojectMapPoint(const Frame::Ptr &frame,
         cv::imshow("cur track", show_cur);
         cv::waitKey(0);
 
-        FeatureTracker::showAffine(image_ref, ft_ref->px_*(1.0/factor), A_cur_from_ref.inverse(), 8, ft_ref->corner_.level);
+        FeatureTracker::drawAffine(show_ref,
+                                   show_ref,
+                                   ft_ref->px_ * (1.0 / factor),
+                                   A_cur_from_ref.inverse(),
+                                   8,
+                                   ft_ref->corner_.level);
     }
 
     bool matched = AlignPatch8x8::align2DI(image_cur, patch_with_border, estimate, max_iterations, epslion, verbose);
@@ -626,7 +636,7 @@ int FeatureTracker::searchBowByProjection(const KeyFrame::Ptr &keyframe,
 }
 
 
-void FeatureTracker::showMatches(const Frame::Ptr frame1, const Frame::Ptr frame2)
+void FeatureTracker::drawMatches(const Frame::Ptr frame1, const Frame::Ptr frame2, cv::Mat &out, bool with_proj)
 {
     const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts1 = frame1->getMapPointFeaturesMatched();
     const std::unordered_map<MapPoint::Ptr, Feature::Ptr> mpt_fts2 = frame2->getMapPointFeaturesMatched();
@@ -636,10 +646,10 @@ void FeatureTracker::showMatches(const Frame::Ptr frame1, const Frame::Ptr frame
 
     const int cols = image1.cols;
     const int rows = image1.rows;
-    cv::Mat show(rows, cols*2, CV_8UC1);
-    image1.copyTo(show.colRange(0, cols));
-    image2.copyTo(show.colRange(cols, cols*2));
-    cv::cvtColor(show, show, CV_GRAY2RGB);
+    out = cv::Mat(rows, cols*2, CV_8UC1);
+    image1.copyTo(out.colRange(0, cols));
+    image2.copyTo(out.colRange(cols, cols*2));
+    cv::cvtColor(out, out, CV_GRAY2RGB);
 
     cv::RNG rng(12345);
     for(const auto item1 : mpt_fts1)
@@ -649,23 +659,24 @@ void FeatureTracker::showMatches(const Frame::Ptr frame1, const Frame::Ptr frame
         if(iter == mpt_fts2.end())
             continue;
 
+        const Vector2d px2_prj = frame2->cam_->project(frame2->Tcw() * mpt->pose());
+
         const Feature::Ptr &ft1 = item1.second;
         const Feature::Ptr &ft2 = iter->second;
 
         cv::Point2i px1(ft1->corner_.x, ft1->corner_.y);
         cv::Point2i px2(ft2->corner_.x+cols, ft2->corner_.y);
+        cv::Point2i px22(px2_prj[0]+cols, px2_prj[1]);
 
         cv::Scalar color(rng.uniform(0,255), rng.uniform(0, 255), rng.uniform(0, 255));
-        cv::circle(show, px1, 3, color);
-        cv::circle(show, px2, 3, color);
-        cv::line(show, px1, px2, color);
+        cv::circle(out, px22, 5, cv::Scalar(0,0,255));
+        cv::circle(out, px1, 5, color);
+        cv::circle(out, px2, 5, color);
+        cv::line(out, px1, px2, color);
     }
-
-    cv::imwrite("KeyFrame Matches.png", show);
 }
 
-void FeatureTracker::showMatches(const Frame::Ptr frame1,
-                                 const Frame::Ptr frame2,
+void FeatureTracker::drawMatches(const Frame::Ptr frame1, const Frame::Ptr frame2, cv::Mat &out,
                                  const std::vector<std::pair<size_t, size_t>> &matches)
 {
     const cv::Mat &image1 = frame1->getImage(0);
@@ -677,10 +688,10 @@ void FeatureTracker::showMatches(const Frame::Ptr frame1,
 
     const int cols = image1.cols;
     const int rows = image1.rows;
-    cv::Mat show(rows, cols*2, CV_8UC1);
-    image1.copyTo(show.colRange(0, cols));
-    image2.copyTo(show.colRange(cols, cols*2));
-    cv::cvtColor(show, show, CV_GRAY2RGB);
+    out = cv::Mat(rows, cols*2, CV_8UC1);
+    image1.copyTo(out.colRange(0, cols));
+    image2.copyTo(out.colRange(cols, cols*2));
+    cv::cvtColor(out, out, CV_GRAY2RGB);
 
     cv::RNG rng(12345);
     for(const auto item : matches)
@@ -698,9 +709,9 @@ void FeatureTracker::showMatches(const Frame::Ptr frame1,
         cv::Point2i px2(ft2->corner_.x+cols, ft2->corner_.y);
 
         cv::Scalar color(rng.uniform(0,255), rng.uniform(0, 255), rng.uniform(0, 255));
-        cv::circle(show, px1, 3, color);
-        cv::circle(show, px2, 3, color);
-        cv::line(show, px1, px2, color);
+        cv::circle(out, px1, 3, color);
+        cv::circle(out, px2, 3, color);
+        cv::line(out, px1, px2, color);
     }
 
     for(size_t i = 0; i < mask1.size(); i++)
@@ -710,7 +721,7 @@ void FeatureTracker::showMatches(const Frame::Ptr frame1,
         const Feature::Ptr &ft1 = fts1[i];
         cv::Point2i px1(ft1->corner_.x, ft1->corner_.y);
         cv::Scalar color(rng.uniform(0,255), rng.uniform(0, 255), rng.uniform(0, 255));
-        cv::circle(show, px1, 3, color);
+        cv::circle(out, px1, 3, color);
     }
 
     for(size_t i = 0; i < mask2.size(); i++)
@@ -720,26 +731,23 @@ void FeatureTracker::showMatches(const Frame::Ptr frame1,
         const Feature::Ptr &ft2 = fts2[i];
         cv::Point2i px2(ft2->corner_.x+cols, ft2->corner_.y);
         cv::Scalar color(rng.uniform(0,255), rng.uniform(0, 255), rng.uniform(0, 255));
-        cv::circle(show, px2, 3, color);
+        cv::circle(out, px2, 3, color);
     }
-
-    cv::imwrite("KeyFrame Matches.png", show);
-//    cv::imshow("KeyFrame Matches", show);
-//    cv::waitKey(0);
 }
 
-void FeatureTracker::showEplMatch(const cv::Mat &image1,
-                                  const cv::Mat &image2,
-                                  const Matrix3d &F12,
-                                  const Vector2d &px1,
-                                  const Vector2d &px2)
+void FeatureTracker::drawEplMatch(const cv::Mat &image1, const cv::Mat &image2,
+                                  cv::Mat &out1, cv::Mat &out2,
+                                  const Matrix3d &F12, const Vector2d &px1, const Vector2d &px2)
 {
-    cv::Mat show1 = image1.clone();
-    cv::Mat show2 = image2.clone();
-    if(show1.channels() == 1)
-        cv::cvtColor(show1, show1, CV_GRAY2RGB);
-    if(show2.channels() == 1)
-        cv::cvtColor(show2, show2, CV_GRAY2RGB);
+    if(image1.channels() == 1)
+        cv::cvtColor(image1, out1, CV_GRAY2RGB);
+    else
+        out1 = image1.clone();
+
+    if(image2.channels() == 1)
+        cv::cvtColor(image2, out2, CV_GRAY2RGB);
+    else
+        out2 = image2.clone();
 
     const double u1 = px1[0];
     const double v1 = px1[1];
@@ -797,17 +805,14 @@ void FeatureTracker::showEplMatch(const cv::Mat &image1,
 
     cv::Scalar color1(0, 255, 0);
     cv::Scalar color2(0, 0, 255);
-    cv::circle(show1, cv::Point(u1,v1), 3, color1);
-    cv::circle(show2, cv::Point(u2,v2), 3, color1);
+    cv::circle(out1, cv::Point(u1,v1), 3, color1);
+    cv::circle(out2, cv::Point(u2,v2), 3, color1);
 
-    cv::line(show1, pt11, pt12, color2);
-    cv::line(show2, pt21, pt22, color2);
-
-    cv::imwrite("imag1.png", show1);
-    cv::imwrite("imag2.png", show2);
+    cv::line(out1, pt11, pt12, color2);
+    cv::line(out2, pt21, pt22, color2);
 }
 
-void FeatureTracker::showAllFeatures(const KeyFrame::Ptr &keyframe)
+void FeatureTracker::drawAllFeatures(const KeyFrame::Ptr &keyframe, cv::Mat &out)
 {
     std::vector<Feature::Ptr> fts = keyframe->getFeatures();
     std::vector<size_t> mpt_indices = keyframe->getMapPointMatchIndices();
@@ -815,8 +820,7 @@ void FeatureTracker::showAllFeatures(const KeyFrame::Ptr &keyframe)
     std::vector<size_t> seed_created_indices = keyframe->getSeedCreateIndices();
 
     cv::Mat img = keyframe->getImage(0);
-    cv::Mat show;
-    cv::cvtColor(img, show, CV_GRAY2RGB);
+    cv::cvtColor(img, out, CV_GRAY2RGB);
 
     cv::Scalar color0(150, 100, 0);
     cv::Scalar color1(0, 255, 0);
@@ -840,28 +844,22 @@ void FeatureTracker::showAllFeatures(const KeyFrame::Ptr &keyframe)
 
         const auto itr = masked_fts.find(idx);
         if(itr == masked_fts.end())
-            cv::circle(show, px, 3, color0);
+            cv::circle(out, px, 3, color0);
         else if(itr->second == 1)
-            cv::circle(show, px, 3, color1);
+            cv::circle(out, px, 3, color1);
         else if(itr->second == 2)
-            cv::circle(show, px, 3, color2);
+            cv::circle(out, px, 3, color2);
         else if(itr->second == 3)
-            cv::circle(show, px, 3, color3);
+            cv::circle(out, px, 3, color3);
 
     }
-
-//    cv::imwrite("ft_imag.png", show);
-//    cv::imshow("KeyFrame feature", show);
-//    cv::waitKey(0);
 }
 
-
-
-void FeatureTracker::showAffine(const cv::Mat &src, const Vector2d &px_ref, const Matrix2d &A_ref_cur, const int size, const int level)
+void FeatureTracker::drawAffine(const cv::Mat &src, cv::Mat &out, const Vector2d &px_ref, const Matrix2d &A_ref_cur, const int size, const int level)
 {
-    cv::Mat src_show = src.clone();
-    if(src_show.channels() == 1)
-        cv::cvtColor(src_show, src_show, CV_GRAY2RGB);
+    out = src.clone();
+    if(out.channels() == 1)
+        cv::cvtColor(out, out, CV_GRAY2RGB);
 
     const double half_size = size*0.5;
     const int factor = Frame::scale_factors_.at(level);
@@ -873,13 +871,11 @@ void FeatureTracker::showAffine(const cv::Mat &src, const Vector2d &px_ref, cons
     cv::Point2d TR(tr[0]+px_ref[0], tr[1]+px_ref[1]);
     cv::Point2d BL(bl[0]+px_ref[0], bl[1]+px_ref[1]);
     cv::Point2d BR(br[0]+px_ref[0], br[1]+px_ref[1]);
-    cv::Scalar color(0, 255, 0);
-    cv::line(src_show, TL, TR, color, 1);
-    cv::line(src_show, TR, BR, color, 1);
-    cv::line(src_show, BR, BL, color, 1);
-    cv::line(src_show, BL, TL, color, 1);
-    cv::imshow("AFFINE", src_show);
-    cv::waitKey(0);
+    cv::Scalar color(0, 0, 255);
+    cv::line(out, TL, TR, color, 1);
+    cv::line(out, TR, BR, color, 1);
+    cv::line(out, BR, BL, color, 1);
+    cv::line(out, BL, TL, color, 1);
 }
 
 }
