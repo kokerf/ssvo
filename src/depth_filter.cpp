@@ -381,7 +381,7 @@ int DepthFilter::createSeeds(const KeyFrame::Ptr &keyframe)
     const size_t max_immature_fts = 200;
     const size_t max_step = std::sqrt(static_cast<float>(KeyFrame::GRID_ROWS*KeyFrame::GRID_COLS)/max_immature_fts);
     size_t step = max_step;
-    for(;step > 0; step--)
+    for(;step > 1; step--)
     {
         size_t immature_fts = 0;
         for(size_t r = 0; r < KeyFrame::GRID_ROWS; r += step)
