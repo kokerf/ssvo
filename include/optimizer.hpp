@@ -15,7 +15,7 @@ class Optimizer: public noncopyable
 {
 public:
 
-    static void twoViewBundleAdjustment(const KeyFrame::Ptr &kf1, const KeyFrame::Ptr &kf2, bool report=false, bool verbose=false);
+    static void globleBundleAdjustment(const Map::Ptr &map, int max_iters, bool report=false, bool verbose=false);
 
     static void motionOnlyBundleAdjustment(const Frame::Ptr &frame, bool use_seeds, bool reject=false, bool report=false, bool verbose=false);
 
@@ -25,9 +25,37 @@ public:
 
     static void refineMapPoint(const MapPoint::Ptr &mpt, int max_iter, bool report=false, bool verbose=false);
 
-    static Vector2d reprojectionError(const ceres::Problem &problem, ceres::ResidualBlockId id);
+    template<int nRes>
+    static inline Eigen::Matrix<double, nRes, 1> evaluateResidual(const ceres::Problem& problem, ceres::ResidualBlockId id)
+    {
+        auto cost = problem.GetCostFunctionForResidualBlock(id);
+        std::vector<double*> parameterBlocks;
+        problem.GetParameterBlocksForResidualBlock(id, &parameterBlocks);
+        Eigen::Matrix<double, nRes, 1> residual;
+        cost->Evaluate(parameterBlocks.data(), residual.data(), nullptr);
+        return residual;
+    }
 
-    static void reportInfo(const ceres::Problem &problem, const ceres::Solver::Summary summary, bool report=false, bool verbose=false);
+    template<int nRes>
+    static inline void reportInfo(const ceres::Problem &problem, const ceres::Solver::Summary summary, bool report = false, bool verbose = false)
+    {
+        if (!report) return;
+
+        if (!verbose)
+        {
+            LOG(INFO) << summary.BriefReport();
+        }
+        else
+        {
+            LOG(INFO) << summary.FullReport();
+            std::vector<ceres::ResidualBlockId> ids;
+            problem.GetResidualBlocks(&ids);
+            for (size_t i = 0; i < ids.size(); ++i)
+            {
+                LOG(INFO) << "BlockId: " << std::setw(5) << i << " residual(RMSE): " << evaluateResidual<nRes>(problem, ids[i]).norm();
+            }
+        }
+    }
 };
 
 namespace ceres_slover {

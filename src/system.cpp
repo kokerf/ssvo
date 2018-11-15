@@ -151,7 +151,7 @@ System::Status System::initialize()
 
     LOG_ASSERT(kf0 != nullptr && kf1 != nullptr) << "Can not find intial keyframes in map!";
 
-    Optimizer::twoViewBundleAdjustment(kf0, kf1, true);
+    Optimizer::globleBundleAdjustment(mapper_->map_, 20, true);
 
     LOG(WARNING) << "[System] End of two-view BA";
 
