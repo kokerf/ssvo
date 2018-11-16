@@ -150,6 +150,7 @@ list(APPEND SOURCEFILES
     src/system.cpp
     src/viewer.cpp
     src/brief.cpp
+    src/sim3_solver.cpp
 )
 
 add_library(${PROJECT_NAME} STATIC ${SOURCEFILES})
@@ -188,6 +189,9 @@ target_link_libraries(test_optimizer ${PROJECT_NAME})
 
 add_executable(test_camera_model test/test_camera_model.cpp src/camera.cpp)
 target_link_libraries(test_camera_model ${LINK_LIBS})
+
+add_executable(test_sim3_solver test/test_sim3_solver.cpp src/sim3_solver.cpp)
+target_link_libraries(test_sim3_solver ${PROJECT_NAME})
 
 add_executable(test_timer test/test_timer.cpp)
 
