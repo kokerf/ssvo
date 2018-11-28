@@ -1,12 +1,10 @@
 #include "config.hpp"
 #include "local_mapping.hpp"
 #include "feature_alignment.hpp"
-#include "feature_detector.hpp"
 #include "feature_tracker.hpp"
 #include "image_alignment.hpp"
 #include "optimizer.hpp"
 #include "time_tracing.hpp"
-#include "brief.hpp"
 
 #ifdef SSVO_DBOW_ENABLE
 #include <DBoW3/DescManip.h>
@@ -29,11 +27,13 @@ std::ostream& operator<<(std::ostream& out, const Feature& ft)
 TimeTracing::Ptr mapTrace = nullptr;
 
 //! LocalMapper
-LocalMapper::LocalMapper(bool report, bool verbose) :
-    report_(report), verbose_(report&&verbose),
+LocalMapper::LocalMapper(const FastDetector::Ptr fast, bool report, bool verbose) :
+    fast_detector_(fast), report_(report), verbose_(report&&verbose),
     mapping_thread_(nullptr), stop_require_(false)
 {
     map_ = Map::create();
+
+    brief_ = BRIEF::create(2.0, Config::imageNLevel());
 
     options_.min_disparity = 100;
     options_.min_redundant_observations = 3;
@@ -67,25 +67,12 @@ LocalMapper::LocalMapper(bool report, bool verbose) :
 
 
 #ifdef SSVO_DBOW_ENABLE
+
     std::string voc_dir = Config::DBoWDirectory();
     LOG_ASSERT(!voc_dir.empty()) << "Please check the config file! The DBoW directory is not set!";
     vocabulary_ = DBoW3::Vocabulary(voc_dir);
     LOG_ASSERT(!vocabulary_.empty()) << "Please check the config file! The Voc is empty!";
     database_ = DBoW3::Database(vocabulary_, true, 4);
-
-    const int nlevel = Config::imageTopLevel() + 1;
-    const int cols = Config::imageWidth();
-    const int rows = Config::imageHeight();
-    border_tl_.resize(nlevel);
-    border_br_.resize(nlevel);
-
-    for(int i = 0; i < nlevel; i++)
-    {
-        border_tl_[i].x = BRIEF::EDGE_THRESHOLD;
-        border_tl_[i].y = BRIEF::EDGE_THRESHOLD;
-        border_br_[i].x = cols/(1<<i) - BRIEF::EDGE_THRESHOLD;
-        border_br_[i].y = rows/(1<<i) - BRIEF::EDGE_THRESHOLD;
-    }
 
 #endif
 
@@ -827,7 +814,7 @@ inline size_t Grid<Feature::Ptr>::getIndex(const Feature::Ptr &element)
 void LocalMapper::addToDatabase(const KeyFrame::Ptr &keyframe)
 {
 #ifdef SSVO_DBOW_ENABLE
-    keyframe->getFeatures(keyframe->dbow_fts_);
+    keyframe->dbow_fts_ = keyframe->getFeatures();
 
     const int cols = keyframe->cam_->width();
     const int rows = keyframe->cam_->height();
@@ -854,8 +841,7 @@ void LocalMapper::addToDatabase(const KeyFrame::Ptr &keyframe)
     for(const Feature::Ptr &ft : keyframe->dbow_fts_)
         kps.emplace_back(cv::KeyPoint(ft->px_[0], ft->px_[1], 31, -1, 0, ft->level_));
 
-    BRIEF brief;
-    brief.compute(keyframe->images(), kps, keyframe->descriptors_);
+    brief_->compute(keyframe->images(), kps, keyframe->descriptors_);
 
     keyframe->dbow_Id_ = database_.add(keyframe->descriptors_, nullptr, nullptr);
 
@@ -882,9 +868,8 @@ KeyFrame::Ptr LocalMapper::relocalizeByDBoW(const Frame::Ptr &frame, const Corne
         kps.emplace_back(cv::KeyPoint(corner.x, corner.y, 31, -1, 0, corner.level));
     }
 
-    BRIEF brief;
     cv::Mat _descriptors;
-    brief.compute(frame->images(), kps, _descriptors);
+    brief_->compute(frame->images(), kps, _descriptors);
     std::vector<cv::Mat> descriptors;
     descriptors.reserve(_descriptors.rows);
     for(int i = 0; i < _descriptors.rows; i++)

@@ -3,6 +3,8 @@
 
 #include <future>
 #include "global.hpp"
+#include "feature_detector.hpp"
+#include "brief.hpp"
 #include "map.hpp"
 
 #ifdef SSVO_DBOW_ENABLE
@@ -33,12 +35,12 @@ public:
 
     KeyFrame::Ptr relocalizeByDBoW(const Frame::Ptr &frame, const Corners &corners);
 
-    static LocalMapper::Ptr create(bool report = false, bool verbose = false)
-    { return LocalMapper::Ptr(new LocalMapper(report, verbose));}
+    static LocalMapper::Ptr create(const FastDetector::Ptr fast, bool report = false, bool verbose = false)
+    { return LocalMapper::Ptr(new LocalMapper(fast, report, verbose));}
 
 private:
 
-    LocalMapper(bool report, bool verbose);
+    LocalMapper(const FastDetector::Ptr fast, bool report, bool verbose);
 
     void run();
 
@@ -76,6 +78,10 @@ private:
         double max_align_error2;
         double min_found_ratio_;
     } options_;
+
+    FastDetector::Ptr fast_detector_;
+
+    BRIEF::Ptr brief_;
 
     std::deque<KeyFrame::Ptr> keyframes_buffer_;
     KeyFrame::Ptr keyframe_last_;
