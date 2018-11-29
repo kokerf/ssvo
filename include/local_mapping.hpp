@@ -89,8 +89,7 @@ private:
 #ifdef SSVO_DBOW_ENABLE
     DBoW3::Vocabulary vocabulary_;
     DBoW3::Database database_;
-    std::vector<cv::Point2i> border_tl_;
-    std::vector<cv::Point2i> border_br_;
+
 #endif
 
     const bool report_;

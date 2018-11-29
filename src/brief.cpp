@@ -266,8 +266,8 @@ static int bit_pattern_31_[256*4] =
         -1,-6, 0,-11/*mean (0.127148), correlation (0.547401)*/
     };
 
-BRIEF::BRIEF(float scale_factor, int nlevels) :
-    scale_factor_(scale_factor), nlevels_(nlevels)
+BRIEF::BRIEF(float scale_factor, int nlevels, int height, int width) :
+    scale_factor_(scale_factor), nlevels_(nlevels), height_(height), width_(width)
 {
     const int npoints = 512;
     const cv::Point* pattern0 = (const cv::Point*)bit_pattern_31_;
@@ -300,18 +300,19 @@ BRIEF::BRIEF(float scale_factor, int nlevels) :
         inv_scale_factors_[i] = 1.0f / scale_factors_[i];
     }
 
-//    border_tl_.resize(nlevels);
-//    border_br_.resize(nlevels);
-//
-//    float cur_scale = 1.0;
-//    for(int i = 0; i < nlevels; i++)
-//    {
-//        border_tl_[i].x = BRIEF::EDGE_THRESHOLD;
-//        border_tl_[i].y = BRIEF::EDGE_THRESHOLD;
-//        border_br_[i].x = cols/cur_scale - BRIEF::EDGE_THRESHOLD;
-//        border_br_[i].y = rows/cur_scale - BRIEF::EDGE_THRESHOLD;
-//        cur_scale *= scale;
-//    }
+    border_tl_.resize(nlevels);
+    border_br_.resize(nlevels);
+
+    float cur_scale = 1.0;
+
+    for(int i = 0; i < nlevels; i++)
+    {
+        border_tl_[i].x = BRIEF::EDGE_THRESHOLD;
+        border_tl_[i].y = BRIEF::EDGE_THRESHOLD;
+        border_br_[i].x = width/cur_scale - BRIEF::EDGE_THRESHOLD;
+        border_br_[i].y = height/cur_scale - BRIEF::EDGE_THRESHOLD;
+        cur_scale *= scale_factor;
+    }
 
 }
 
@@ -430,6 +431,28 @@ void BRIEF::compute(const std::vector<cv::Mat> &images, const std::vector<cv::Ke
 
         compute(keypoint, image_pyramid_border_gauss[keypoint.octave], &pattern_[0], descriptors.ptr((int)i));
     }
+}
+
+
+bool BRIEF::checkBorder(const Feature::Ptr &ft)
+{
+    if(ft->px_[0] <= border_tl_[ft->level_].x ||
+       ft->px_[1] <= border_tl_[ft->level_].y ||
+       ft->px_[0] >= border_br_[ft->level_].x ||
+       ft->px_[1] >= border_br_[ft->level_].y)
+        return false;
+    else
+        return true;
+}
+bool BRIEF::checkBorder(const Corner &corner)
+{
+    if(corner.x <= border_tl_[corner.level].x ||
+       corner.y <= border_tl_[corner.level].y ||
+       corner.x >= border_br_[corner.level].x ||
+       corner.y >= border_br_[corner.level].y)
+        return false;
+    else
+        return true;
 }
 
 
