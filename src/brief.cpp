@@ -433,30 +433,16 @@ void BRIEF::compute(const std::vector<cv::Mat> &images, const std::vector<cv::Ke
     }
 }
 
-
-bool BRIEF::checkBorder(const Feature::Ptr &ft)
+bool BRIEF::checkBorder(const double x, const double y,const int level)
 {
-    if(ft->px_[0] <= border_tl_[ft->level_].x ||
-       ft->px_[1] <= border_tl_[ft->level_].y ||
-       ft->px_[0] >= border_br_[ft->level_].x ||
-       ft->px_[1] >= border_br_[ft->level_].y)
+    if(x <= border_tl_[level].x ||
+       y <= border_tl_[level].y ||
+       x >= border_br_[level].x ||
+       y >= border_br_[level].y)
         return false;
     else
         return true;
 }
-bool BRIEF::checkBorder(const Corner &corner)
-{
-    if(corner.x <= border_tl_[corner.level].x ||
-       corner.y <= border_tl_[corner.level].y ||
-       corner.x >= border_br_[corner.level].x ||
-       corner.y >= border_br_[corner.level].y)
-        return false;
-    else
-        return true;
-}
-
-
-
 }
 
 

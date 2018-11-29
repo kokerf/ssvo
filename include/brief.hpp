@@ -3,9 +3,6 @@
 
 #include <memory>
 #include <opencv2/core.hpp>
-#include "feature.hpp"
-#include "config.hpp"
-#include "feature_detector.hpp"
 
 namespace ssvo
 {
@@ -31,9 +28,7 @@ public:
     inline static Ptr create(float scale_factor, int nlevels, int height, int width)
     { return Ptr(new BRIEF(scale_factor, nlevels, height, width));}
 
-    bool checkBorder(const Feature::Ptr &ft);
-
-    bool checkBorder(const Corner &corner);
+    bool checkBorder(const double x, const double y,const int level);
 
 private:
 
