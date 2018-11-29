@@ -3,6 +3,9 @@
 
 #include <memory>
 #include <opencv2/core.hpp>
+#include "feature.hpp"
+#include "config.hpp"
+#include "feature_detector.hpp"
 
 namespace ssvo
 {
@@ -25,12 +28,16 @@ public:
 
     void compute(const cv::KeyPoint &kpt, const cv::Mat &img, const cv::Point *pattern, uchar *desc) const;
 
-    inline static Ptr create(float scale_factor, int nlevels)
-    { return Ptr(new BRIEF(scale_factor, nlevels));}
+    inline static Ptr create(float scale_factor, int nlevels, int height, int width)
+    { return Ptr(new BRIEF(scale_factor, nlevels, height, width));}
+
+    bool checkBorder(const Feature::Ptr &ft);
+
+    bool checkBorder(const Corner &corner);
 
 private:
 
-    BRIEF(float scale_factor, int nlevels);
+    BRIEF(float scale_factor, int nlevels, int height, int width);
 
     const float scale_factor_;
 
@@ -47,6 +54,8 @@ private:
     std::vector<cv::Point2i> border_tl_;
 
     std::vector<cv::Point2i> border_br_;
+
+    int height_, width_;
 };
 
 }
