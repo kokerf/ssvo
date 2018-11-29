@@ -823,7 +823,7 @@ void LocalMapper::addToDatabase(const KeyFrame::Ptr &keyframe)
 
     for(const Feature::Ptr &ft : keyframe->dbow_fts_)
     {
-        if(!brief_->checkBorder(ft->px_[0],ft->px_[1],ft->level_))
+        if(!brief_->checkBorder(ft->px_[0],ft->px_[1],ft->level_, true))
             continue;
 
         grid.insert(ft);
@@ -856,7 +856,7 @@ KeyFrame::Ptr LocalMapper::relocalizeByDBoW(const Frame::Ptr &frame, const Corne
     std::vector<cv::KeyPoint> kps;
     for(const Corner & corner : corners)
     {
-        if(!brief_->checkBorder(corner.x,corner.y,corner.level))
+        if(!brief_->checkBorder(corner.x,corner.y,corner.level,true))
             continue;
 
         kps.emplace_back(cv::KeyPoint(corner.x, corner.y, 31, -1, 0, corner.level));
