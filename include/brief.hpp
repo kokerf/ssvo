@@ -28,7 +28,7 @@ public:
     inline static Ptr create(float scale_factor, int nlevels, int height, int width)
     { return Ptr(new BRIEF(scale_factor, nlevels, height, width));}
 
-    bool checkBorder(const double x, const double y,const int level);
+    bool checkBorder(const double x, const double y,const int level,const bool bottom_level);
 
 private:
 

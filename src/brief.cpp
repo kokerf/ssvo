@@ -433,12 +433,21 @@ void BRIEF::compute(const std::vector<cv::Mat> &images, const std::vector<cv::Ke
     }
 }
 
-bool BRIEF::checkBorder(const double x, const double y,const int level)
+bool BRIEF::checkBorder(const double x, const double y,const int level, const bool bottom_level)
 {
-    if(x <= border_tl_[level].x ||
-       y <= border_tl_[level].y ||
-       x >= border_br_[level].x ||
-       y >= border_br_[level].y)
+    double x_ = x ;
+    double y_ = y ;
+    if(bottom_level)
+    {
+        double scale = 1 >> level;
+        x_ = x * scale;
+        y_ = y * scale;
+    }
+
+    if(x_ <= border_tl_[level].x ||
+       y_ <= border_tl_[level].y ||
+       x_ >= border_br_[level].x ||
+       y_ >= border_br_[level].y)
         return false;
     else
         return true;
