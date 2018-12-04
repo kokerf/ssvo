@@ -117,7 +117,8 @@ int main(int argc, char *argv[])
 
     for(int j = 0; j < kps[0].size(); ++j)
     {
-        std::cout << "pt: [" << kps[0][j].pt.x << ", " << kps[0][j].pt.y << "], "<< kps[0][j].octave  << std::endl;
+        std::cout << "----------------\n"
+                  << "pt: [" << kps[0][j].pt.x << ", " << kps[0][j].pt.y << "], "<< kps[0][j].octave << " dist: " << DBoW3::DescManip::distance(desps[0].row(j), desps1[0].row(j)) << std::endl;
         std::cout << "1: " << " " << to_binary(desps[0].row(j)) << std::endl;
         std::cout << "2: " << " " << to_binary(desps1[0].row(j)) << std::endl;
         std::cout << "d: " << " " << to_binary(desps[0].row(j)^desps1[0].row(j)) << std::endl;
