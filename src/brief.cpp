@@ -266,8 +266,8 @@ static int bit_pattern_31_[256*4] =
         -1,-6, 0,-11/*mean (0.127148), correlation (0.547401)*/
     };
 
-BRIEF::BRIEF(float scale_factor, int nlevels, int height, int width) :
-    scale_factor_(scale_factor), nlevels_(nlevels), height_(height), width_(width)
+BRIEF::BRIEF(float scale_factor, int nlevels)://, int height, int width) :
+    scale_factor_(scale_factor), nlevels_(nlevels)//, height_(height), width_(width)
 {
     const int npoints = 512;
     const cv::Point* pattern0 = (const cv::Point*)bit_pattern_31_;
@@ -300,19 +300,19 @@ BRIEF::BRIEF(float scale_factor, int nlevels, int height, int width) :
         inv_scale_factors_[i] = 1.0f / scale_factors_[i];
     }
 
-    border_tl_.resize(nlevels);
-    border_br_.resize(nlevels);
-
-    float cur_scale = 1.0;
-
-    for(int i = 0; i < nlevels; i++)
-    {
-        border_tl_[i].x = BRIEF::EDGE_THRESHOLD;
-        border_tl_[i].y = BRIEF::EDGE_THRESHOLD;
-        border_br_[i].x = width/cur_scale - BRIEF::EDGE_THRESHOLD;
-        border_br_[i].y = height/cur_scale - BRIEF::EDGE_THRESHOLD;
-        cur_scale *= scale_factor;
-    }
+//    border_tl_.resize(nlevels);
+//    border_br_.resize(nlevels);
+//
+//    float cur_scale = 1.0;
+//
+//    for(int i = 0; i < nlevels; i++)
+//    {
+//        border_tl_[i].x = BRIEF::EDGE_THRESHOLD;
+//        border_tl_[i].y = BRIEF::EDGE_THRESHOLD;
+//        border_br_[i].x = width/cur_scale - BRIEF::EDGE_THRESHOLD;
+//        border_br_[i].y = height/cur_scale - BRIEF::EDGE_THRESHOLD;
+//        cur_scale *= scale_factor;
+//    }
 
 }
 
@@ -433,25 +433,26 @@ void BRIEF::compute(const std::vector<cv::Mat> &images, const std::vector<cv::Ke
     }
 }
 
-bool BRIEF::checkBorder(const double x, const double y,const int level, const bool bottom_level)
-{
-    double x_ = x ;
-    double y_ = y ;
-    if(bottom_level)
-    {
-        double scale = 1 >> level;
-        x_ = x * scale;
-        y_ = y * scale;
-    }
+//bool BRIEF::checkBorder(const double x, const double y,const int level, const bool bottom_level)
+//{
+//    double x_ = x ;
+//    double y_ = y ;
+//    if(bottom_level)
+//    {
+//        double scale = 1.0 / (1 << level);
+//        x_ = x * scale;
+//        y_ = y * scale;
+//    }
+//
+//    if(x_ <= border_tl_[level].x ||
+//       y_ <= border_tl_[level].y ||
+//       x_ >= border_br_[level].x ||
+//       y_ >= border_br_[level].y)
+//        return false;
+//    else
+//        return true;
+//}
 
-    if(x_ <= border_tl_[level].x ||
-       y_ <= border_tl_[level].y ||
-       x_ >= border_br_[level].x ||
-       y_ >= border_br_[level].y)
-        return false;
-    else
-        return true;
-}
 }
 
 

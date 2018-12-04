@@ -25,14 +25,14 @@ public:
 
     void compute(const cv::KeyPoint &kpt, const cv::Mat &img, const cv::Point *pattern, uchar *desc) const;
 
-    inline static Ptr create(float scale_factor, int nlevels, int height, int width)
-    { return Ptr(new BRIEF(scale_factor, nlevels, height, width));}
+    inline static Ptr create(float scale_factor, int nlevels)
+    { return Ptr(new BRIEF(scale_factor, nlevels));}
 
-    bool checkBorder(const double x, const double y,const int level,const bool bottom_level);
+//    bool checkBorder(const double x, const double y,const int level,const bool bottom_level);
 
 private:
 
-    BRIEF(float scale_factor, int nlevels, int height, int width);
+    BRIEF(float scale_factor, int nlevels);//, int height, int width);
 
     const float scale_factor_;
 
@@ -46,11 +46,11 @@ private:
 
     std::vector<float> inv_scale_factors_;
 
-    std::vector<cv::Point2i> border_tl_;
-
-    std::vector<cv::Point2i> border_br_;
-
-    int height_, width_;
+//    std::vector<cv::Point2i> border_tl_;
+//
+//    std::vector<cv::Point2i> border_br_;
+//
+//    int height_, width_;
 };
 
 }

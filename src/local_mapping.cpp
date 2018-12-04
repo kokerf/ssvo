@@ -33,7 +33,7 @@ LocalMapper::LocalMapper(const FastDetector::Ptr fast, bool report, bool verbose
 {
     map_ = Map::create();
 
-    brief_ = BRIEF::create(2.0, Config::imageNLevel(),fast_detector_->getHeight(),fast_detector_->getWidth());
+    brief_ = BRIEF::create(2.0, Config::imageNLevel());//,fast_detector_->getHeight(),fast_detector_->getWidth());
 
     options_.min_disparity = 100;
     options_.min_redundant_observations = 3;
@@ -823,8 +823,8 @@ void LocalMapper::addToDatabase(const KeyFrame::Ptr &keyframe)
 
     for(const Feature::Ptr &ft : keyframe->dbow_fts_)
     {
-        if(!brief_->checkBorder(ft->px_[0],ft->px_[1],ft->level_, true))
-            continue;
+//        if(!brief_->checkBorder(ft->px_[0],ft->px_[1],ft->level_, true))
+//            continue;
 
         grid.insert(ft);
     }
@@ -856,8 +856,8 @@ KeyFrame::Ptr LocalMapper::relocalizeByDBoW(const Frame::Ptr &frame, const Corne
     std::vector<cv::KeyPoint> kps;
     for(const Corner & corner : corners)
     {
-        if(!brief_->checkBorder(corner.x,corner.y,corner.level,true))
-            continue;
+//        if(!brief_->checkBorder(corner.x,corner.y,corner.level,true))
+//            continue;
 
         kps.emplace_back(cv::KeyPoint(corner.x, corner.y, 31, -1, 0, corner.level));
     }

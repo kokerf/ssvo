@@ -2,6 +2,7 @@
 #include <DBoW3/Vocabulary.h>
 #include <DBoW3/Database.h>
 #include <DBoW3/DescManip.h>
+#include <include/feature_detector.hpp>
 #include "brief.hpp"
 
 std::vector<std::string> readImagePaths(int argc,char **argv,int start){
@@ -60,8 +61,8 @@ int main(int argc, char *argv[])
     std::cout << voc << std::endl;
     std::cout << db << std::endl;
 
-    const float scale_factor = 1.2;
-    const int nlevels = 8;
+    const float scale_factor = 2.0;
+    const int nlevels = 4;
     std::vector<cv::Mat> images;
     std::vector<std::vector<cv::Mat>> imgPyrs;
     for(int i = 0; i < img_path.size(); ++i)
@@ -83,7 +84,9 @@ int main(int argc, char *argv[])
     std::vector<cv::Mat > desps(images.size());
     std::vector<cv::Mat > desps1(images.size());
 
-    cv::Ptr<cv::ORB> orb = cv::ORB::create(100, scale_factor, nlevels);
+    //-----------------  check cv::ORB vs ssvo::BRIEF ------------------------
+    const int N = 1000;
+    cv::Ptr<cv::ORB> orb = cv::ORB::create(N, scale_factor, nlevels);
     ssvo::BRIEF::Ptr brief = ssvo::BRIEF::create(scale_factor, nlevels);
 
     double t0 = cv::getTickCount();
@@ -120,12 +123,13 @@ int main(int argc, char *argv[])
         std::cout << "d: " << " " << to_binary(desps[0].row(j)^desps1[0].row(j)) << std::endl;
     }
 
+    //-----------------  test bowvec & featvec ------------------------
     std::vector<DBoW3::BowVector> bvs(images.size());
     std::vector<DBoW3::FeatureVector> fvs(images.size());
     double t4 = cv::getTickCount();
     for(int i = 0; i < images.size(); ++i)
     {
-        db.add(desps[i], &bvs[i], &fvs[i]);
+        db.add(desps1[i], &bvs[i], &fvs[i]);
     }
     double t5 = cv::getTickCount();
     std::cout << "Database Time: " << (t5-t4)/cv::getTickFrequency()/images.size() << std::endl;
@@ -150,15 +154,45 @@ int main(int argc, char *argv[])
     std::cout << "\n=========" << std::endl;
     std::cout << "* Querying the database: " << std::endl;
 
-    DBoW3::QueryResults ret;
+    DBoW3::QueryResults rets;
     for(size_t i = 0; i < bvs.size(); i++)
     {
-        db.query(bvs[i], ret, 4);
+        db.query(bvs[i], rets, -1);
 
         // ret[0] is always the same image in this case, because we added it to the
         // database. ret[1] is the second best match.
 
-        std::cout << "Searching for Image " << i << ". " << ret << std::endl;
+        std::cout << "Searching for Image " << i << ". " << rets << std::endl;
+
+        for(const DBoW3::Result ret : rets)
+        {
+            if(ret.Id != i)
+            {
+                DBoW3::BowVector::iterator bv1_iter = bvs[i].begin();
+                DBoW3::BowVector::iterator bv1_end = bvs[i].end();
+
+                DBoW3::BowVector::iterator bv2_iter = bvs[ret.Id].begin();
+                DBoW3::BowVector::iterator bv2_end = bvs[ret.Id].end();
+
+                int count = 0;
+                while(bv1_iter != bv1_end && bv2_iter != bv2_end)
+                {
+
+                    if(bv1_iter->first == bv2_iter->first)
+                    {
+                        count++;
+                        bv2_iter++;
+                        bv1_iter++;
+                    }
+                    else if(bv1_iter->first > bv2_iter->first)
+                        bv2_iter = bvs[ret.Id].lower_bound(bv1_iter->first);
+                    else
+                        bv1_iter = bvs[i].lower_bound(bv2_iter->first);
+                }
+
+                std::cout << "share words <" << i << ", " << ret.Id << "> : " << count << std::endl;
+            }
+        }
     }
 
     for(int j = 0; j < images.size(); ++j)
